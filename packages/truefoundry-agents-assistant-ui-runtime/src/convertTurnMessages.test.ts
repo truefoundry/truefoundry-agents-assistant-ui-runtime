@@ -1,0 +1,1728 @@
+import { describe, expect, it } from "vitest";
+import type { AppendMessage } from "@assistant-ui/core";
+import type {
+    AgentSession,
+    ModelMessageEvent,
+    ThreadCreatedEvent,
+    ToolApprovalRequiredEvent,
+    ToolResponseRequiredEvent,
+    Turn,
+    TurnEvent,
+    TurnStreamData,
+} from "truefoundry-gateway-sdk/agents";
+
+import { ROOT_THREAD_ID } from "./constants.js";
+import { collectPendingToolResponses } from "./collectPending.js";
+import {
+    buildTurnAssistantContent,
+    buildUserMessageContent,
+    buildUserMessageFromTurnInput,
+    convertTurnsToThreadMessages,
+    getTurnMessageContent,
+    projectSessionMessages,
+    repositoryItemsFromMessages,
+    streamTurnEvents,
+    turnStreamUpdateToAssistantMessage,
+} from "./convertTurnMessages.js";
+import { PeerThreadFoldState, buildRootAssistantContent, ingestTurnEvent } from "./foldPeerThreads.js";
+import { findPausedAssistantMessage } from "./requiredActionInputs.js";
+import {
+    createEmptySessionSnapshot,
+    replaceSessionSnapshot,
+} from "./sessionSnapshot.js";
+import { TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY } from "./toolApproval.js";
+import {
+    applyUserToolResponsesToFold,
+    TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY,
+    toolResponseStatus,
+} from "./toolResponse.js";
+import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
+
+const createdAt = new Date().toISOString();
+
+function modelMessage(
+    event: Omit<ModelMessageEvent, "type" | "createdAt">,
+): ModelMessageEvent {
+    return { type: "model.message", createdAt, ...event };
+}
+
+function approvalRequired(
+    event: Omit<ToolApprovalRequiredEvent, "type" | "createdAt">,
+): ToolApprovalRequiredEvent {
+    return { type: "tool.approval_required", createdAt, ...event };
+}
+
+function threadCreated(
+    event: Omit<ThreadCreatedEvent, "type" | "createdAt">,
+): ThreadCreatedEvent {
+    return { type: "thread.created", createdAt, ...event };
+}
+
+function responseRequired(
+    event: Omit<ToolResponseRequiredEvent, "type" | "createdAt">,
+): ToolResponseRequiredEvent {
+    return { type: "tool.response_required", createdAt, ...event };
+}
+
+async function* streamFrom(
+    events: TurnStreamData["event"][],
+): AsyncGenerator<TurnStreamData> {
+    for (const [index, event] of events.entries()) {
+        yield { sequenceNumber: index + 1, event };
+    }
+}
+
+function eventsPage(events: TurnEvent[]) {
+    return async () => ({
+        async *[Symbol.asyncIterator]() {
+            for (const event of events) {
+                yield event;
+            }
+        },
+    });
+}
+
+function turnsPage(turns: Turn[]) {
+    return async () => ({
+        async *[Symbol.asyncIterator]() {
+            for (const turn of turns) {
+                yield turn;
+            }
+        },
+    });
+}
+
+function appendUserMessage(
+    content: AppendMessage["content"],
+    attachments: AppendMessage["attachments"] = [],
+): AppendMessage {
+    return {
+        role: "user",
+        content,
+        attachments,
+        createdAt: new Date(),
+        metadata: { custom: {} },
+        parentId: null,
+        sourceId: null,
+        runConfig: undefined,
+    };
+}
+
+function mockTurn(
+    overrides: Partial<Turn> & Pick<Turn, "id" | "createdAt">,
+): Pick<Turn, "id" | "createdAt" | "input" | "state" | "listEvents"> {
+    return {
+        input: [{ type: "user.message", content: "hello" }],
+        state: { status: "done", requiredActions: [], completedAt: createdAt },
+        listEvents: eventsPage([
+            modelMessage({
+                id: "m1",
+                threadId: ROOT_THREAD_ID,
+                content: "assistant reply",
+            }),
+        ]) as unknown as Turn["listEvents"],
+        ...overrides,
+    };
+}
+
+function mockSession(turns: ReturnType<typeof mockTurn>[]): AgentSession {
+    return {
+        listTurns: turnsPage(turns as Turn[]) as unknown as AgentSession["listTurns"],
+    } as unknown as AgentSession;
+}
+
+async function collectStream<T>(stream: AsyncGenerator<T>): Promise<T[]> {
+    const items: T[] = [];
+    for await (const item of stream) {
+        items.push(item);
+    }
+    return items;
+}
+
+describe("convertTurnMessages", () => {
+    describe("getTurnMessageContent", () => {
+        it("joins text parts from append message content", () => {
+            expect(
+                getTurnMessageContent(
+                    appendUserMessage([
+                        { type: "text", text: "line one" },
+                        { type: "text", text: "line two" },
+                    ]),
+                ),
+            ).toBe("line one\nline two");
+        });
+
+        it("throws when no text content is present", () => {
+            expect(() => getTurnMessageContent(appendUserMessage([]))).toThrow(
+                "User message must contain text content.",
+            );
+        });
+    });
+
+    describe("buildUserMessageContent", () => {
+        it("returns a bare string for text-only messages", () => {
+            expect(
+                buildUserMessageContent(
+                    appendUserMessage([{ type: "text", text: "hello there" }]),
+                ),
+            ).toBe("hello there");
+        });
+
+        it("forwards file attachments as gateway file parts", () => {
+            expect(
+                buildUserMessageContent(
+                    appendUserMessage(
+                        [{ type: "text", text: "see attached" }],
+                        [
+                            {
+                                id: "att-1",
+                                type: "file",
+                                name: "doc.pdf",
+                                contentType: "application/pdf",
+                                status: { type: "complete" },
+                                content: [
+                                    {
+                                        type: "file",
+                                        mimeType: "application/pdf",
+                                        data: "JVBERi0xLjQK",
+                                    },
+                                ],
+                            },
+                        ],
+                    ),
+                ),
+            ).toEqual([
+                { type: "text", text: "see attached" },
+                {
+                    type: "file",
+                    name: "doc.pdf",
+                    data: "data:application/pdf;base64,JVBERi0xLjQK",
+                },
+            ]);
+        });
+
+        it("passes through data URIs unchanged", () => {
+            const dataUri = "data:application/pdf;base64,JVBERi0xLjQK";
+            expect(
+                buildUserMessageContent(
+                    appendUserMessage(
+                        [{ type: "text", text: "file" }],
+                        [
+                            {
+                                id: "att-1",
+                                type: "file",
+                                name: "doc.pdf",
+                                contentType: "application/pdf",
+                                status: { type: "complete" },
+                                content: [
+                                    {
+                                        type: "file",
+                                        mimeType: "application/pdf",
+                                        data: dataUri,
+                                    },
+                                ],
+                            },
+                        ],
+                    ),
+                ),
+            ).toEqual([
+                { type: "text", text: "file" },
+                {
+                    type: "file",
+                    name: "doc.pdf",
+                    data: dataUri,
+                },
+            ]);
+        });
+
+        it("maps image parts to gateway file parts", () => {
+            expect(
+                buildUserMessageContent(
+                    appendUserMessage(
+                        [{ type: "text", text: "image" }],
+                        [
+                            {
+                                id: "att-1",
+                                type: "image",
+                                name: "photo.png",
+                                contentType: "image/png",
+                                status: { type: "complete" },
+                                content: [
+                                    {
+                                        type: "image",
+                                        image: "data:image/png;base64,AAAA",
+                                    },
+                                ],
+                            },
+                        ],
+                    ),
+                ),
+            ).toEqual([
+                { type: "text", text: "image" },
+                {
+                    type: "file",
+                    name: "photo.png",
+                    data: "data:image/png;base64,AAAA",
+                },
+            ]);
+        });
+
+        it("includes file parts from message content and attachments", () => {
+            expect(
+                buildUserMessageContent(
+                    appendUserMessage(
+                        [
+                            { type: "text", text: "inline" },
+                            {
+                                type: "file",
+                                mimeType: "application/pdf",
+                                data: "AAAA",
+                                filename: "inline.pdf",
+                            },
+                        ],
+                        [
+                            {
+                                id: "att-1",
+                                type: "file",
+                                name: "attached.pdf",
+                                contentType: "application/pdf",
+                                status: { type: "complete" },
+                                content: [
+                                    {
+                                        type: "file",
+                                        mimeType: "application/pdf",
+                                        data: "BBBB",
+                                    },
+                                ],
+                            },
+                        ],
+                    ),
+                ),
+            ).toEqual([
+                { type: "text", text: "inline" },
+                {
+                    type: "file",
+                    name: "inline.pdf",
+                    data: "data:application/pdf;base64,AAAA",
+                },
+                {
+                    type: "file",
+                    name: "attached.pdf",
+                    data: "data:application/pdf;base64,BBBB",
+                },
+            ]);
+        });
+    });
+
+    describe("buildUserMessageFromTurnInput", () => {
+        it("maps gateway file parts to assistant-ui attachments", () => {
+            const message = buildUserMessageFromTurnInput(
+                "turn-1",
+                [
+                    {
+                        type: "user.message",
+                        content: [
+                            { type: "text", text: "see attached" },
+                            {
+                                type: "file",
+                                name: "doc.pdf",
+                                data: "data:application/pdf;base64,JVBERi0xLjQK",
+                            },
+                        ],
+                    },
+                ],
+                createdAt,
+            );
+
+            expect(message.role).toBe("user");
+            expect(message.content).toEqual([{ type: "text", text: "see attached" }]);
+            if (message.role !== "user") {
+                return;
+            }
+            expect(message.attachments).toHaveLength(1);
+            expect(message.attachments[0]?.name).toBe("doc.pdf");
+        });
+    });
+
+    describe("turnStreamUpdateToAssistantMessage", () => {
+        it("creates a new assistant message when none exists", () => {
+            const message = turnStreamUpdateToAssistantMessage("turn-1", {
+                content: [{ type: "text", text: "hi" }],
+            });
+            expect(message.id).toBe("turn-1-assistant");
+            expect(message.role).toBe("assistant");
+            expect(message.status).toEqual({ type: "running" });
+        });
+
+        it("preserves the existing assistant message id on update", () => {
+            const existing = turnStreamUpdateToAssistantMessage("turn-1", {
+                content: [{ type: "text", text: "first" }],
+            });
+            const updated = turnStreamUpdateToAssistantMessage(
+                "turn-1",
+                { content: [{ type: "text", text: "second" }] },
+                existing,
+            );
+            expect(updated.id).toBe(existing.id);
+            expect(updated.content).toEqual([{ type: "text", text: "second" }]);
+        });
+    });
+
+    describe("repositoryItemsFromMessages", () => {
+        it("chains parent ids in order", () => {
+            const userMessage = {
+                id: "u1",
+                role: "user" as const,
+                content: [{ type: "text" as const, text: "hi" }],
+                attachments: [],
+                createdAt: new Date(),
+                metadata: { custom: {} },
+            };
+            const assistant = turnStreamUpdateToAssistantMessage("t1", {
+                content: [{ type: "text", text: "a" }],
+            });
+
+            const items = repositoryItemsFromMessages([userMessage, assistant]);
+            expect(items).toEqual([
+                { parentId: null, message: userMessage },
+                { parentId: "u1", message: assistant },
+            ]);
+        });
+    });
+
+    describe("buildTurnAssistantContent", () => {
+        it("aggregates turn listEvents into root assistant content", async () => {
+            const content = await buildTurnAssistantContent(
+                mockTurn({
+                    id: "turn-1",
+                    createdAt,
+                }),
+            );
+            expect(content).toEqual([{ type: "text", text: "assistant reply" }]);
+        });
+    });
+
+    describe("convertTurnsToThreadMessages", () => {
+        it("builds user and assistant messages from completed turns", async () => {
+            const result = await convertTurnsToThreadMessages(
+                mockSession([
+                    mockTurn({
+                        id: "turn-1",
+                        createdAt,
+                        input: [{ type: "user.message", content: "hello" }],
+                    }),
+                ]),
+            );
+
+            expect(result.messages).toHaveLength(2);
+            expect(result.messages[0]).toMatchObject({
+                id: "turn-1-user",
+                role: "user",
+                content: [{ type: "text", text: "hello" }],
+            });
+            expect(result.messages[1]).toMatchObject({
+                id: "turn-1-assistant",
+                role: "assistant",
+                content: [{ type: "text", text: "assistant reply" }],
+                status: { type: "complete", reason: "stop" },
+            });
+            expect(result.runningTurn).toBeUndefined();
+        });
+
+        it("returns runningTurn and unstable_resume for an in-flight turn", async () => {
+            const runningTurn = mockTurn({
+                id: "turn-running",
+                createdAt,
+                state: { status: "running" },
+            });
+            const result = await convertTurnsToThreadMessages(mockSession([runningTurn]));
+
+            expect(result.runningTurn).toBe(runningTurn);
+            expect(result.unstable_resume).toBe(true);
+            expect(result.messages.at(-1)?.role).toBe("assistant");
+        });
+
+        it("merges continuation turns without user input into the last assistant message", async () => {
+            const firstTurn = mockTurn({
+                id: "turn-1",
+                createdAt,
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m1",
+                        threadId: ROOT_THREAD_ID,
+                        content: "first chunk",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const continuationTurn = mockTurn({
+                id: "turn-2",
+                createdAt,
+                input: [{ type: "user.tool_approval", threadId: ROOT_THREAD_ID, toolCallId: "tc-1", approval: { status: "allow" } }],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m2",
+                        threadId: ROOT_THREAD_ID,
+                        content: " after approval",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockSession([continuationTurn, firstTurn]),
+            );
+
+            expect(result.messages).toHaveLength(2);
+            const assistant = result.messages[1];
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.content).toEqual([
+                { type: "text", text: "first chunk" },
+                { type: "text", text: " after approval" },
+            ]);
+        });
+
+        it("preserves requires-action on reload when a turn ends awaiting tool approval", async () => {
+            const pausedTurn = mockTurn({
+                id: "turn-approval",
+                createdAt,
+                input: [{ type: "user.message", content: "run tool" }],
+                state: {
+                    status: "done",
+                    output: null,
+                    requiredActions: [
+                        approvalRequired({
+                            id: "approval-event",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
+                        }),
+                    ],
+                    completedAt: createdAt,
+                },
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m1",
+                        threadId: ROOT_THREAD_ID,
+                        content: "run tool",
+                        toolCalls: [
+                            {
+                                id: "approval-1",
+                                type: "function",
+                                function: { name: "bash", arguments: "{}" },
+                                toolInfo: {
+                                    type: "mcp",
+                                    name: "bash",
+                                    serverId: "bash-server",
+                                    serverName: "bash",
+                                },
+                            },
+                        ],
+                    }),
+                    approvalRequired({
+                        id: "approval-event",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(mockSession([pausedTurn]));
+
+            expect(result.messages).toHaveLength(2);
+            const assistant = result.messages[1];
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({
+                type: "requires-action",
+                reason: "tool-calls",
+            });
+            expect(assistant.metadata.custom[TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY]).toBe(
+                ROOT_THREAD_ID,
+            );
+            expect(assistant.content.find((part) => part.type === "tool-call")).toMatchObject({
+                type: "tool-call",
+                toolCallId: "approval-1",
+                approval: { id: "approval-1" },
+            });
+            expect(findPausedAssistantMessage(result.messages)).toBe(assistant);
+        });
+
+        it("downgrades to complete after a later turn submits user.tool_approval", async () => {
+            const pausedTurn = mockTurn({
+                id: "turn-approval",
+                createdAt,
+                input: [{ type: "user.message", content: "run tool" }],
+                state: {
+                    status: "done",
+                    output: null,
+                    requiredActions: [
+                        approvalRequired({
+                            id: "approval-event",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
+                        }),
+                    ],
+                    completedAt: createdAt,
+                },
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m1",
+                        threadId: ROOT_THREAD_ID,
+                        content: "run tool",
+                        toolCalls: [
+                            {
+                                id: "approval-1",
+                                type: "function",
+                                function: { name: "bash", arguments: "{}" },
+                                toolInfo: {
+                                    type: "mcp",
+                                    name: "bash",
+                                    serverId: "bash-server",
+                                    serverName: "bash",
+                                },
+                            },
+                        ],
+                    }),
+                    approvalRequired({
+                        id: "approval-event",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const continuationTurn = mockTurn({
+                id: "turn-approval-resume",
+                createdAt,
+                input: [
+                    {
+                        type: "user.tool_approval",
+                        threadId: ROOT_THREAD_ID,
+                        toolCallId: "approval-1",
+                        approval: { status: "allow" },
+                    },
+                ],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m2",
+                        threadId: ROOT_THREAD_ID,
+                        content: "done",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockSession([continuationTurn, pausedTurn]),
+            );
+
+            const assistant = result.messages[1];
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({ type: "complete", reason: "stop" });
+            expect(
+                assistant.metadata.custom[TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY],
+            ).toBeUndefined();
+            const toolCall = assistant.content.find((part) => part.type === "tool-call");
+            expect(toolCall?.type).toBe("tool-call");
+            if (toolCall?.type !== "tool-call") {
+                return;
+            }
+            expect(toolCall.approval?.approved).toBe(true);
+        });
+
+        it("preserves requires-action on reload when a turn ends awaiting tool response", async () => {
+            const pausedTurn = mockTurn({
+                id: "turn-response",
+                createdAt,
+                input: [{ type: "user.message", content: "ask me" }],
+                state: {
+                    status: "done",
+                    output: null,
+                    requiredActions: [
+                        responseRequired({
+                            id: "resp-req-1",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                        }),
+                    ],
+                    completedAt: createdAt,
+                },
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "model-1",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [
+                            {
+                                id: "question-1",
+                                type: "function",
+                                function: {
+                                    name: "ask_user_question",
+                                    arguments: JSON.stringify({
+                                        question: "Pick one",
+                                        options: ["A", "B"],
+                                    }),
+                                },
+                                toolInfo: {
+                                    type: "truefoundry-system",
+                                    name: "ask_user_question",
+                                },
+                            },
+                        ],
+                    }),
+                    responseRequired({
+                        id: "resp-req-1",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(mockSession([pausedTurn]));
+
+            const assistant = result.messages[1];
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({
+                type: "requires-action",
+                reason: "tool-calls",
+            });
+            expect(assistant.metadata.custom[TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY]).toBe(
+                ROOT_THREAD_ID,
+            );
+            expect(assistant.content[0]).toMatchObject({
+                type: "tool-call",
+                toolCallId: "question-1",
+                interrupt: {
+                    type: "human",
+                    payload: { question: "Pick one", options: ["A", "B"] },
+                },
+            });
+            expect(findPausedAssistantMessage(result.messages)).toBe(assistant);
+        });
+
+        it("downgrades to complete after a later turn submits user.tool_response", async () => {
+            const pausedTurn = mockTurn({
+                id: "turn-response",
+                createdAt,
+                input: [{ type: "user.message", content: "ask me" }],
+                state: {
+                    status: "done",
+                    output: null,
+                    requiredActions: [
+                        responseRequired({
+                            id: "resp-req-1",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                        }),
+                    ],
+                    completedAt: createdAt,
+                },
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "model-1",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [
+                            {
+                                id: "question-1",
+                                type: "function",
+                                function: {
+                                    name: "ask_user_question",
+                                    arguments: JSON.stringify({
+                                        question: "Pick one",
+                                        options: ["A", "B"],
+                                    }),
+                                },
+                                toolInfo: {
+                                    type: "truefoundry-system",
+                                    name: "ask_user_question",
+                                },
+                            },
+                        ],
+                    }),
+                    responseRequired({
+                        id: "resp-req-1",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const continuationTurn = mockTurn({
+                id: "turn-response-resume",
+                createdAt,
+                input: [
+                    {
+                        type: "user.tool_response",
+                        threadId: ROOT_THREAD_ID,
+                        toolCallId: "question-1",
+                        content: "A",
+                    },
+                ],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "model-2",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Thanks",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockSession([continuationTurn, pausedTurn]),
+            );
+
+            const assistant = result.messages[1];
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({ type: "complete", reason: "stop" });
+            expect(
+                assistant.metadata.custom[TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY],
+            ).toBeUndefined();
+            const toolCall = assistant.content[0];
+            expect(toolCall?.type).toBe("tool-call");
+            if (toolCall?.type !== "tool-call") {
+                return;
+            }
+            expect(toolCall.result).toBe("A");
+        });
+
+        it("scopes assistant content to each user turn group", async () => {
+            const helloTurn = mockTurn({
+                id: "turn-hello",
+                createdAt,
+                input: [{ type: "user.message", content: "hello" }],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m-hello",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Hello! How can I help?",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const analyzeTurn = mockTurn({
+                id: "turn-analyze",
+                createdAt,
+                input: [{ type: "user.message", content: "analyze" }],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m-analyze",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Let me look at the file.",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const ticketsTurn = mockTurn({
+                id: "turn-tickets",
+                createdAt,
+                input: [
+                    {
+                        type: "user.message",
+                        content: "create linear tickets",
+                    },
+                ],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m-tickets",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Creating tickets now.",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockSession([ticketsTurn, analyzeTurn, helloTurn]),
+            );
+
+            expect(result.messages).toHaveLength(6);
+            expect(result.messages[1]).toMatchObject({
+                id: "turn-hello-assistant",
+                role: "assistant",
+                content: [{ type: "text", text: "Hello! How can I help?" }],
+            });
+            expect(result.messages[3]).toMatchObject({
+                id: "turn-analyze-assistant",
+                role: "assistant",
+                content: [{ type: "text", text: "Let me look at the file." }],
+            });
+            expect(result.messages[5]).toMatchObject({
+                id: "turn-tickets-assistant",
+                role: "assistant",
+                content: [{ type: "text", text: "Creating tickets now." }],
+            });
+        });
+
+        it("projects file attachments on user messages from turn input", async () => {
+            const fileData = "data:text/x-python;base64,cHJpbnQoJ2hlbGxvJyk=";
+            const analyzeTurn = mockTurn({
+                id: "turn-analyze",
+                createdAt,
+                input: [
+                    {
+                        type: "user.message",
+                        content: [
+                            { type: "text", text: "analyze" },
+                            { type: "file", name: "Untitled.py", data: fileData },
+                        ],
+                    },
+                ],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m-analyze",
+                        threadId: ROOT_THREAD_ID,
+                        content: "File analyzed.",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(mockSession([analyzeTurn]));
+
+            expect(result.messages).toHaveLength(2);
+            expect(result.messages[0]).toMatchObject({
+                id: "turn-analyze-user",
+                role: "user",
+                content: [{ type: "text", text: "analyze" }],
+            });
+            if (result.messages[0]?.role !== "user") {
+                return;
+            }
+            expect(result.messages[0].attachments).toHaveLength(1);
+            expect(result.messages[0].attachments[0]).toMatchObject({
+                type: "file",
+                name: "Untitled.py",
+                contentType: "text/x-python",
+                status: { type: "complete" },
+                content: [
+                    {
+                        type: "file",
+                        mimeType: "text/x-python",
+                        filename: "Untitled.py",
+                        data: fileData,
+                    },
+                ],
+            });
+        });
+
+        it("nests sub-agents within a turn group and isolates the next user turn", async () => {
+            const spawnTurn = mockTurn({
+                id: "turn-spawn",
+                createdAt,
+                input: [{ type: "user.message", content: "spawn agent" }],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "root-spawn",
+                        threadId: ROOT_THREAD_ID,
+                        toolCalls: [
+                            {
+                                id: "spawn-1",
+                                type: "function",
+                                function: { name: "create_sub_agent", arguments: "{}" },
+                                toolInfo: {
+                                    type: "truefoundry-system",
+                                    name: "create_sub_agent",
+                                },
+                            },
+                        ],
+                    }),
+                    threadCreated({
+                        id: "t-created",
+                        threadId: "child-1",
+                        title: "Research agent",
+                        agentInfo: {
+                            type: "dynamic",
+                            name: "researcher",
+                            input: "do research",
+                        },
+                        parent: { threadId: ROOT_THREAD_ID, toolCallId: "spawn-1" },
+                    }),
+                    modelMessage({
+                        id: "child-msg-1",
+                        threadId: "child-1",
+                        content: "initial child work",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const continuationTurn = mockTurn({
+                id: "turn-continuation",
+                createdAt,
+                input: [
+                    {
+                        type: "user.tool_approval",
+                        threadId: ROOT_THREAD_ID,
+                        toolCallId: "spawn-1",
+                        approval: { status: "allow" },
+                    },
+                ],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "child-msg-2",
+                        threadId: "child-1",
+                        content: "more child work",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+            const nextUserTurn = mockTurn({
+                id: "turn-next",
+                createdAt,
+                input: [{ type: "user.message", content: "thanks" }],
+                listEvents: eventsPage([
+                    modelMessage({
+                        id: "m-thanks",
+                        threadId: ROOT_THREAD_ID,
+                        content: "You're welcome!",
+                    }),
+                ]) as unknown as Turn["listEvents"],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockSession([nextUserTurn, continuationTurn, spawnTurn]),
+            );
+
+            expect(result.messages).toHaveLength(4);
+            const groupAssistant = result.messages[1];
+            expect(groupAssistant?.role).toBe("assistant");
+            if (groupAssistant?.role !== "assistant") {
+                return;
+            }
+            const spawnPart = groupAssistant.content.find(
+                (part) => part.type === "tool-call",
+            );
+            expect(spawnPart?.type).toBe("tool-call");
+            if (spawnPart?.type !== "tool-call") {
+                return;
+            }
+            expect(spawnPart.artifact).toEqual({
+                subAgents: [
+                    {
+                        threadId: "child-1",
+                        title: "Research agent",
+                        agentInfo: {
+                            type: "dynamic",
+                            name: "researcher",
+                            input: "do research",
+                        },
+                    },
+                ],
+            });
+            expect(spawnPart.messages?.[0]?.metadata.custom.subAgent).toEqual({
+                threadId: "child-1",
+                title: "Research agent",
+                name: "researcher",
+                input: "do research",
+            });
+
+            const nextAssistant = result.messages[3];
+            expect(nextAssistant?.role).toBe("assistant");
+            if (nextAssistant?.role !== "assistant") {
+                return;
+            }
+            expect(nextAssistant.content).toEqual([
+                { type: "text", text: "You're welcome!" },
+            ]);
+            expect(
+                nextAssistant.content.some((part) => part.type === "tool-call"),
+            ).toBe(false);
+        });
+    });
+
+    describe("streamTurnEvents", () => {
+        it("yields folded root content as model messages arrive", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "streaming",
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            expect(updates).toEqual([{ content: [{ type: "text", text: "streaming" }] }]);
+        });
+
+        it("scopes streamed content to ids after the group baseline", async () => {
+            const foldState = new PeerThreadFoldState();
+            foldState.getOrCreateBucket(ROOT_THREAD_ID);
+            foldState.threads.get(ROOT_THREAD_ID)!.modelMessageIds.push("prior");
+            foldState.threads.get(ROOT_THREAD_ID)!.events.set(
+                "prior",
+                modelMessage({
+                    id: "prior",
+                    threadId: ROOT_THREAD_ID,
+                    content: "old turn",
+                }),
+            );
+
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m-new",
+                            threadId: ROOT_THREAD_ID,
+                            content: "new turn only",
+                        }),
+                    ]),
+                    foldState,
+                    ["prior"],
+                ),
+            );
+
+            expect(updates).toEqual([
+                { content: [{ type: "text", text: "new turn only" }] },
+            ]);
+        });
+
+        it("throws when the turn ends in error", async () => {
+            const foldState = new PeerThreadFoldState();
+            await expect(
+                collectStream(
+                    streamTurnEvents(
+                        streamFrom([
+                            {
+                                type: "turn.done",
+                                id: "turn-done",
+                                createdAt,
+                                state: {
+                                    status: "error",
+                                    message: "boom",
+                                    completedAt: createdAt,
+                                },
+                            },
+                        ]),
+                        foldState,
+                    ),
+                ),
+            ).rejects.toThrow("boom");
+        });
+
+        it("emits tool approval metadata after the stream when approvals remain pending", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "run tool",
+                            toolCalls: [
+                                {
+                                    id: "approval-1",
+                                    type: "function",
+                                    function: { name: "bash", arguments: "{}" },
+                                    toolInfo: {
+                                        type: "mcp",
+                                        name: "bash",
+                                        serverId: "bash-server",
+                                        serverName: "bash",
+                                    },
+                                },
+                            ],
+                        }),
+                        approvalRequired({
+                            id: "approval-event",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const final = updates.at(-1);
+            expect(final?.status).toEqual({
+                type: "requires-action",
+                reason: "tool-calls",
+            });
+            expect(final?.metadata?.custom?.[TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY]).toBe(
+                ROOT_THREAD_ID,
+            );
+        });
+
+        it("defers mcp auth until stream end and appends auth links", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "before auth",
+                        }),
+                        {
+                            type: "mcp.auth_required",
+                            id: "mcp-auth",
+                            createdAt,
+                            mcpServers: [
+                                {
+                                    id: "github-auth",
+                                    name: "github",
+                                    authUrl: "https://example.com/auth",
+                                },
+                            ],
+                        },
+                    ]),
+                    foldState,
+                ),
+            );
+
+            expect(updates).toHaveLength(2);
+            expect(updates[0]).toEqual({
+                content: [{ type: "text", text: "before auth" }],
+            });
+            expect(updates[1]?.status).toEqual({
+                type: "requires-action",
+                reason: "interrupt",
+            });
+            expect(updates[1]?.content.at(-1)).toMatchObject({
+                type: "text",
+                text: expect.stringContaining("Authorize github"),
+            });
+        });
+    });
+
+    describe("projectSessionMessages streamComplete", () => {
+        const turnId = "turn-live";
+
+        function snapshotWithCompletedStream(
+            update: TurnStreamUpdate,
+            foldState: PeerThreadFoldState,
+        ) {
+            return {
+                ...replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    pendingUser: {
+                        turnId,
+                        content: "hello",
+                        createdAt: new Date(createdAt),
+                    },
+                    activeStream: {
+                        turnId,
+                        update,
+                        isContinuation: false,
+                        streamComplete: true,
+                    },
+                }),
+                fold: foldState,
+            };
+        }
+
+        it("preserves requires-action when streamComplete and update has approval status", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "run tool",
+                            toolCalls: [
+                                {
+                                    id: "approval-1",
+                                    type: "function",
+                                    function: { name: "bash", arguments: "{}" },
+                                    toolInfo: {
+                                        type: "mcp",
+                                        name: "bash",
+                                        serverId: "bash-server",
+                                        serverName: "bash",
+                                    },
+                                },
+                            ],
+                        }),
+                        approvalRequired({
+                            id: "approval-event",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const finalUpdate = updates.at(-1)!;
+            const messages = projectSessionMessages(
+                snapshotWithCompletedStream(finalUpdate, foldState),
+            );
+
+            const assistant = messages.at(-1);
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({
+                type: "requires-action",
+                reason: "tool-calls",
+            });
+            expect(assistant.content.find((part) => part.type === "tool-call")).toMatchObject({
+                type: "tool-call",
+                toolCallId: "approval-1",
+                approval: { id: "approval-1" },
+            });
+            expect(findPausedAssistantMessage(messages)).toBe(assistant);
+        });
+
+        it("preserves requires-action when streamComplete and update has ask-user status", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "model-1",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [
+                                {
+                                    id: "question-1",
+                                    type: "function",
+                                    function: {
+                                        name: "ask_user_question",
+                                        arguments: JSON.stringify({
+                                            question: "Pick one",
+                                            options: ["A", "B"],
+                                        }),
+                                    },
+                                    toolInfo: {
+                                        type: "truefoundry-system",
+                                        name: "ask_user_question",
+                                    },
+                                },
+                            ],
+                        }),
+                        responseRequired({
+                            id: "resp-req-1",
+                            threadId: ROOT_THREAD_ID,
+                            toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const finalUpdate = updates.at(-1)!;
+            const messages = projectSessionMessages(
+                snapshotWithCompletedStream(finalUpdate, foldState),
+            );
+
+            const assistant = messages.at(-1);
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({
+                type: "requires-action",
+                reason: "tool-calls",
+            });
+            expect(assistant.content[0]).toMatchObject({
+                type: "tool-call",
+                toolCallId: "question-1",
+                interrupt: {
+                    type: "human",
+                    payload: { question: "Pick one", options: ["A", "B"] },
+                },
+            });
+            expect(findPausedAssistantMessage(messages)).toBe(assistant);
+        });
+
+        it("forces complete when streamComplete and update has no explicit status", () => {
+            const foldState = new PeerThreadFoldState();
+            const messages = projectSessionMessages(
+                snapshotWithCompletedStream(
+                    { content: [{ type: "text", text: "done" }] },
+                    foldState,
+                ),
+            );
+
+            const assistant = messages.at(-1);
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({
+                type: "complete",
+                reason: "stop",
+            });
+        });
+    });
+
+    describe("ask-user reload projection", () => {
+        it("does not resurface answered ask-user prompts after a continuation turn", () => {
+            const fold = new PeerThreadFoldState();
+            const turn1Id = "turn-1";
+            const turn2Id = "turn-2";
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "What would you like help with today?",
+                                    options: ["Help with a coding or technical task"],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            );
+            ingestTurnEvent(
+                fold,
+                responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            );
+            applyUserToolResponsesToFold(fold, []);
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-2",
+                    threadId: ROOT_THREAD_ID,
+                    content: "Great, you'd like help with a coding task!",
+                }),
+            );
+            applyUserToolResponsesToFold(fold, [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "Help with a coding or technical task",
+                },
+            ]);
+
+            const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                fold,
+                turns: [
+                    {
+                        id: turn1Id,
+                        createdAt,
+                        userText: "hello",
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "hello" }],
+                        rootModelMessageIds: ["model-1"],
+                    },
+                    {
+                        id: turn2Id,
+                        createdAt,
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [
+                            {
+                                type: "user.tool_response",
+                                threadId: ROOT_THREAD_ID,
+                                toolCallId: "question-1",
+                                content: "Help with a coding or technical task",
+                            },
+                        ],
+                        rootModelMessageIds: ["model-2"],
+                    },
+                ],
+            });
+
+            const messages = projectSessionMessages(snapshot);
+            expect(collectPendingToolResponses(messages)).toHaveLength(0);
+
+            const assistant = messages.find((message) => message.role === "assistant");
+            expect(assistant).toBeDefined();
+            const toolCall = assistant?.content.find((part) => part.type === "tool-call");
+            expect(toolCall).toMatchObject({
+                type: "tool-call",
+                toolCallId: "question-1",
+                result: "Help with a coding or technical task",
+            });
+            if (toolCall?.type === "tool-call") {
+                expect(toolCall.interrupt).toBeUndefined();
+            }
+        });
+
+        it("rebuilds paused activeStream content from fold after an ask-user answer is recorded", () => {
+            const fold = new PeerThreadFoldState();
+            const turnId = "turn-ask";
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Pick one",
+                                    options: ["A", "B"],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            );
+            ingestTurnEvent(
+                fold,
+                responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            );
+
+            const pausedContent = buildRootAssistantContent(fold);
+            applyUserToolResponsesToFold(fold, [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "A",
+                },
+            ]);
+
+            const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                fold,
+                pendingUser: {
+                    turnId,
+                    content: "ask me a question",
+                    createdAt: new Date(createdAt),
+                },
+                activeStream: {
+                    turnId,
+                    isContinuation: false,
+                    streamComplete: true,
+                    update: {
+                        content: pausedContent,
+                        status: toolResponseStatus(),
+                    },
+                },
+                groupRootBaseline: [],
+            });
+
+            const messages = projectSessionMessages(snapshot);
+            expect(collectPendingToolResponses(messages)).toHaveLength(0);
+        });
+    });
+
+    describe("ask-user live continuation projection", () => {
+        it("scopes activeStream to the current group when a continuation turn completes", () => {
+            const fold = new PeerThreadFoldState();
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "What would you like help with?",
+                                    options: ["Help with a coding task"],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            );
+            ingestTurnEvent(
+                fold,
+                responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            );
+            applyUserToolResponsesToFold(fold, [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "Help with a coding task",
+                },
+            ]);
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-2",
+                    threadId: ROOT_THREAD_ID,
+                    content: "Group 1 follow-up",
+                }),
+            );
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-3",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [
+                        {
+                            id: "question-2",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "What kind of code?",
+                                    options: ["Write new code"],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            );
+            ingestTurnEvent(
+                fold,
+                responseRequired({
+                    id: "resp-req-2",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-2", sourceEventId: "model-3" }],
+                }),
+            );
+            applyUserToolResponsesToFold(fold, [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-2",
+                    content: "Write new code",
+                },
+            ]);
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-4",
+                    threadId: ROOT_THREAD_ID,
+                    content: "Group 2 follow-up",
+                }),
+            );
+
+            const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                fold,
+                groupRootBaseline: ["model-1", "model-2"],
+                turns: [
+                    {
+                        id: "turn-1",
+                        createdAt,
+                        userText: "ask me a question",
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "ask me a question" }],
+                        rootModelMessageIds: ["model-1"],
+                    },
+                    {
+                        id: "turn-2",
+                        createdAt,
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [
+                            {
+                                type: "user.tool_response",
+                                threadId: ROOT_THREAD_ID,
+                                toolCallId: "question-1",
+                                content: "Help with a coding task",
+                            },
+                        ],
+                        rootModelMessageIds: ["model-2"],
+                    },
+                    {
+                        id: "turn-3",
+                        createdAt,
+                        userText: "ask again",
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "ask again" }],
+                        rootModelMessageIds: ["model-3"],
+                    },
+                ],
+                activeStream: {
+                    turnId: "turn-4",
+                    isContinuation: true,
+                    streamComplete: true,
+                    update: {
+                        content: [{ type: "text", text: "Group 2 follow-up" }],
+                        status: { type: "complete", reason: "stop" },
+                    },
+                },
+            });
+
+            const messages = projectSessionMessages(snapshot);
+            expect(messages).toHaveLength(4);
+
+            const group1Assistant = messages[1];
+            const group2Assistant = messages[3];
+            expect(group1Assistant?.role).toBe("assistant");
+            expect(group2Assistant?.role).toBe("assistant");
+            if (group1Assistant?.role !== "assistant" || group2Assistant?.role !== "assistant") {
+                return;
+            }
+
+            const group1Texts = group1Assistant.content
+                .filter((part) => part.type === "text")
+                .map((part) => part.text);
+            const group2Texts = group2Assistant.content
+                .filter((part) => part.type === "text")
+                .map((part) => part.text);
+
+            expect(group1Texts).toContain("Group 1 follow-up");
+            expect(group1Texts).not.toContain("Group 2 follow-up");
+            expect(group2Texts).toContain("Group 2 follow-up");
+            expect(group2Texts).not.toContain("Group 1 follow-up");
+
+            const group2ToolCalls = group2Assistant.content.filter(
+                (part) => part.type === "tool-call",
+            );
+            expect(group2ToolCalls).toHaveLength(1);
+            expect(group2ToolCalls[0]).toMatchObject({
+                toolCallId: "question-2",
+                result: "Write new code",
+            });
+        });
+    });
+});

@@ -1,0 +1,66 @@
+{
+  "name": "truefoundry-agents-assistant-ui-runtime",
+  "version": "0.1.0",
+  "description": "TrueFoundry Gateway agent runtime adapter for assistant-ui",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime"
+  },
+  "homepage": "https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime#readme",
+  "keywords": [
+    "assistant-ui",
+    "truefoundry",
+    "ai",
+    "agent",
+    "react",
+    "llm",
+    "chat"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "prepare": "tsup",
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@assistant-ui/core": "^0.2.19",
+    "@assistant-ui/store": "^0.2.19"
+  },
+  "peerDependencies": {
+    "@types/react": "*",
+    "react": "^18 || ^19",
+    "truefoundry-gateway-sdk": "^0.1.0-rc.1"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^20",
+    "@types/react": "^19.2.17",
+    "jsdom": "^29.1.1",
+    "react": "^19.2.4",
+    "truefoundry-gateway-sdk": "^0.1.0-rc.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}
