@@ -11,7 +11,7 @@ import { useErrorToaster } from "@/components/assistant-ui/error-toaster";
 import { getAgentSessionClient } from "@/lib/chat/agentClient";
 import { useGatewayCredentials } from "@/lib/chat/gatewayCredentials";
 
-const AGENT_NAME = "agent-sdk-test";
+const DEFAULT_AGENT_NAME = "agent-sdk-test";
 
 export function TrueFoundryAgentRuntimeProvider({
     children,
@@ -25,7 +25,7 @@ export function TrueFoundryAgentRuntimeProvider({
 
     const runtime = useTrueFoundryAgentRuntime({
         client,
-        agentName: AGENT_NAME,
+        agentName: credentials.agentName ?? DEFAULT_AGENT_NAME,
         adapters: { attachments: trueFoundryAttachmentAdapter },
         onError: showError,
     });

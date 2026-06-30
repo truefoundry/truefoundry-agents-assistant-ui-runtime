@@ -45,10 +45,10 @@ Features shown:
 
    Copy `.env.example` as a reference.
 
-4. **Set your agent name.** Edit `src/app/TrueFoundryAgentRuntimeProvider.tsx` and update `AGENT_NAME` to match your deployed agent:
+4. **Set your agent name.** Include `TFY_AGENT_NAME` in the `.env` content you paste into the credentials form:
 
-   ```ts
-   const AGENT_NAME = "your-agent-name";
+   ```
+   TFY_AGENT_NAME=your-agent-name
    ```
 
 ## Key files

@@ -1,6 +1,7 @@
 export type GatewayCredentials = {
     apiKey: string;
     gatewayUrl: string;
+    agentName?: string;
 };
 
 function unquote(value: string): string {
@@ -31,6 +32,7 @@ function parseEnvLine(line: string): [string, string] | null {
 export function parseEnvCredentials(text: string): GatewayCredentials {
     let apiKey: string | undefined;
     let gatewayUrl: string | undefined;
+    let agentName: string | undefined;
 
     for (const line of text.split(/\r?\n/)) {
         const parsed = parseEnvLine(line);
@@ -42,6 +44,8 @@ export function parseEnvCredentials(text: string): GatewayCredentials {
             apiKey = value;
         } else if (key === "TFY_GATEWAY_URL") {
             gatewayUrl = value;
+        } else if (key === "TFY_AGENT_NAME") {
+            agentName = value;
         }
     }
 
@@ -52,5 +56,5 @@ export function parseEnvCredentials(text: string): GatewayCredentials {
         throw new Error("Missing TFY_GATEWAY_URL in pasted .env content.");
     }
 
-    return { apiKey, gatewayUrl };
+    return { apiKey, gatewayUrl, agentName };
 }

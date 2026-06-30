@@ -59,8 +59,9 @@ function ConnectGateway({
                 <h1 className="text-xl font-semibold">Connect to TrueFoundry Gateway</h1>
                 <p className="text-sm text-muted-foreground">
                     Paste your <code className="text-xs">.env</code> content (
-                    <code className="text-xs">TFY_API_KEY</code> and{" "}
-                    <code className="text-xs">TFY_GATEWAY_URL</code>).
+                    <code className="text-xs">TFY_API_KEY</code>,{" "}
+                    <code className="text-xs">TFY_GATEWAY_URL</code>, and optionally{" "}
+                    <code className="text-xs">TFY_AGENT_NAME</code>).
                 </p>
                 <label className="block space-y-1">
                     <span className="text-sm text-muted-foreground">.env</span>
@@ -70,7 +71,7 @@ function ConnectGateway({
                             setEnvText(e.target.value);
                             setError(null);
                         }}
-                        placeholder={"TFY_API_KEY=your-api-key\nTFY_GATEWAY_URL=https://gateway.truefoundry.ai/<tenant>"}
+                        placeholder={"TFY_API_KEY=your-api-key\nTFY_GATEWAY_URL=https://gateway.truefoundry.ai/<tenant>\nTFY_AGENT_NAME=your-agent-name"}
                         rows={6}
                         spellCheck={false}
                         className="w-full rounded-md border px-3 py-2 font-mono text-sm"

@@ -43,7 +43,7 @@ import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 
-const AGENT_NAME = process.env.NEXT_PUBLIC_TFY_AGENT_NAME!;
+const AGENT_NAME = process.env.TFY_AGENT_NAME!;
 const client = new AgentSessionClient({ /* ... */ });
 
 export function MyAssistant() {
