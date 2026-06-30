@@ -18,6 +18,8 @@ examples/
 | `packages/truefoundry-agents-assistant-ui-runtime` | [Package docs](packages/truefoundry-agents-assistant-ui-runtime/README.md) — installation, API reference, hooks, architecture |
 | `examples/assistant-ui-react` | [Example docs](examples/assistant-ui-react/README.md) — running the demo locally |
 
+![Demo screenshot](examples/assistant-ui-react/assets/image.png)
+
 ## Quickstart (demo app)
 
 ```bash

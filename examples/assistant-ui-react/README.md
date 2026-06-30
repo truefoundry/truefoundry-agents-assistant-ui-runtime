@@ -2,6 +2,8 @@
 
 A Next.js chat app that demonstrates [`truefoundry-agents-assistant-ui-runtime`](../../packages/truefoundry-agents-assistant-ui-runtime) wired to a live TrueFoundry Gateway agent.
 
+![Demo screenshot](assets/image.png)
+
 Features shown:
 - Session list sidebar with thread history
 - Streaming assistant responses with reasoning blocks
