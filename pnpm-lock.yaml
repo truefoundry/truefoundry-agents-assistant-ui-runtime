@@ -53,8 +53,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/truefoundry-agents-assistant-ui-runtime
       truefoundry-gateway-sdk:
-        specifier: ^0.1.0-rc.1
-        version: 0.1.0-rc.1
+        specifier: ^0.1.0
+        version: 0.1.0
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
@@ -115,8 +115,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.4
       truefoundry-gateway-sdk:
-        specifier: ^0.1.0-rc.1
-        version: 0.1.0-rc.1
+        specifier: ^0.1.0
+        version: 0.1.0
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(typescript@5.9.3)
@@ -4653,8 +4653,8 @@ packages:
   trough@2.2.0:
     resolution: {integrity: sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==}
 
-  truefoundry-gateway-sdk@0.1.0-rc.1:
-    resolution: {integrity: sha512-hMp1a4o766uB2uE8cBKzvWXooXFnkSk+kG3jIGu5tNDvbTV3cuW6YlIgknzeWbtObv5mKooRPGWFf2qCpuYrrw==}
+  truefoundry-gateway-sdk@0.1.0:
+    resolution: {integrity: sha512-DeOfcSX5fActQ8bkmOvp189MOihWgokPel2A4hzGnEylcqgj4fDa/Z0s87JwISX4Os8TT73tDNeCxJ2VM/KNww==}
     engines: {node: '>=18.0.0'}
 
   ts-api-utils@2.5.0:
@@ -10008,7 +10008,7 @@ snapshots:
 
   trough@2.2.0: {}
 
-  truefoundry-gateway-sdk@0.1.0-rc.1: {}
+  truefoundry-gateway-sdk@0.1.0: {}
 
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
