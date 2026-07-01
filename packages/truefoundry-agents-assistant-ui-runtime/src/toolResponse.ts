@@ -12,7 +12,11 @@ import type {
 } from "truefoundry-gateway-sdk/agents";
 
 import { ROOT_THREAD_ID } from "./constants.js";
-import { recordToolResponseInFold, type PeerThreadFoldState } from "./foldPeerThreads.js";
+import {
+    recordToolApprovalInFold,
+    recordToolResponseInFold,
+    type PeerThreadFoldState,
+} from "./foldPeerThreads.js";
 import type { ToolResponseMessageCustomMetadata } from "./messageCustomMetadata.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
@@ -343,6 +347,14 @@ export function applyUserToolResponsesToFold(
             recordToolResponseInFold(fold, {
                 toolCallId: item.toolCallId,
                 content: item.content,
+            });
+        } else if (item.type === "user.tool_approval") {
+            recordToolApprovalInFold(fold, {
+                toolCallId: item.toolCallId,
+                approved: item.approval.status === "allow",
+                ...(item.approval.status === "deny" && item.approval.reason != null
+                    ? { reason: item.approval.reason }
+                    : {}),
             });
         }
     }

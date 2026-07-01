@@ -1,7 +1,5 @@
 import type { ThreadAssistantMessagePart } from "@assistant-ui/core";
 import type { ModelMessageEvent } from "truefoundry-gateway-sdk/agents";
-
-import { parseAskUserQuestionArgs } from "./askUserQuestion.js";
 import type { PendingResponseRef } from "./foldPeerThreads.js";
 
 export type AssistantContentPart = ThreadAssistantMessagePart;
@@ -9,6 +7,10 @@ export type AssistantContentPart = ThreadAssistantMessagePart;
 export type ToolCallContext = {
     toolResults?: ReadonlyMap<string, string>;
     pendingApprovals?: ReadonlyMap<string, { id: string }>;
+    approvalDecisions?: ReadonlyMap<
+        string,
+        { id: string; approved: boolean; reason?: string }
+    >;
     pendingResponses?: ReadonlyMap<string, PendingResponseRef>;
 };
 
@@ -29,17 +31,20 @@ function parseToolArgs(argsText: string): Record<string, string | number | boole
     }
 }
 
+type ToolCallPart = Extract<AssistantContentPart, { type: "tool-call" }>;
+
 function toolCallToPart(
     toolCall: SdkToolCall,
     context?: ToolCallContext,
-): Extract<AssistantContentPart, { type: "tool-call" }> {
+): ToolCallPart {
     const argsText = toolCall.function.arguments ?? "";
-    const result = context?.toolResults?.get(toolCall.id);
-    const approval = context?.pendingApprovals?.get(toolCall.id);
+    const toolResult = context?.toolResults?.get(toolCall.id);
     const pendingResponse = context?.pendingResponses?.get(toolCall.id);
+    const pendingApproval = context?.pendingApprovals?.get(toolCall.id);
+    const approvalDecision = context?.approvalDecisions?.get(toolCall.id);
 
-    let interrupt: Extract<AssistantContentPart, { type: "tool-call" }>["interrupt"];
-    if (pendingResponse != null && result === undefined) {
+    let interrupt: ToolCallPart["interrupt"];
+    if (pendingResponse != null && toolResult === undefined) {
         interrupt = {
             type: "human",
             payload: {
@@ -53,6 +58,28 @@ function toolCallToPart(
         };
     }
 
+    let approval: ToolCallPart["approval"];
+    if (approvalDecision != null) {
+        approval = {
+            id: approvalDecision.id,
+            approved: approvalDecision.approved,
+            ...(approvalDecision.reason != null
+                ? { reason: approvalDecision.reason }
+                : {}),
+        };
+    } else if (pendingApproval != null) {
+        approval = { id: pendingApproval.id };
+    }
+
+    let result: ToolCallPart["result"];
+    let isError = false;
+    if (toolResult !== undefined) {
+        result = toolResult;
+    } else if (approvalDecision?.approved === false) {
+        result = { error: approvalDecision.reason || "Tool approval denied" };
+        isError = true;
+    }
+
     return {
         type: "tool-call",
         toolCallId: toolCall.id,
@@ -60,7 +87,8 @@ function toolCallToPart(
         argsText,
         args: parseToolArgs(argsText),
         ...(result !== undefined ? { result } : {}),
-        ...(approval != null ? { approval: { id: approval.id } } : {}),
+        ...(isError ? { isError: true } : {}),
+        ...(approval != null ? { approval } : {}),
         ...(interrupt != null ? { interrupt } : {}),
     };
 }

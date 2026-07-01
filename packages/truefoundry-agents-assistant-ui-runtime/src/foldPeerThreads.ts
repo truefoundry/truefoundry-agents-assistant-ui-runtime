@@ -48,11 +48,18 @@ export type PendingResponseRef = {
     options?: string[];
 };
 
+export type ApprovalDecisionRef = {
+    id: string;
+    approved: boolean;
+    reason?: string;
+};
+
 export type ThreadBucket = {
     events: Map<string, TurnEvent>;
     modelMessageIds: string[];
     toolResults: Map<string, string>;
     pendingApprovals: Map<string, { id: string }>;
+    approvalDecisions: Map<string, ApprovalDecisionRef>;
     pendingResponses: Map<string, PendingResponseRef>;
     done: boolean;
     title?: string;
@@ -102,6 +109,7 @@ export class PeerThreadFoldState {
                 modelMessageIds: [],
                 toolResults: new Map(),
                 pendingApprovals: new Map(),
+                approvalDecisions: new Map(),
                 pendingResponses: new Map(),
                 done: false,
             };
@@ -415,6 +423,7 @@ function buildThreadAssistantParts(
             ...buildAssistantContent(event, {
                 toolResults: bucket.toolResults,
                 pendingApprovals: bucket.pendingApprovals,
+                approvalDecisions: bucket.approvalDecisions,
                 pendingResponses: bucket.pendingResponses,
             }),
         );
@@ -514,6 +523,31 @@ export function resolveAskUserQuestion(
 
 export function isRootThreadId(threadId: string | undefined): boolean {
     return threadId === ROOT_THREAD_ID;
+}
+
+export function recordToolApprovalInFold(
+    fold: PeerThreadFoldState,
+    decision: { toolCallId: string; approved: boolean; reason?: string },
+): void {
+    const record: ApprovalDecisionRef = {
+        id: decision.toolCallId,
+        approved: decision.approved,
+        ...(decision.reason != null ? { reason: decision.reason } : {}),
+    };
+    let applied = false;
+    for (const bucket of fold.threads.values()) {
+        if (!bucket.pendingApprovals.has(decision.toolCallId)) {
+            continue;
+        }
+        bucket.pendingApprovals.delete(decision.toolCallId);
+        bucket.approvalDecisions.set(decision.toolCallId, record);
+        applied = true;
+    }
+    if (applied) {
+        return;
+    }
+    const rootBucket = fold.getOrCreateBucket(ROOT_THREAD_ID);
+    rootBucket.approvalDecisions.set(decision.toolCallId, record);
 }
 
 /** Persist a user.tool_response answer into fold state (clears pending ask-user). */

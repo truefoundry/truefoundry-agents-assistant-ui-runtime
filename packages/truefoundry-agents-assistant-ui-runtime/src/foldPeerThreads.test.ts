@@ -11,6 +11,7 @@ import {
     ingestStreamEvent,
     ingestTurnEvent,
     PeerThreadFoldState,
+    recordToolApprovalInFold,
     recordToolResponseInFold,
 } from "./foldPeerThreads.js";
 
@@ -292,5 +293,80 @@ describe("foldPeerThreads", () => {
         }
         expect(toolCall.result).toBe("A");
         expect(toolCall.interrupt).toBeUndefined();
+    });
+
+    function seedPendingApproval(): PeerThreadFoldState {
+        const state = new PeerThreadFoldState();
+        ingestTurnEvent(
+            state,
+            modelMessage({
+                id: "model-1",
+                threadId: ROOT_THREAD_ID,
+                toolCalls: [
+                    {
+                        id: "tool-1",
+                        type: "function",
+                        function: { name: "run_shell", arguments: "{}" },
+                        toolInfo: {
+                            type: "mcp",
+                            name: "run_shell",
+                            serverId: "srv-1",
+                            serverName: "shell",
+                        },
+                    },
+                ],
+            }),
+        );
+        ingestTurnEvent(state, {
+            type: "tool.approval_required",
+            id: "appr-req-1",
+            createdAt,
+            threadId: ROOT_THREAD_ID,
+            toolCalls: [{ id: "tool-1", sourceEventId: "model-1" }],
+        });
+        return state;
+    }
+
+    it("recordToolApprovalInFold resolves a pending approval on allow", () => {
+        const state = seedPendingApproval();
+        const bucket = state.threads.get(ROOT_THREAD_ID)!;
+        expect(bucket.pendingApprovals.has("tool-1")).toBe(true);
+
+        recordToolApprovalInFold(state, { toolCallId: "tool-1", approved: true });
+
+        // Once decided, the approval must leave the pending set so the turn is
+        // not re-paused (and the user re-prompted) for it after resume.
+        expect(bucket.pendingApprovals.has("tool-1")).toBe(false);
+
+        const toolCall = buildRootAssistantContent(state).find(
+            (part) => part.type === "tool-call",
+        );
+        if (toolCall?.type !== "tool-call") {
+            throw new Error("expected a tool-call part");
+        }
+        expect(toolCall.approval?.approved).toBe(true);
+    });
+
+    it("recordToolApprovalInFold synthesizes an error result on deny", () => {
+        const state = seedPendingApproval();
+
+        recordToolApprovalInFold(state, {
+            toolCallId: "tool-1",
+            approved: false,
+            reason: "not allowed",
+        });
+
+        const bucket = state.threads.get(ROOT_THREAD_ID)!;
+        expect(bucket.pendingApprovals.has("tool-1")).toBe(false);
+
+        const toolCall = buildRootAssistantContent(state).find(
+            (part) => part.type === "tool-call",
+        );
+        if (toolCall?.type !== "tool-call") {
+            throw new Error("expected a tool-call part");
+        }
+        expect(toolCall.approval?.approved).toBe(false);
+        expect(toolCall.isError).toBe(true);
+        expect(toolCall.result).toEqual({ error: "not allowed" });
     });
 });
