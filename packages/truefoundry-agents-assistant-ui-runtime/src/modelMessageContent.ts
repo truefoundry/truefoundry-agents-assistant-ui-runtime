@@ -9,6 +9,10 @@ export type AssistantContentPart = ThreadAssistantMessagePart;
 export type ToolCallContext = {
     toolResults?: ReadonlyMap<string, string>;
     pendingApprovals?: ReadonlyMap<string, { id: string }>;
+    approvalDecisions?: ReadonlyMap<
+        string,
+        { id: string; approved: boolean; reason?: string }
+    >;
     pendingResponses?: ReadonlyMap<string, PendingResponseRef>;
 };
 
@@ -34,12 +38,13 @@ function toolCallToPart(
     context?: ToolCallContext,
 ): Extract<AssistantContentPart, { type: "tool-call" }> {
     const argsText = toolCall.function.arguments ?? "";
-    const result = context?.toolResults?.get(toolCall.id);
-    const approval = context?.pendingApprovals?.get(toolCall.id);
+    const toolResult = context?.toolResults?.get(toolCall.id);
+    const pendingApproval = context?.pendingApprovals?.get(toolCall.id);
+    const approvalDecision = context?.approvalDecisions?.get(toolCall.id);
     const pendingResponse = context?.pendingResponses?.get(toolCall.id);
 
     let interrupt: Extract<AssistantContentPart, { type: "tool-call" }>["interrupt"];
-    if (pendingResponse != null && result === undefined) {
+    if (pendingResponse != null && toolResult === undefined) {
         interrupt = {
             type: "human",
             payload: {
@@ -53,6 +58,18 @@ function toolCallToPart(
         };
     }
 
+    // A resolved approval takes precedence over a pending one: it carries the
+    // allow/deny decision, and a denial synthesizes an error result (mirroring
+    // the projection overlay) when the tool never executed.
+    const approval = approvalDecision ?? pendingApproval;
+    const isDenied = approvalDecision != null && approvalDecision.approved === false;
+    const result =
+        toolResult !== undefined
+            ? toolResult
+            : isDenied
+              ? { error: approvalDecision!.reason || "Tool approval denied" }
+              : undefined;
+
     return {
         type: "tool-call",
         toolCallId: toolCall.id,
@@ -60,7 +77,21 @@ function toolCallToPart(
         argsText,
         args: parseToolArgs(argsText),
         ...(result !== undefined ? { result } : {}),
-        ...(approval != null ? { approval: { id: approval.id } } : {}),
+        ...(isDenied && toolResult === undefined ? { isError: true } : {}),
+        ...(approval != null
+            ? {
+                  approval:
+                      approvalDecision != null
+                          ? {
+                                id: approvalDecision.id,
+                                approved: approvalDecision.approved,
+                                ...(approvalDecision.reason != null
+                                    ? { reason: approvalDecision.reason }
+                                    : {}),
+                            }
+                          : { id: pendingApproval!.id },
+              }
+            : {}),
         ...(interrupt != null ? { interrupt } : {}),
     };
 }
