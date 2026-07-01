@@ -11,6 +11,7 @@ import { MarkdownText } from "@assistant-ui/react-ink-markdown";
 import {
     useTrueFoundryToolResponses,
     useTrueFoundryApprovals,
+    useTrueFoundryMcpAuth,
     type PendingToolResponse,
 } from "truefoundry-agents-assistant-ui-runtime";
 
@@ -82,6 +83,41 @@ const ToolResponseInput = ({ pending }: { pending: PendingToolResponse }) => {
     );
 };
 
+// ── MCP OAuth prompt ──────────────────────────────────────────────────────────
+
+const McpAuthInput = () => {
+    const { pending, resume } = useTrueFoundryMcpAuth();
+
+    useInput((_input, key) => {
+        if (!pending) return;
+        if (key.return) {
+            void resume();
+        }
+    });
+
+    if (!pending) return null;
+
+    return (
+        <Box flexDirection="column" gap={1}>
+            <Text color="magenta" bold>
+                {"⚠ Authorization required"}
+            </Text>
+            <Text dimColor>{"  Open each link in your browser to sign in:"}</Text>
+            {pending.mcpServers.map((server) => (
+                <Box key={server.name} flexDirection="column">
+                    <Text>
+                        {"  "}
+                        <Text color="cyan">{server.name}</Text>
+                        {": "}
+                        <Text underline>{server.authUrl}</Text>
+                    </Text>
+                </Box>
+            ))}
+            <Text dimColor>{"  Press Enter once authorized to continue."}</Text>
+        </Box>
+    );
+};
+
 // ── Tool approval prompt (y/n) ───────────────────────────────────────────────
 
 const ToolApprovalInput = () => {
@@ -119,8 +155,13 @@ const ToolApprovalInput = () => {
 // ── Composer ──────────────────────────────────────────────────────────────────
 
 const Composer = () => {
+    const { pending: pendingMcpAuth } = useTrueFoundryMcpAuth();
     const { pending: pendingResponses } = useTrueFoundryToolResponses();
     const { pending: pendingApprovals } = useTrueFoundryApprovals();
+
+    if (pendingMcpAuth != null) {
+        return <McpAuthInput />;
+    }
 
     if (pendingResponses.length > 0) {
         return <ToolResponseInput key={pendingResponses[0]!.toolCallId} pending={pendingResponses[0]!} />;
