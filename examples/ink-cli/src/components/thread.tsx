@@ -6,6 +6,7 @@ import {
     MessagePrimitive,
     ErrorPrimitive,
     LoadingPrimitive,
+    useAuiState,
 } from "@assistant-ui/react-ink";
 import { MarkdownText } from "@assistant-ui/react-ink-markdown";
 import {
@@ -19,11 +20,13 @@ import {
 
 const ToolResponseInput = ({ pending }: { pending: PendingToolResponse }) => {
     const { respond } = useTrueFoundryToolResponses();
+    const isRunning = useAuiState((s) => s.thread.isRunning);
     const [value, setValue] = useState("");
     const [selected, setSelected] = useState(0);
     const hasOptions = pending.options != null && pending.options.length > 0;
 
     useInput((input, key) => {
+        if (isRunning) return;
         if (hasOptions) {
             const count = pending.options!.length;
             if (key.upArrow) {
@@ -54,25 +57,33 @@ const ToolResponseInput = ({ pending }: { pending: PendingToolResponse }) => {
     return (
         <Box flexDirection="column" gap={1}>
             {pending.question != null && (
-                <Text color="yellow">{"? "}{pending.question}</Text>
+                <Text color={isRunning ? undefined : "yellow"} dimColor={isRunning}>
+                    {"? "}{pending.question}
+                </Text>
             )}
             {hasOptions ? (
                 <Box flexDirection="column">
                     {pending.options!.map((opt, i) => (
-                        <Text key={opt}>
-                            {i === selected ? (
+                        <Text key={opt} dimColor={isRunning}>
+                            {!isRunning && i === selected ? (
                                 <Text color="yellow">{"❯ "}{opt}</Text>
                             ) : (
                                 <Text dimColor>{"  "}{opt}</Text>
                             )}
                         </Text>
                     ))}
-                    <Text dimColor>  ↑↓ navigate · Enter to select</Text>
+                    {isRunning ? (
+                        <Text dimColor>  Waiting for agent…</Text>
+                    ) : (
+                        <Text dimColor>  ↑↓ navigate · Enter to select</Text>
+                    )}
                 </Box>
             ) : (
-                <Box borderStyle="round" borderColor="yellow" paddingX={1}>
+                <Box borderStyle="round" borderColor={isRunning ? "gray" : "yellow"} paddingX={1}>
                     <Text color="gray">{"> "}</Text>
-                    {value !== "" ? (
+                    {isRunning ? (
+                        <Text dimColor>Waiting for agent…</Text>
+                    ) : value !== "" ? (
                         <Text>{value}</Text>
                     ) : (
                         <Text dimColor>Type your answer… (Enter to send)</Text>
@@ -87,9 +98,10 @@ const ToolResponseInput = ({ pending }: { pending: PendingToolResponse }) => {
 
 const McpAuthInput = () => {
     const { pending, resume } = useTrueFoundryMcpAuth();
+    const isRunning = useAuiState((s) => s.thread.isRunning);
 
     useInput((_input, key) => {
-        if (!pending) return;
+        if (!pending || isRunning) return;
         if (key.return) {
             void resume();
         }
@@ -113,7 +125,11 @@ const McpAuthInput = () => {
                     </Text>
                 </Box>
             ))}
-            <Text dimColor>{"  Press Enter once authorized to continue."}</Text>
+            {isRunning ? (
+                <Text dimColor>{"  Waiting for agent…"}</Text>
+            ) : (
+                <Text dimColor>{"  Press Enter once authorized to continue."}</Text>
+            )}
         </Box>
     );
 };
@@ -122,10 +138,11 @@ const McpAuthInput = () => {
 
 const ToolApprovalInput = () => {
     const { pending, respond } = useTrueFoundryApprovals();
+    const isRunning = useAuiState((s) => s.thread.isRunning);
     const first = pending[0];
 
     useInput((input) => {
-        if (!first) return;
+        if (!first || isRunning) return;
         if (input === "y" || input === "Y") {
             respond({ approvalId: first.approvalId, approved: true });
         } else if (input === "n" || input === "N") {
@@ -137,17 +154,21 @@ const ToolApprovalInput = () => {
 
     return (
         <Box flexDirection="column" gap={1}>
-            <Text color="magenta">
+            <Text color={isRunning ? undefined : "magenta"} dimColor={isRunning}>
                 {"⚠ Allow tool call: "}
                 <Text bold>{first.toolName}</Text>
                 {"?"}
             </Text>
             <Text dimColor>  {first.argsText}</Text>
-            <Text>
-                <Text color="green">[y] Allow</Text>
-                {"  "}
-                <Text color="red">[n] Deny</Text>
-            </Text>
+            {isRunning ? (
+                <Text dimColor>  Waiting for agent…</Text>
+            ) : (
+                <Text>
+                    <Text color="green">[y] Allow</Text>
+                    {"  "}
+                    <Text color="red">[n] Deny</Text>
+                </Text>
+            )}
         </Box>
     );
 };
