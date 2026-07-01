@@ -1,7 +1,5 @@
 import type { ThreadAssistantMessagePart } from "@assistant-ui/core";
 import type { ModelMessageEvent } from "truefoundry-gateway-sdk/agents";
-
-import { parseAskUserQuestionArgs } from "./askUserQuestion.js";
 import type { PendingResponseRef } from "./foldPeerThreads.js";
 
 export type AssistantContentPart = ThreadAssistantMessagePart;
@@ -33,17 +31,19 @@ function parseToolArgs(argsText: string): Record<string, string | number | boole
     }
 }
 
+type ToolCallPart = Extract<AssistantContentPart, { type: "tool-call" }>;
+
 function toolCallToPart(
     toolCall: SdkToolCall,
     context?: ToolCallContext,
-): Extract<AssistantContentPart, { type: "tool-call" }> {
+): ToolCallPart {
     const argsText = toolCall.function.arguments ?? "";
     const toolResult = context?.toolResults?.get(toolCall.id);
+    const pendingResponse = context?.pendingResponses?.get(toolCall.id);
     const pendingApproval = context?.pendingApprovals?.get(toolCall.id);
     const approvalDecision = context?.approvalDecisions?.get(toolCall.id);
-    const pendingResponse = context?.pendingResponses?.get(toolCall.id);
 
-    let interrupt: Extract<AssistantContentPart, { type: "tool-call" }>["interrupt"];
+    let interrupt: ToolCallPart["interrupt"];
     if (pendingResponse != null && toolResult === undefined) {
         interrupt = {
             type: "human",
@@ -58,17 +58,27 @@ function toolCallToPart(
         };
     }
 
-    // A resolved approval takes precedence over a pending one: it carries the
-    // allow/deny decision, and a denial synthesizes an error result (mirroring
-    // the projection overlay) when the tool never executed.
-    const approval = approvalDecision ?? pendingApproval;
-    const isDenied = approvalDecision != null && approvalDecision.approved === false;
-    const result =
-        toolResult !== undefined
-            ? toolResult
-            : isDenied
-              ? { error: approvalDecision!.reason || "Tool approval denied" }
-              : undefined;
+    let approval: ToolCallPart["approval"];
+    if (approvalDecision != null) {
+        approval = {
+            id: approvalDecision.id,
+            approved: approvalDecision.approved,
+            ...(approvalDecision.reason != null
+                ? { reason: approvalDecision.reason }
+                : {}),
+        };
+    } else if (pendingApproval != null) {
+        approval = { id: pendingApproval.id };
+    }
+
+    let result: ToolCallPart["result"];
+    let isError = false;
+    if (toolResult !== undefined) {
+        result = toolResult;
+    } else if (approvalDecision?.approved === false) {
+        result = { error: approvalDecision.reason || "Tool approval denied" };
+        isError = true;
+    }
 
     return {
         type: "tool-call",
@@ -77,21 +87,8 @@ function toolCallToPart(
         argsText,
         args: parseToolArgs(argsText),
         ...(result !== undefined ? { result } : {}),
-        ...(isDenied && toolResult === undefined ? { isError: true } : {}),
-        ...(approval != null
-            ? {
-                  approval:
-                      approvalDecision != null
-                          ? {
-                                id: approvalDecision.id,
-                                approved: approvalDecision.approved,
-                                ...(approvalDecision.reason != null
-                                    ? { reason: approvalDecision.reason }
-                                    : {}),
-                            }
-                          : { id: pendingApproval!.id },
-              }
-            : {}),
+        ...(isError ? { isError: true } : {}),
+        ...(approval != null ? { approval } : {}),
         ...(interrupt != null ? { interrupt } : {}),
     };
 }
