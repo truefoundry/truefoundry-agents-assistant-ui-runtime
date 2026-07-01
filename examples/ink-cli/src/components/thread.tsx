@@ -123,7 +123,7 @@ const Composer = () => {
     const { pending: pendingApprovals } = useTrueFoundryApprovals();
 
     if (pendingResponses.length > 0) {
-        return <ToolResponseInput pending={pendingResponses[0]!} />;
+        return <ToolResponseInput key={pendingResponses[0]!.toolCallId} pending={pendingResponses[0]!} />;
     }
 
     if (pendingApprovals.length > 0) {
