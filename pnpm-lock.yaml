@@ -98,6 +98,9 @@ importers:
       '@assistant-ui/react-ink-markdown':
         specifier: ^0.0.29
         version: 0.0.29(@assistant-ui/react-ink@0.0.30(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.4))(react@19.2.4))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.4))(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.4))
+      '@assistant-ui/store':
+        specifier: ^0.2.19
+        version: 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.4))(@types/react@19.2.17)(react@19.2.4)
       ink:
         specifier: ^7.1.0
         version: 7.1.0(@types/react@19.2.17)(react@19.2.4)
@@ -117,9 +120,6 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.2.17
-      esbuild:
-        specifier: ^0.28.1
-        version: 0.28.1
       tsx:
         specifier: ^4.22.4
         version: 4.22.4

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Box, Text } from "ink";
 import { AssistantRuntimeProvider, StatusBarPrimitive } from "@assistant-ui/react-ink";
+import { useAuiState } from "@assistant-ui/store";
 import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
 import { Thread } from "./components/thread.js";
@@ -20,14 +21,20 @@ const agentName = process.env["TFY_AGENT_NAME"] ?? "my-agent";
 
 const client = new AgentSessionClient({ apiKey, baseUrl: gatewayUrl });
 
-const StatusBar = () => (
-    <StatusBarPrimitive.Root>
-        <Text dimColor>
-            agent: {agentName} · <StatusBarPrimitive.MessageCount /> ·{" "}
-            <StatusBarPrimitive.Status />
-        </Text>
-    </StatusBarPrimitive.Root>
-);
+const StatusBar = () => {
+    const sessionId = useAuiState((s) => s.threadListItem.remoteId);
+
+    return (
+        <StatusBarPrimitive.Root>
+            <Text dimColor>
+                agent: {agentName}
+                {sessionId != null && <Text dimColor> · session: {sessionId}</Text>}
+                {" · "}
+                <StatusBarPrimitive.MessageCount /> · <StatusBarPrimitive.Status />
+            </Text>
+        </StatusBarPrimitive.Root>
+    );
+};
 
 export const App = () => {
     const agentRuntime = useTrueFoundryAgentRuntime(

@@ -11,6 +11,7 @@
   "dependencies": {
     "@assistant-ui/react-ink": "^0.0.30",
     "@assistant-ui/react-ink-markdown": "^0.0.29",
+    "@assistant-ui/store": "^0.2.19",
     "truefoundry-agents-assistant-ui-runtime": "workspace:*",
     "truefoundry-gateway-sdk": "^0.1.0",
     "ink": "^7.1.0",
