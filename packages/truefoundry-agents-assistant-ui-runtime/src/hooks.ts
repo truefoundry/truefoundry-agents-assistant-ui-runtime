@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useAui } from "@assistant-ui/store";
 
-import { trueFoundryExtras } from "./truefoundryExtras.js";
+import { trueFoundryExtras, type TrueFoundryDraftRuntimeExtras } from "./truefoundryExtras.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
@@ -83,3 +83,31 @@ export const useTrueFoundryCancel = () => {
     const aui = useAui();
     return () => trueFoundryExtras.get(aui).cancel();
 };
+
+/** Current draft agent spec and sync state (draft mode only). */
+export const useTrueFoundryAgentSpec = () => {
+    const extras = trueFoundryExtras.use((e) => e.draft, null);
+
+    return useMemo(
+        () => ({
+            agentSpec: extras?.agentSpec ?? null,
+            draftSessionId: extras?.draftSessionId,
+            isSpecSyncing: extras?.isSpecSyncing ?? false,
+            specError: extras?.specError ?? null,
+            updateAgentSpec:
+                extras?.updateAgentSpec ??
+                (() => {
+                    throw new Error("Draft agent extras are only available in draft mode.");
+                }),
+        }),
+        [extras],
+    );
+};
+
+/** Returns a draft spec updater from any render context. */
+export const useTrueFoundryUpdateAgentSpec = () => {
+    const aui = useAui();
+    return (update: Parameters<TrueFoundryDraftRuntimeExtras["updateAgentSpec"]>[0]) =>
+        trueFoundryExtras.get(aui).draft?.updateAgentSpec(update);
+};
+

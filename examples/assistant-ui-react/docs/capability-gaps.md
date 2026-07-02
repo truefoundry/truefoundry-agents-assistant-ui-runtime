@@ -13,11 +13,10 @@ Two scopes exist; this table is written against the first.
 - **Saved agent (current scope).** Instructions, model, and tools are fixed server-side and the
   client references them only by `agentName`. assistant-ui currently covers just the agent name.
   Per-turn model context (system/model/tools/settings) does not apply here by definition.
-- **Draft (future scope, not yet covered).** Instructions, model, and tools change per request, so
-  the assistant-ui `ModelContext` fields below would become live mappings. This requires an SDK
-  surface for inline agent definition at session/turn creation, which the agent module does not
-  expose today (`CreateSessionRequest` takes only `agentName`; `CreateTurnRequest` takes only
-  `input` + `previousTurnId`). Items that belong to this scope are tagged **(draft scope)**.
+- **Draft (implemented in runtime).** Instructions, model, and tools are edited per draft session
+  via gateway `AgentSpec` (`draftSessions.create/get/update`). The runtime exposes spec state through
+  `useTrueFoundryAgentSpec` and resolves conversation sessions for turns via `createDraftSessionBridge`.
+  Items that belong to this scope are tagged **(draft scope)**.
 
 Legend: **(none)** = no SDK source · **(partial)** = part maps, part does not · **(maps)** = clean
 mapping (listed for completeness) · **(out of scope)** = not a gap; fixed by the saved-agent scope ·
@@ -229,16 +228,16 @@ This is viewport behavior only — no additional API calls.
 In the **saved-agent** scope these are fixed server-side, so they are out of scope. In the **draft**
 scope each becomes a live mapping target (pending an SDK surface for inline agent definition).
 
-- `ModelContext.system` (per-turn system prompt) — saved agent: **(out of scope)**; draft: **(draft scope)** — would map to the draft's instructions.
-- `ModelContext.callSettings` (`temperature`, `topP`, `maxTokens`, penalties, `seed`) — saved agent: **(out of scope)**; draft: **(draft scope)** — would map to the draft's model settings.
-- `ModelContext.config` (`modelName`, `apiKey`, `baseUrl`, `reasoningEffort`) — saved agent: **(out of scope)**; draft: **(draft scope)** — would map to the draft's model selection.
-- `ModelContext.tools` / client-registered tools (`useAui` toolkit → `context.tools`) — saved agent: **(out of scope)**; draft: **(draft scope)** — would map to the draft's tool set. (Client-executed frontend tools still run in assistant-ui regardless, but are not advertised to the backend model.)
+- `ModelContext.system` (per-turn system prompt) — saved agent: **(out of scope)**; draft: **(maps)** ← `AgentSpec.instructions` via `useTrueFoundryAgentSpec`.
+- `ModelContext.callSettings` (`temperature`, `topP`, `maxTokens`, penalties, `seed`) — saved agent: **(out of scope)**; draft: **(maps)** ← `AgentSpec.model.params`.
+- `ModelContext.config` (`modelName`, `apiKey`, `baseUrl`, `reasoningEffort`) — saved agent: **(out of scope)**; draft: **(maps)** ← `AgentSpec.model.name` + `model.params.reasoningEffort`.
+- `ModelContext.tools` / client-registered tools (`useAui` toolkit → `context.tools`) — saved agent: **(out of scope)**; draft: **(maps)** ← `AgentSpec.mcpServers` + `skills`. (Client-executed frontend tools still run in assistant-ui regardless, but are not advertised to the backend model.)
 - `RunConfig.custom` / `unstable_composerMetadata` (per-run custom metadata) — **(none)**; no metadata field on `createTurn` in either scope.
 
 ## Multi-thread / thread list (`RemoteThreadListAdapter`)
 
 - `list` — **(maps)** ← `client.listSessions()` (paginated).
-- `initialize` — **(maps)** ← `client.createSession({ agentName })`.
+- `initialize` — **(maps)** ← `client.createSession({ agentName })` (named) or `draftSessions.create({ agentSpec })` (draft).
 - `fetch` — **(maps)** ← `client.getSession()`.
 - `rename` — **(none)**; no session-mutation endpoint.
 - `archive` / `unarchive` — **(none)**; no archive concept.

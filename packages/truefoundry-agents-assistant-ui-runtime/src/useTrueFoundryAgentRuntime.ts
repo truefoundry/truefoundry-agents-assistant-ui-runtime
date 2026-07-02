@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
     pickExternalStoreSharedOptions,
     type AppendMessage,
@@ -19,19 +19,67 @@ import {
     derivePendingMcpAuth,
 } from "./collectPending.js";
 import { buildUserMessageContent } from "./convertTurnMessages.js";
+import { createDraftSessionBridge } from "./draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
+import { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
 import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
 import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
+import { resolveTrueFoundryAgentRuntimeOptions } from "./types.js";
+import { useDraftAgentSpec } from "./useDraftAgentSpec.js";
 import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
 
-function useTrueFoundryAgentRuntimeImpl(options: UseTrueFoundryAgentRuntimeOptions) {
-    const { client, agentName: _agentName, adapters, onError, listEventsConcurrency, ...sharedOptions } =
-        options;
+function useTrueFoundryAgentRuntimeImpl(
+    options: ReturnType<typeof resolveTrueFoundryAgentRuntimeOptions>,
+) {
+    const {
+        client,
+        agent,
+        gateway,
+        adapters,
+        onError,
+        listEventsConcurrency,
+        ...sharedOptions
+    } = options;
 
-    const sessionId = useAuiState(
-        (state) => state.threadListItem.remoteId ?? undefined,
+    const draftBridgeRef = useRef(
+        agent.mode === "draft" && gateway != null
+            ? createDraftSessionBridge(client, gateway)
+            : null,
     );
+
+    const draftSessionId = useAuiState(
+        (state) =>
+            agent.mode === "draft"
+                ? (state.threadListItem.remoteId ?? undefined)
+                : undefined,
+    );
+    const sessionId = useAuiState((state) => state.threadListItem.remoteId ?? undefined);
+
+    const draftSpec = useDraftAgentSpec({
+        draftSessionId,
+        draftBridge: draftBridgeRef.current,
+        defaultAgentSpec:
+            agent.mode === "draft" ? agent.defaultAgentSpec : { model: { name: "" } },
+        onAgentSpecChange: agent.mode === "draft" ? agent.onAgentSpecChange : undefined,
+        onError,
+    });
+
+    const resolveConversationSessionId = useCallback(
+        async (remoteId: string) => {
+            if (agent.mode === "draft") {
+                const bridge = draftBridgeRef.current;
+                if (bridge == null) {
+                    throw new Error("Draft session bridge is not configured.");
+                }
+                const session = await bridge.resolveConversationSession(remoteId);
+                return session.id;
+            }
+            return remoteId;
+        },
+        [agent.mode],
+    );
+
     const aui = useAui();
     const initializeSession = useCallback(
         () => aui.threadListItem().initialize(),
@@ -57,6 +105,8 @@ function useTrueFoundryAgentRuntimeImpl(options: UseTrueFoundryAgentRuntimeOptio
         listEventsConcurrency,
         onError,
         initializeSession,
+        resolveConversationSessionId:
+            agent.mode === "draft" ? resolveConversationSessionId : undefined,
     });
 
     const pendingApprovals = useMemo(
@@ -74,6 +124,19 @@ function useTrueFoundryAgentRuntimeImpl(options: UseTrueFoundryAgentRuntimeOptio
         [sendTurn],
     );
 
+    const draftExtras = useMemo(() => {
+        if (agent.mode !== "draft") {
+            return null;
+        }
+        return {
+            agentSpec: draftSpec.agentSpec,
+            draftSessionId: draftSpec.draftSessionId,
+            isSpecSyncing: draftSpec.isSpecSyncing,
+            specError: draftSpec.specError,
+            updateAgentSpec: draftSpec.updateAgentSpec,
+        };
+    }, [agent.mode, draftSpec]);
+
     return useExternalStoreRuntime({
         ...pickExternalStoreSharedOptions(sharedOptions),
         messages,
@@ -87,6 +150,7 @@ function useTrueFoundryAgentRuntimeImpl(options: UseTrueFoundryAgentRuntimeOptio
             respondToToolResponse,
             resumeMcpAuth,
             cancel,
+            draft: draftExtras,
         }),
         unstable_enableToolInvocations: true,
         setToolStatuses,
@@ -125,20 +189,36 @@ function useTrueFoundryAgentRuntimeImpl(options: UseTrueFoundryAgentRuntimeOptio
 }
 
 export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOptions) {
-    const { client, agentName } = options;
-
-    const threadListAdapter = useMemo(
-        () =>
-            createTrueFoundryThreadListAdapter({ client, agentName }),
-        [client, agentName],
+    const resolved = useMemo(
+        () => resolveTrueFoundryAgentRuntimeOptions(options),
+        [options],
     );
+    const { client, agent, gateway } = resolved;
+
+    const threadListAdapter = useMemo(() => {
+        if (agent.mode === "draft") {
+            if (gateway == null) {
+                throw new Error(
+                    "Draft agent mode requires a `gateway` TrueFoundryGateway client.",
+                );
+            }
+            return createTrueFoundryDraftThreadListAdapter({
+                gateway,
+                defaultAgentSpec: agent.defaultAgentSpec,
+            });
+        }
+        return createTrueFoundryThreadListAdapter({
+            client,
+            agentName: agent.agentName,
+        });
+    }, [agent, client, gateway]);
 
     return useRemoteThreadListRuntime({
         allowNesting: true,
         adapter: threadListAdapter,
-        initialThreadId: options.initialSessionId,
-        threadId: options.threadId,
-        onThreadIdChange: options.onThreadIdChange,
-        runtimeHook: () => useTrueFoundryAgentRuntimeImpl(options),
+        initialThreadId: resolved.initialSessionId,
+        threadId: resolved.threadId,
+        onThreadIdChange: resolved.onThreadIdChange,
+        runtimeHook: () => useTrueFoundryAgentRuntimeImpl(resolved),
     });
 }

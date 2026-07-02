@@ -50,6 +50,8 @@ export type UseTrueFoundryAgentMessagesOptions = {
         remoteId: string;
         externalId: string | undefined;
     }>;
+    /** Maps a thread `remoteId` to the gateway conversation session id used for turns. */
+    resolveConversationSessionId?: (remoteId: string) => Promise<string>;
 };
 
 export type SendTurnOptions =
@@ -140,12 +142,23 @@ function commitActiveStream(
     });
 }
 
+async function resolveActiveSessionId(
+    remoteId: string,
+    resolveConversationSessionId?: (remoteId: string) => Promise<string>,
+): Promise<string> {
+    if (resolveConversationSessionId != null) {
+        return resolveConversationSessionId(remoteId);
+    }
+    return remoteId;
+}
+
 export function useTrueFoundryAgentMessages({
     client,
     sessionId,
     listEventsConcurrency,
     onError,
     initializeSession,
+    resolveConversationSessionId,
 }: UseTrueFoundryAgentMessagesOptions) {
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
@@ -272,7 +285,15 @@ export function useTrueFoundryAgentMessages({
         setIsLoading(true);
 
         try {
-            const loadedSnapshot = await loadSessionSnapshot(client, sessionId, listEventsConcurrency);
+            const conversationSessionId = await resolveActiveSessionId(
+                sessionId,
+                resolveConversationSessionId,
+            );
+            const loadedSnapshot = await loadSessionSnapshot(
+                client,
+                conversationSessionId,
+                listEventsConcurrency,
+            );
             if (generation !== loadGenerationRef.current) {
                 return;
             }
@@ -306,7 +327,7 @@ export function useTrueFoundryAgentMessages({
                 setIsLoading(false);
             }
         }
-    }, [client, onError, runStream, sessionId]);
+    }, [client, listEventsConcurrency, onError, resolveConversationSessionId, runStream, sessionId]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -324,7 +345,11 @@ export function useTrueFoundryAgentMessages({
                 lazilyCreatedSessionIdRef.current = remoteId;
             }
 
-            const session = await getSession(client, activeSessionId);
+            const conversationSessionId = await resolveActiveSessionId(
+                activeSessionId,
+                resolveConversationSessionId,
+            );
+            const session = await getSession(client, conversationSessionId);
             const isContinuation =
                 "inputs" in options ||
                 ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
@@ -403,7 +428,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation,
             );
         },
-        [client, initializeSession, runStream, sessionId],
+        [client, initializeSession, resolveConversationSessionId, runStream, sessionId],
     );
 
     const cancel = useCallback(async () => {
@@ -411,7 +436,11 @@ export function useTrueFoundryAgentMessages({
             abortControllerRef.current?.abort();
             return;
         }
-        const session = await getSession(client, sessionId);
+        const conversationSessionId = await resolveActiveSessionId(
+            sessionId,
+            resolveConversationSessionId,
+        );
+        const session = await getSession(client, conversationSessionId);
         // Request cancellation but keep consuming the stream. After cancel(),
         // the backend gracefully closes the SSE stream: it emits a terminal
         // turn.done event and then ends the stream, which lets the active run
@@ -421,7 +450,7 @@ export function useTrueFoundryAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [client, sessionId]);
+    }, [client, resolveConversationSessionId, sessionId]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
