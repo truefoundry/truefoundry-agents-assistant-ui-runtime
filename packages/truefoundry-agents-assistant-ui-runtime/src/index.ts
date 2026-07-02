@@ -4,7 +4,9 @@ export { useTrueFoundryAgentRuntime } from "./useTrueFoundryAgentRuntime.js";
 export {
     convertTurnsToThreadMessages,
     buildUserMessageContent,
+    buildEditedUserMessageContent,
     getTurnMessageContent,
+    parseTurnIdFromMessageId,
     buildTurnAssistantContent,
     repositoryItemsFromMessages,
 } from "./convertTurnMessages.js";
@@ -40,6 +42,7 @@ export {
     useTrueFoundryRespondToToolResponse,
     useTrueFoundryResumeMcpAuth,
     useTrueFoundryCancel,
+    useTrueFoundryResetFromTurn,
 } from "./hooks.js";
 export {
     collectApprovalInputs,

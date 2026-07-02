@@ -5,6 +5,7 @@ import { ThreadPrimitive, useAuiState, type AssistantState } from "@assistant-ui
 
 import { useSlot } from "../theme/SlotsProvider.js";
 import { AssistantMessageContainer } from "./AssistantMessageContainer.js";
+import { UserEditComposerContainer } from "./UserEditComposerContainer.js";
 import { UserMessageContainer } from "./UserMessageContainer.js";
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so the
@@ -12,9 +13,14 @@ import { UserMessageContainer } from "./UserMessageContainer.js";
 const isNewChatView = (s: AssistantState) =>
     s.thread.messages.length === 0 && (!s.thread.isLoading || s.threads.isLoading);
 
-function ThreadMessage() {
+function ThreadMessage({ isEditing }: { isEditing: boolean }) {
     const role = useAuiState((s) => s.message.role);
-    if (role === "user") return <UserMessageContainer />;
+    if (role === "user") {
+        if (isEditing) {
+            return <UserEditComposerContainer />;
+        }
+        return <UserMessageContainer />;
+    }
     return <AssistantMessageContainer />;
 }
 
@@ -49,7 +55,16 @@ export function ThreadContainer({ composer }: ThreadContainerProps) {
                             <MessageListSkeleton />
                         ) : (
                             <MessageGroup>
-                                <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
+                                <ThreadPrimitive.Messages>
+                                    {({ message }) => (
+                                        <ThreadMessage
+                                            isEditing={
+                                                message.role === "user" &&
+                                                message.composer.isEditing
+                                            }
+                                        />
+                                    )}
+                                </ThreadPrimitive.Messages>
                             </MessageGroup>
                         )}
                     </ThreadViewportShell>

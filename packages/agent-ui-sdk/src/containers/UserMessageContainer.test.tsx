@@ -6,9 +6,12 @@ import { describe, expect, it } from "vitest";
 import { RuntimeHarness } from "./RuntimeHarness.js";
 import { UserMessageContainer } from "./UserMessageContainer.js";
 
-function renderUserMessage(messages: ThreadMessageLike[]) {
+function renderUserMessage(
+    messages: ThreadMessageLike[],
+    options?: { isRunning?: boolean },
+) {
     return render(
-        <RuntimeHarness messages={messages}>
+        <RuntimeHarness messages={messages} isRunning={options?.isRunning}>
             <ThreadPrimitive.Messages>{() => <UserMessageContainer />}</ThreadPrimitive.Messages>
         </RuntimeHarness>,
     );
@@ -81,5 +84,21 @@ describe("UserMessageContainer", () => {
         expect(screen.getByText("See attached")).toBeInTheDocument();
         const chip = screen.getByText("report.pdf").closest("[data-slot='aui_attachment-chip']");
         expect(chip).toHaveStyle({ maxWidth: "12rem" });
+    });
+
+    it("shows the action bar when the thread is idle", () => {
+        renderUserMessage([{ role: "user", content: "hello", id: "turn-1-user" }], {
+            isRunning: false,
+        });
+        expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    });
+
+    it("hides the action bar while the thread is running", () => {
+        renderUserMessage([{ role: "user", content: "hello", id: "turn-1-user" }], {
+            isRunning: true,
+        });
+        expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     });
 });

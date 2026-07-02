@@ -16,6 +16,7 @@ export type UserMessageBubbleProps = {
     children: ReactNode;
     attachments?: ReactNode;
     branchIndicator?: ReactNode;
+    actionBar?: ReactNode;
     className?: string;
 };
 
@@ -44,7 +45,7 @@ export function MessageBubble(props: MessageBubbleProps) {
         );
     }
 
-    const { children, attachments, branchIndicator, className } = props;
+    const { children, attachments, branchIndicator, actionBar, className } = props;
     return (
         <div
             data-slot="aui_user-message-root"
@@ -59,12 +60,13 @@ export function MessageBubble(props: MessageBubbleProps) {
                     {children}
                 </div>
             </div>
-            {branchIndicator != null && (
+            {(branchIndicator != null || actionBar != null) && (
                 <div
-                    data-slot="aui_user-branch-picker"
-                    className="col-span-full col-start-1 row-start-3 -me-1 flex justify-end"
+                    data-slot="aui_user-message-footer"
+                    className="col-span-full col-start-1 row-start-3 -me-1 flex items-center justify-end gap-1"
                 >
                     {branchIndicator}
+                    {actionBar}
                 </div>
             )}
         </div>

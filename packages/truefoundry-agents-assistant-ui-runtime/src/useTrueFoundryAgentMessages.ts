@@ -12,8 +12,12 @@ import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
+    buildEditedUserMessageContent,
+    buildSnapshotBeforeTurnIndex,
     computeGroupRootBaseline,
+    extractTurnUserMessageContent,
     projectSessionMessages,
+    resolveGatewayBranchPreviousTurnId,
     rootModelMessageIdsSinceBaseline,
     userMessageContentToText,
     type UserMessageContent,
@@ -58,7 +62,7 @@ export type UseTrueFoundryAgentMessagesOptions = {
 };
 
 export type SendTurnOptions =
-    | { userMessage: UserMessageContent }
+    | { userMessage: UserMessageContent; previousTurnId?: string | null }
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
 
@@ -153,6 +157,31 @@ async function resolveActiveSessionId(
         return resolveConversationSessionId(remoteId);
     }
     return remoteId;
+}
+
+function findTurnIndex(snapshot: SessionSnapshot, turnId: string): number {
+    const committedIndex = snapshot.turns.findIndex((turn) => turn.id === turnId);
+    if (committedIndex !== -1) {
+        return committedIndex;
+    }
+    if (snapshot.pendingUser?.turnId === turnId) {
+        return snapshot.turns.length;
+    }
+    throw new Error(`Turn ${turnId} not found in session snapshot`);
+}
+
+function resolveTurnInput(
+    snapshot: SessionSnapshot,
+    turnId: string,
+): TurnInputItem[] | undefined {
+    const turnRecord = snapshot.turns.find((turn) => turn.id === turnId);
+    if (turnRecord?.input != null) {
+        return turnRecord.input;
+    }
+    if (snapshot.pendingUser?.turnId === turnId) {
+        return [{ type: "user.message", content: snapshot.pendingUser.content }];
+    }
+    return undefined;
 }
 
 export function useTrueFoundryAgentMessages({
@@ -253,7 +282,7 @@ export function useTrueFoundryAgentMessages({
                         if (prev.activeStream == null) {
                             return prev;
                         }
-                        return replaceSessionSnapshot(prev, {
+                        const marked = replaceSessionSnapshot(prev, {
                             activeStream: {
                                 ...prev.activeStream,
                                 streamComplete: true,
@@ -263,6 +292,7 @@ export function useTrueFoundryAgentMessages({
                                 toolResponses: new Map(),
                             },
                         });
+                        return commitActiveStream(marked);
                     });
                 }
             })();
@@ -430,7 +460,12 @@ export function useTrueFoundryAgentMessages({
                     return streamTurnContent(
                         session,
                         snapshotRef.current.fold,
-                        { userMessage: options.userMessage },
+                        {
+                            userMessage: options.userMessage,
+                            ...(options.previousTurnId !== undefined
+                                ? { previousTurnId: options.previousTurnId }
+                                : {}),
+                        },
                         signal,
                         groupRootBaseline,
                     );
@@ -541,6 +576,82 @@ export function useTrueFoundryAgentMessages({
         );
     }, [runStream]);
 
+    const branchFromTurn = useCallback(
+        async (turnId: string, userMessage: UserMessageContent) => {
+            let activeSessionId = sessionId;
+            if (activeSessionId == null) {
+                throw new Error("Cannot branch from a turn without an active session.");
+            }
+
+            const committed = commitActiveStream(snapshotRef.current);
+            setSnapshot(committed);
+
+            const turnIndex = findTurnIndex(committed, turnId);
+
+            await cancel();
+
+            const conversationSessionId = await resolveActiveSessionId(
+                activeSessionId,
+                resolveConversationSessionId,
+            );
+            const session = await getSession(client, conversationSessionId, sessionOptions);
+            const previousTurnId = await resolveGatewayBranchPreviousTurnId(
+                session,
+                turnIndex,
+            );
+            const rewound = await buildSnapshotBeforeTurnIndex(
+                session,
+                turnIndex,
+                listEventsConcurrency,
+            );
+            createdAtByMessageIdRef.current = new Map();
+            setSnapshot(rewound);
+
+            await sendTurn({
+                userMessage,
+                previousTurnId,
+            });
+        },
+        [
+            cancel,
+            client,
+            listEventsConcurrency,
+            resolveConversationSessionId,
+            sendTurn,
+            sessionId,
+            sessionOptions,
+        ],
+    );
+
+    const resetFromTurn = useCallback(
+        async (turnId: string) => {
+            const committed = commitActiveStream(snapshotRef.current);
+            const originalInput = resolveTurnInput(committed, turnId);
+            if (originalInput == null) {
+                throw new Error(`Turn ${turnId} not found in session snapshot`);
+            }
+            const userMessage = extractTurnUserMessageContent(originalInput);
+            await branchFromTurn(turnId, userMessage);
+        },
+        [branchFromTurn],
+    );
+
+    const editFromTurn = useCallback(
+        async (turnId: string, editedText: string) => {
+            const committed = commitActiveStream(snapshotRef.current);
+            const originalInput = resolveTurnInput(committed, turnId);
+            if (originalInput == null) {
+                throw new Error(`Turn ${turnId} not found in session snapshot`);
+            }
+            const userMessage = buildEditedUserMessageContent(
+                editedText,
+                originalInput,
+            );
+            await branchFromTurn(turnId, userMessage);
+        },
+        [branchFromTurn],
+    );
+
     return {
         messages,
         isRunning,
@@ -551,6 +662,9 @@ export function useTrueFoundryAgentMessages({
         respondToToolApproval,
         respondToToolResponse,
         resumeRun,
+        branchFromTurn,
+        resetFromTurn,
+        editFromTurn,
     };
 }
 

@@ -30,6 +30,7 @@ import { CodeBlockHeader } from "../atoms/CodeBlockHeader.js";
 import { Markdown } from "../atoms/Markdown.js";
 import { OpenUIBlock } from "../atoms/OpenUIBlock.js";
 import { MessageActionBar } from "../atoms/MessageActionBar.js";
+import { UserMessageActionBar } from "../atoms/UserMessageActionBar.js";
 import { MessageBubble } from "../atoms/MessageBubble.js";
 import { MessageErrorBanner } from "../atoms/MessageErrorBanner.js";
 import { MessageIndicator } from "../atoms/MessageIndicator.js";
@@ -98,6 +99,7 @@ export const defaultSlots: AtomSlots = {
     MessageBubble,
     MessageErrorBanner,
     MessageActionBar,
+    UserMessageActionBar,
     BranchIndicator,
     MessageIndicator,
     WelcomeScreen,

@@ -84,6 +84,12 @@ export const useTrueFoundryCancel = () => {
     return () => trueFoundryExtras.get(aui).cancel();
 };
 
+/** Returns a function to reset (re-submit) a user turn from any render context. */
+export const useTrueFoundryResetFromTurn = () => {
+    const aui = useAui();
+    return (turnId: string) => trueFoundryExtras.get(aui).resetFromTurn(turnId);
+};
+
 /** Current draft agent spec and sync state (draft mode only). */
 export const useTrueFoundryAgentSpec = () => {
     const extras = trueFoundryExtras.use((e) => e.draft, null);

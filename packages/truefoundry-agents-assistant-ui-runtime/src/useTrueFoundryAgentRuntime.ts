@@ -18,7 +18,11 @@ import {
     collectPendingToolResponses,
     derivePendingMcpAuth,
 } from "./collectPending.js";
-import { buildUserMessageContent } from "./convertTurnMessages.js";
+import {
+    buildUserMessageContent,
+    extractEditedText,
+    parseTurnIdFromMessageId,
+} from "./convertTurnMessages.js";
 import { createDraftSessionBridge } from "./draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
@@ -84,6 +88,8 @@ function useTrueFoundryAgentRuntimeImpl(
         respondToToolApproval,
         respondToToolResponse,
         resumeRun,
+        editFromTurn,
+        resetFromTurn,
     } = useTrueFoundryAgentMessages({
         client,
         sessionId,
@@ -134,6 +140,10 @@ function useTrueFoundryAgentRuntimeImpl(
             respondToToolResponse,
             resumeMcpAuth,
             cancel,
+            resetFromTurn: (turnId: string) =>
+                resetFromTurn(turnId).catch((error) => {
+                    onError?.(error);
+                }),
             draft: draftExtras,
         }),
         unstable_enableToolInvocations: true,
@@ -168,6 +178,20 @@ function useTrueFoundryAgentRuntimeImpl(
         },
         onResume: async () => {
             await resumeRun();
+        },
+        onEdit: async (message: AppendMessage) => {
+            const sourceId = message.sourceId;
+            if (sourceId == null) {
+                throw new Error("Could not resolve edited user message.");
+            }
+            const turnId = parseTurnIdFromMessageId(sourceId);
+            const editedText = extractEditedText(message);
+            try {
+                await editFromTurn(turnId, editedText);
+            } catch (error) {
+                onError?.(error);
+                throw error;
+            }
         },
     });
 }

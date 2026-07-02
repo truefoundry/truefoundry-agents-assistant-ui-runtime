@@ -714,19 +714,11 @@ export function projectSessionMessages(
 
 const DEFAULT_LIST_EVENTS_CONCURRENCY = 5;
 
-export async function buildSnapshotFromSession(
-    session: AgentSession,
-    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
-): Promise<SessionSnapshot> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
-    }
-    turns.reverse();
-
-    const eventArrays = await fetchAllTurnEventsWithConcurrency(turns, concurrency);
-
-    const snapshot = createEmptySessionSnapshot();
+function ingestTurnsIntoSnapshot(
+    snapshot: SessionSnapshot,
+    turns: Turn[],
+    eventArrays: TurnEvent[][],
+): Turn | undefined {
     let runningTurn: Turn | undefined;
 
     for (let i = 0; i < turns.length; i++) {
@@ -753,6 +745,24 @@ export async function buildSnapshotFromSession(
         }
     }
 
+    return runningTurn;
+}
+
+export async function buildSnapshotFromSession(
+    session: AgentSession,
+    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+): Promise<SessionSnapshot> {
+    const turns: Turn[] = [];
+    for await (const turn of await session.listTurns()) {
+        turns.push(turn);
+    }
+    turns.reverse();
+
+    const eventArrays = await fetchAllTurnEventsWithConcurrency(turns, concurrency);
+
+    const snapshot = createEmptySessionSnapshot();
+    const runningTurn = ingestTurnsIntoSnapshot(snapshot, turns, eventArrays);
+
     return replaceSessionSnapshot(snapshot, {
         ...(runningTurn != null
             ? {
@@ -762,6 +772,74 @@ export async function buildSnapshotFromSession(
               }
             : {}),
     });
+}
+
+/** Rebuilds session state from turns strictly before `beforeTurnId` (excludes that turn). */
+export async function buildSnapshotBeforeTurn(
+    session: AgentSession,
+    beforeTurnId: string,
+    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+): Promise<SessionSnapshot> {
+    const turns: Turn[] = [];
+    for await (const turn of await session.listTurns()) {
+        turns.push(turn);
+    }
+    turns.reverse();
+
+    const beforeIndex = turns.findIndex((turn) => turn.id === beforeTurnId);
+    if (beforeIndex === -1) {
+        throw new Error(`Turn ${beforeTurnId} not found in session`);
+    }
+
+    return buildSnapshotBeforeTurnIndex(session, beforeIndex, concurrency, turns);
+}
+
+/** Rebuilds session state from the first `turnIndex` gateway turns (excludes that turn). */
+export async function buildSnapshotBeforeTurnIndex(
+    session: AgentSession,
+    turnIndex: number,
+    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+    orderedTurns?: Turn[],
+): Promise<SessionSnapshot> {
+    if (turnIndex <= 0) {
+        return createEmptySessionSnapshot();
+    }
+
+    const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
+    const turnsToInclude = turns.slice(0, turnIndex);
+    if (turnsToInclude.length === 0) {
+        return createEmptySessionSnapshot();
+    }
+
+    const eventArrays = await fetchAllTurnEventsWithConcurrency(
+        turnsToInclude,
+        concurrency,
+    );
+    const snapshot = createEmptySessionSnapshot();
+    ingestTurnsIntoSnapshot(snapshot, turnsToInclude, eventArrays);
+    return snapshot;
+}
+
+/** Gateway turn id to branch from when resubmitting at `turnIndex` (null for first turn). */
+export async function resolveGatewayBranchPreviousTurnId(
+    session: AgentSession,
+    turnIndex: number,
+    orderedTurns?: Turn[],
+): Promise<string | null> {
+    if (turnIndex <= 0) {
+        return null;
+    }
+    const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
+    return turns[turnIndex - 1]?.id ?? null;
+}
+
+async function listSessionTurnsOrdered(session: AgentSession): Promise<Turn[]> {
+    const turns: Turn[] = [];
+    for await (const turn of await session.listTurns()) {
+        turns.push(turn);
+    }
+    turns.reverse();
+    return turns;
 }
 
 export async function buildTurnAssistantContent(
@@ -905,6 +983,76 @@ export function userMessageContentToText(content: UserMessageContent): string {
         .map((item) => item.text)
         .join("\n")
         .trim();
+}
+
+/** Strips the `-user` suffix from a projected user message id to recover the turn id. */
+export function parseTurnIdFromMessageId(messageId: string): string {
+    return messageId.replace(/-user$/, "");
+}
+
+/** Parent turn id for branching before `turnId`; `null` when editing the first turn. */
+export function resolveBranchPreviousTurnId(
+    turns: readonly SessionTurnRecord[],
+    turnId: string,
+): string | null {
+    const turnIndex = turns.findIndex((turn) => turn.id === turnId);
+    if (turnIndex <= 0) {
+        return null;
+    }
+    return turns[turnIndex - 1]!.id;
+}
+
+/** Extracts edited text from an assistant-ui append message (text parts only). */
+export function extractEditedText(message: AppendMessage): string {
+    return getTurnMessageContent(message);
+}
+
+/** Original gateway user-message content from a turn record (for reset). */
+export function extractTurnUserMessageContent(
+    input: TurnInputItem[] | undefined,
+): UserMessageContent {
+    for (const item of input ?? []) {
+        if (item.type === "user.message") {
+            return item.content;
+        }
+    }
+    return "";
+}
+
+/**
+ * Builds resubmit content for a text-only edit: replaces text with `editedText`
+ * while preserving original file parts from the turn record.
+ */
+export function buildEditedUserMessageContent(
+    editedText: string,
+    originalInput: TurnInputItem[] | undefined,
+): UserMessageContent {
+    const fileParts: FileContent[] = [];
+    for (const item of originalInput ?? []) {
+        if (item.type !== "user.message") {
+            continue;
+        }
+        const content = item.content;
+        if (typeof content === "string") {
+            continue;
+        }
+        for (const part of content) {
+            if (part.type === "file") {
+                fileParts.push(part);
+            }
+        }
+    }
+
+    if (fileParts.length === 0) {
+        return editedText;
+    }
+
+    const items: UserMessageContentItem[] = [];
+    if (editedText.trim().length > 0) {
+        items.push({ type: "text", text: editedText });
+    }
+    items.push(...fileParts);
+    return items;
 }
 
 function buildMcpAuthUpdate(

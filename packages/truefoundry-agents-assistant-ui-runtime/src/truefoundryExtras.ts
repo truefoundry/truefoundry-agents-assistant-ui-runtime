@@ -24,6 +24,7 @@ export type TrueFoundryRuntimeExtras = {
     respondToToolResponse: (response: RespondToToolResponseOptions) => void;
     resumeMcpAuth: () => Promise<void>;
     cancel: () => Promise<void>;
+    resetFromTurn: (turnId: string) => Promise<void>;
     draft: TrueFoundryDraftRuntimeExtras | null;
 };
 

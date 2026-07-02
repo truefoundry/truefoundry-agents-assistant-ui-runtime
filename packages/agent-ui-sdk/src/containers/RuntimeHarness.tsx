@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
     AssistantRuntimeProvider,
     useExternalStoreRuntime,
+    type AppendMessage,
     type RespondToToolApprovalOptions,
     type ThreadMessageLike,
 } from "@assistant-ui/react";
@@ -14,12 +15,14 @@ export function RuntimeHarness({
     isRunning = false,
     isLoading = false,
     onRespondToToolApproval,
+    onEdit,
     children,
 }: {
     messages: ThreadMessageLike[];
     isRunning?: boolean;
     isLoading?: boolean;
     onRespondToToolApproval?: (options: RespondToToolApprovalOptions) => void;
+    onEdit?: (message: AppendMessage) => Promise<void>;
     children: ReactNode;
 }) {
     const runtime = useExternalStoreRuntime<ThreadMessageLike>({
@@ -28,6 +31,7 @@ export function RuntimeHarness({
         isLoading,
         convertMessage: (message) => message,
         onNew: async () => {},
+        onEdit,
         onRespondToToolApproval,
     });
 
