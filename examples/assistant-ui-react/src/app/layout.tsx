@@ -5,6 +5,7 @@ import { TrueFoundryAgentRuntimeProvider } from "@/app/TrueFoundryAgentRuntimePr
 import { ErrorToasterProvider, TooltipProvider } from "@truefoundry/agent-ui-sdk";
 import { GatewayCredentialsProvider } from "@/lib/chat/gatewayCredentials";
 import { AgentModeProvider } from "@/lib/draft/agentMode";
+import { ThemeProvider, themeInitScript } from "@/lib/theme";
 
 import "./globals.css";
 import "@truefoundry/agent-ui-sdk/openui.css";
@@ -35,19 +36,24 @@ export default function RootLayout({
             className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
             suppressHydrationWarning
         >
+            <head>
+                <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+            </head>
             <body
                 className="flex h-dvh flex-col overflow-hidden"
                 suppressHydrationWarning
             >
-                <GatewayCredentialsProvider>
-                    <ErrorToasterProvider>
-                        <AgentModeProvider>
-                            <TrueFoundryAgentRuntimeProvider>
-                                <TooltipProvider>{children}</TooltipProvider>
-                            </TrueFoundryAgentRuntimeProvider>
-                        </AgentModeProvider>
-                    </ErrorToasterProvider>
-                </GatewayCredentialsProvider>
+                <ThemeProvider>
+                    <GatewayCredentialsProvider>
+                        <ErrorToasterProvider>
+                            <AgentModeProvider>
+                                <TrueFoundryAgentRuntimeProvider>
+                                    <TooltipProvider>{children}</TooltipProvider>
+                                </TrueFoundryAgentRuntimeProvider>
+                            </AgentModeProvider>
+                        </ErrorToasterProvider>
+                    </GatewayCredentialsProvider>
+                </ThemeProvider>
             </body>
         </html>
     );

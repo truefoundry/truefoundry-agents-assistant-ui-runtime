@@ -109,9 +109,11 @@ import "@truefoundry/agent-ui-sdk/openui.css";
 which dispatches `language-openui` fences to `OpenUIBlock`. Streaming state is
 passed through while the assistant message is still running.
 
-`ThemeProvider` is intentionally not included in the default `OpenUIBlock`. If
-you need OpenUI design-token theming, wrap your app in OpenUI's
-`ThemeProvider` or override the `Markdown` slot with a custom implementation.
+`OpenUIBlock` wraps rendered output in OpenUI's `ThemeProvider` and syncs
+`mode` with a `.dark` class on `<html>` by default (the same pattern used by
+the example app's theme toggle). Pass an explicit `mode` prop on `OpenUIBlock`
+to override, or wrap a larger subtree in OpenUI's `ThemeProvider` yourself for
+custom token overrides via `lightTheme` / `darkTheme`.
 
 ## Examples
 

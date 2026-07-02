@@ -20,4 +20,18 @@ describe("OpenUIBlock", () => {
         render(<OpenUIBlock source="Card() {}" />);
         expect(screen.getByTestId("openui-renderer").closest("[data-slot='openui-block']")).toBeTruthy();
     });
+
+    it("wraps content in OpenUI ThemeProvider using the html .dark class by default", () => {
+        document.documentElement.classList.add("dark");
+        render(<OpenUIBlock source="Card() {}" />);
+        expect(screen.getByTestId("openui-theme-provider")).toHaveAttribute("data-mode", "dark");
+        document.documentElement.classList.remove("dark");
+    });
+
+    it("honors an explicit mode override", () => {
+        document.documentElement.classList.add("dark");
+        render(<OpenUIBlock source="Card() {}" mode="light" />);
+        expect(screen.getByTestId("openui-theme-provider")).toHaveAttribute("data-mode", "light");
+        document.documentElement.classList.remove("dark");
+    });
 });

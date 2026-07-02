@@ -20,6 +20,11 @@ vi.mock("@openuidev/react-lang", () => ({
         ),
 }));
 
+vi.mock("@openuidev/react-ui", () => ({
+    ThemeProvider: ({ children, mode }: { children: unknown; mode?: string }) =>
+        createElement("div", { "data-testid": "openui-theme-provider", "data-mode": mode }, children),
+}));
+
 vi.mock("@openuidev/react-ui/genui-lib", () => ({
     openuiLibrary: {},
 }));

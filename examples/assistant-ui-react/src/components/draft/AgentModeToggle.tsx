@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAgentMode, type AgentRuntimeMode } from "@/lib/draft/agentMode";
 
 const MODES: { id: AgentRuntimeMode; label: string }[] = [
@@ -11,7 +12,7 @@ export function AgentModeToggle() {
     const { mode, setMode } = useAgentMode();
 
     return (
-        <div className="border-border flex gap-1 border-b px-3 py-2">
+        <div className="border-border flex items-center gap-1 border-b px-3 py-2">
             {MODES.map((item) => (
                 <button
                     key={item.id}
@@ -26,6 +27,7 @@ export function AgentModeToggle() {
                     {item.label}
                 </button>
             ))}
+            <ThemeToggle className="ml-auto" />
         </div>
     );
 }
