@@ -74,6 +74,8 @@ export type { SkeletonProps } from "./atoms/primitives/Skeleton.js";
 
 export { Markdown } from "./atoms/Markdown.js";
 export type { MarkdownProps } from "./atoms/Markdown.js";
+export { OpenUIBlock } from "./atoms/OpenUIBlock.js";
+export type { OpenUIBlockProps } from "./atoms/OpenUIBlock.js";
 export { CodeBlockHeader } from "./atoms/CodeBlockHeader.js";
 export type { CodeBlockHeaderProps } from "./atoms/CodeBlockHeader.js";
 export { MessageBubble } from "./atoms/MessageBubble.js";

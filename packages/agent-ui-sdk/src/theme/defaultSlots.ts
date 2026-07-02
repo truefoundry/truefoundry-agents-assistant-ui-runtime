@@ -28,6 +28,7 @@ import {
 import { BranchIndicator } from "../atoms/BranchIndicator.js";
 import { CodeBlockHeader } from "../atoms/CodeBlockHeader.js";
 import { Markdown } from "../atoms/Markdown.js";
+import { OpenUIBlock } from "../atoms/OpenUIBlock.js";
 import { MessageActionBar } from "../atoms/MessageActionBar.js";
 import { MessageBubble } from "../atoms/MessageBubble.js";
 import { MessageErrorBanner } from "../atoms/MessageErrorBanner.js";
@@ -92,6 +93,7 @@ export const defaultSlots: AtomSlots = {
     CollapsibleContent,
     Skeleton,
     Markdown,
+    OpenUIBlock,
     CodeBlockHeader,
     MessageBubble,
     MessageErrorBanner,

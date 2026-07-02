@@ -84,6 +84,35 @@ TFY_GATEWAY_URL=https://gateway.truefoundry.ai/<your-tenant>
 TFY_AGENT_NAME=your-agent-name
 ```
 
+## OpenUI
+
+Assistant messages that include an OpenUI Lang fenced block are rendered
+automatically — no custom markdown wiring required:
+
+````markdown
+```openui
+Card() {
+  title: "Quarterly revenue"
+  TextContent() { text: "Revenue is up 12%." }
+}
+```
+````
+
+Import OpenUI styles once in your app entry (for example `layout.tsx` or
+`globals.css`):
+
+```ts
+import "@truefoundry/agent-ui-sdk/openui.css";
+```
+
+`<Thread />` already routes assistant text through the SDK `Markdown` atom,
+which dispatches `language-openui` fences to `OpenUIBlock`. Streaming state is
+passed through while the assistant message is still running.
+
+`ThemeProvider` is intentionally not included in the default `OpenUIBlock`. If
+you need OpenUI design-token theming, wrap your app in OpenUI's
+`ThemeProvider` or override the `Markdown` slot with a custom implementation.
+
 ## Examples
 
 ### Dive in (60 seconds)
@@ -486,7 +515,7 @@ a future design system has a token surface to bind to without inventing one.
 | Area | Containers | Notes |
 |---|---|---|
 | Thread shell | `ThreadContainer`, `Thread` | Welcome screen, loading skeleton, scroll-to-bottom, message list |
-| Messages | `AssistantMessageContainer`, `UserMessageContainer`, `AssistantTextContainer` | Text, branch picker, error banner, copy/export action bar |
+| Messages | `AssistantMessageContainer`, `UserMessageContainer`, `AssistantTextContainer` | Text, branch picker, error banner, copy/export action bar; ` ```openui ` fences render via `OpenUIBlock` |
 | Tools | `ToolCallContainer`, `ToolGroupContainer` | Tool-call rendering, approval flow, sub-agent nesting (recursive) |
 | Reasoning | `ReasoningContainer` | Streaming-aware collapsible reasoning blocks |
 | Composer | `ComposerContainer`, `AskUserContainer`, `McpAuthContainer` | Message input; auto-swaps to ask-user / MCP-auth prompts when a turn is paused |

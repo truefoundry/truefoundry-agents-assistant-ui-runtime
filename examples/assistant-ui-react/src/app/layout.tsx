@@ -7,6 +7,7 @@ import { GatewayCredentialsProvider } from "@/lib/chat/gatewayCredentials";
 import { AgentModeProvider } from "@/lib/draft/agentMode";
 
 import "./globals.css";
+import "@truefoundry/agent-ui-sdk/openui.css";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",

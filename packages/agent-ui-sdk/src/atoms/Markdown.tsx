@@ -1,9 +1,10 @@
-import { isValidElement, type ReactNode } from "react";
+import { isValidElement, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "./lib/cn.js";
 import { CodeBlockHeader } from "./CodeBlockHeader.js";
+import { OpenUIBlock } from "./OpenUIBlock.js";
 
 function extractCodeText(node: ReactNode): string {
     if (typeof node === "string") return node;
@@ -15,7 +16,8 @@ function extractCodeText(node: ReactNode): string {
     return "";
 }
 
-const markdownComponents: Components = {
+function createMarkdownComponents(isStreaming?: boolean): Components {
+    return {
     h1: ({ className, ...props }) => (
         <h1
             className={cn(
@@ -156,6 +158,9 @@ const markdownComponents: Components = {
         const codeClassName = (codeElement?.props as { className?: string } | undefined)?.className ?? "";
         const language = /language-(\S+)/.exec(codeClassName)?.[1] ?? "text";
         const code = extractCodeText(children);
+        if (language === "openui") {
+            return <OpenUIBlock source={code} isStreaming={isStreaming} />;
+        }
         return (
             <>
                 <CodeBlockHeader language={language} code={code} />
@@ -183,17 +188,20 @@ const markdownComponents: Components = {
             />
         );
     },
-};
+    };
+}
 
 export type MarkdownProps = {
     content: string;
     className?: string;
+    isStreaming?: boolean;
 };
 
-export function Markdown({ content, className }: MarkdownProps) {
+export function Markdown({ content, className, isStreaming }: MarkdownProps) {
+    const components = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
     return (
         <div className={cn("aui-md", className)}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
                 {content}
             </ReactMarkdown>
         </div>
