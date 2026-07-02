@@ -107,7 +107,7 @@ Legacy `agentName` shorthand is still supported.
 
 ### Draft agent mode (inline `AgentSpec`)
 
-Draft mode lists **draft sessions** (`draftSessions.*`) in the thread list. Each thread's `remoteId` is a `DraftSession.id`. The runtime syncs `AgentSpec` edits via `draftSessions.update` and resolves a conversation `AgentSession` for turns through an internal session bridge.
+Draft mode lists **draft sessions** (`draftSessions.*`) in the thread list. Each thread's `remoteId` is a `DraftSession.id`. The runtime syncs `AgentSpec` edits via `draftSessions.update`. Turns and history use `/agents/sessions/{draftSessionId}/turns` after validating the draft via `draftSessions.get` — no separate conversation session is created.
 
 ```tsx
 import { TrueFoundryGateway } from "truefoundry-gateway-sdk";
@@ -496,7 +496,7 @@ For contributors and agents working inside this package. Source lives in `src/`;
 | `requiredActionInputs.ts` | Combined gate + `collectRequiredActionInputs` for batched resume. |
 | `truefoundryThreadListAdapter.ts` | `RemoteThreadListAdapter` — cursor-paginated session list (`list({ after })` → `nextCursor`), create/fetch sessions. |
 | `truefoundryDraftThreadListAdapter.ts` | Draft-session `RemoteThreadListAdapter` backed by `draftSessions.*`. |
-| `draftSessionBridge.ts` | Maps draft session ids to conversation sessions for turns; syncs `AgentSpec`. |
+| `draftSessionBridge.ts` | Validates draft sessions and syncs `AgentSpec`; turns use the draft id at `/agents/sessions/{draftSessionId}/turns`. |
 | `useDraftAgentSpec.ts` | Debounced draft spec state + `draftSessions.update` wiring. |
 | `agentSpec.ts` | `AgentSpec` helpers and `mergeAgentSpec`. |
 | `convertTurnMessages.ts` | `projectSessionMessages` pure projector; `buildSnapshotFromSession` history ingest; `convertTurnsToThreadMessages` wrapper; stream-event aggregation. |

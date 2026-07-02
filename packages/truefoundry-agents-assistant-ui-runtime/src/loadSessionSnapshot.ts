@@ -1,7 +1,8 @@
 import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import { buildSnapshotFromSession } from "./convertTurnMessages.js";
-import { getSession } from "./sessions.js";
+import { getSession, type GetSessionOptions } from "./sessions.js";
 import type { SessionSnapshot } from "./sessionSnapshot.js";
 
 const inflightBySessionId = new Map<string, Promise<SessionSnapshot>>();
@@ -15,17 +16,20 @@ export function loadSessionSnapshot(
     client: AgentSessionClient,
     sessionId: string,
     concurrency?: number,
+    sessionOptions?: GetSessionOptions,
 ): Promise<SessionSnapshot> {
-    let inflight = inflightBySessionId.get(sessionId);
+    const cacheKey =
+        sessionOptions?.draftGateway != null ? `draft:${sessionId}` : sessionId;
+    let inflight = inflightBySessionId.get(cacheKey);
     if (inflight == null) {
-        inflight = getSession(client, sessionId)
+        inflight = getSession(client, sessionId, sessionOptions)
             .then((session) => buildSnapshotFromSession(session, concurrency))
             .finally(() => {
-                if (inflightBySessionId.get(sessionId) === inflight) {
-                    inflightBySessionId.delete(sessionId);
+                if (inflightBySessionId.get(cacheKey) === inflight) {
+                    inflightBySessionId.delete(cacheKey);
                 }
             });
-        inflightBySessionId.set(sessionId, inflight);
+        inflightBySessionId.set(cacheKey, inflight);
     }
     return inflight;
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
 import {
     pickExternalStoreSharedOptions,
     type AppendMessage,
@@ -12,6 +11,7 @@ import {
     useRuntimeAdapters,
 } from "@assistant-ui/core/react";
 import { useAui, useAuiState } from "@assistant-ui/store";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
     collectPendingApprovals,
@@ -22,8 +22,8 @@ import { buildUserMessageContent } from "./convertTurnMessages.js";
 import { createDraftSessionBridge } from "./draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
-import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
+import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { resolveTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { useDraftAgentSpec } from "./useDraftAgentSpec.js";
@@ -44,7 +44,7 @@ function useTrueFoundryAgentRuntimeImpl(
 
     const draftBridgeRef = useRef(
         agent.mode === "draft" && gateway != null
-            ? createDraftSessionBridge(client, gateway)
+            ? createDraftSessionBridge(gateway)
             : null,
     );
 
@@ -64,21 +64,6 @@ function useTrueFoundryAgentRuntimeImpl(
         onAgentSpecChange: agent.mode === "draft" ? agent.onAgentSpecChange : undefined,
         onError,
     });
-
-    const resolveConversationSessionId = useCallback(
-        async (remoteId: string) => {
-            if (agent.mode === "draft") {
-                const bridge = draftBridgeRef.current;
-                if (bridge == null) {
-                    throw new Error("Draft session bridge is not configured.");
-                }
-                const session = await bridge.resolveConversationSession(remoteId);
-                return session.id;
-            }
-            return remoteId;
-        },
-        [agent.mode],
-    );
 
     const aui = useAui();
     const initializeSession = useCallback(
@@ -105,8 +90,7 @@ function useTrueFoundryAgentRuntimeImpl(
         listEventsConcurrency,
         onError,
         initializeSession,
-        resolveConversationSessionId:
-            agent.mode === "draft" ? resolveConversationSessionId : undefined,
+        draftGateway: agent.mode === "draft" ? gateway : undefined,
     });
 
     const pendingApprovals = useMemo(

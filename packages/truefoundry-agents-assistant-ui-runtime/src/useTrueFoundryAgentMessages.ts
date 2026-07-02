@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generateId } from "@assistant-ui/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
     AgentSessionClient,
     Turn,
     TurnInputItem,
     TurnStateDone,
 } from "truefoundry-gateway-sdk/agents";
+import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
+import { ROOT_THREAD_ID } from "./constants.js";
 import {
     computeGroupRootBaseline,
     projectSessionMessages,
@@ -16,7 +18,6 @@ import {
     userMessageContentToText,
     type UserMessageContent,
 } from "./convertTurnMessages.js";
-import { ROOT_THREAD_ID } from "./constants.js";
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
@@ -26,19 +27,19 @@ import {
     messageHasPendingRequiredActions,
     type RequiredActionInput,
 } from "./requiredActionInputs.js";
-import { getSession } from "./sessions.js";
-import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
-import type { RespondToToolApprovalOptions } from "./toolApproval.js";
-import {
-    applyUserToolResponsesToFold,
-    type RespondToToolResponseOptions,
-} from "./toolResponse.js";
+import { getSession, type GetSessionOptions } from "./sessions.js";
 import {
     createEmptySessionSnapshot,
     replaceSessionSnapshot,
     type SessionSnapshot,
     type SessionTurnRecord,
 } from "./sessionSnapshot.js";
+import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
+import type { RespondToToolApprovalOptions } from "./toolApproval.js";
+import {
+    applyUserToolResponsesToFold,
+    type RespondToToolResponseOptions,
+} from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
 export type UseTrueFoundryAgentMessagesOptions = {
@@ -50,8 +51,10 @@ export type UseTrueFoundryAgentMessagesOptions = {
         remoteId: string;
         externalId: string | undefined;
     }>;
-    /** Maps a thread `remoteId` to the gateway conversation session id used for turns. */
+    /** Maps a thread `remoteId` to the gateway session id used for turns. */
     resolveConversationSessionId?: (remoteId: string) => Promise<string>;
+    /** When set, turns bind to `/agents/sessions/{draftSessionId}/turns` after draft validation. */
+    draftGateway?: TrueFoundryGateway;
 };
 
 export type SendTurnOptions =
@@ -159,7 +162,14 @@ export function useTrueFoundryAgentMessages({
     onError,
     initializeSession,
     resolveConversationSessionId,
+    draftGateway,
 }: UseTrueFoundryAgentMessagesOptions) {
+    const sessionOptions = useMemo<GetSessionOptions | undefined>(
+        () =>
+            draftGateway != null ? { draftGateway } : undefined,
+        [draftGateway],
+    );
+
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -293,6 +303,7 @@ export function useTrueFoundryAgentMessages({
                 client,
                 conversationSessionId,
                 listEventsConcurrency,
+                sessionOptions,
             );
             if (generation !== loadGenerationRef.current) {
                 return;
@@ -327,7 +338,7 @@ export function useTrueFoundryAgentMessages({
                 setIsLoading(false);
             }
         }
-    }, [client, listEventsConcurrency, onError, resolveConversationSessionId, runStream, sessionId]);
+    }, [client, listEventsConcurrency, onError, resolveConversationSessionId, runStream, sessionId, sessionOptions]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -349,7 +360,7 @@ export function useTrueFoundryAgentMessages({
                 activeSessionId,
                 resolveConversationSessionId,
             );
-            const session = await getSession(client, conversationSessionId);
+            const session = await getSession(client, conversationSessionId, sessionOptions);
             const isContinuation =
                 "inputs" in options ||
                 ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
@@ -428,7 +439,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation,
             );
         },
-        [client, initializeSession, resolveConversationSessionId, runStream, sessionId],
+        [client, initializeSession, resolveConversationSessionId, runStream, sessionId, sessionOptions],
     );
 
     const cancel = useCallback(async () => {
@@ -450,7 +461,7 @@ export function useTrueFoundryAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [client, resolveConversationSessionId, sessionId]);
+    }, [client, resolveConversationSessionId, sessionId, sessionOptions]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -543,4 +554,5 @@ export function useTrueFoundryAgentMessages({
     };
 }
 
-export { MCP_AUTH_RESUME_RUN_CUSTOM_KEY, findPausedAssistantMessage };
+export { findPausedAssistantMessage, MCP_AUTH_RESUME_RUN_CUSTOM_KEY };
+
