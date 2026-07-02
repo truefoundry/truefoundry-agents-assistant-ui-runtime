@@ -490,7 +490,7 @@ a future design system has a token surface to bind to without inventing one.
 | Tools | `ToolCallContainer`, `ToolGroupContainer` | Tool-call rendering, approval flow, sub-agent nesting (recursive) |
 | Reasoning | `ReasoningContainer` | Streaming-aware collapsible reasoning blocks |
 | Composer | `ComposerContainer`, `AskUserContainer`, `McpAuthContainer` | Message input; auto-swaps to ask-user / MCP-auth prompts when a turn is paused |
-| Attachments | `ComposerAttachmentsContainer`, `ComposerAttachmentPickerContainer` | Composer-side staging tray only — see gaps below |
+| Attachments | `ComposerAttachmentsContainer`, `MessageAttachmentsContainer`, `ComposerAttachmentPickerContainer` | Staging tray in composer; image/file chips in user message bubbles |
 | Thread list | `ThreadListContainer` | Flat list (not grouped by date), new/select/archive/delete |
 | Errors | `ErrorToasterProvider`, `useErrorToaster` | Global toast for gateway/runtime errors |
 
@@ -508,18 +508,15 @@ dropped:
 - **`ToolCallCard`**'s `tool` variant has an `approvalSlot`/`durationText`
   beyond the originally-sketched contract — needed to keep the (fully
   supported) tool-approval flow working.
-- **`ComposerShell`** has no cancel/stop-generating affordance and no visible
-  attachment tray. Streaming can't be cancelled through it, and staged
-  attachments aren't shown (though they're still sent). Use
-  `ComposerAttachmentsContainer` / `ComposerAttachmentPickerContainer`
-  directly if you need those visible.
+- **`ComposerShell`** has no cancel/stop-generating affordance. Streaming can't
+  be cancelled through it. Staged attachments render in the built-in tray via
+  `ComposerAttachmentsContainer` (wired by default `ComposerContainer`). Image
+  previews use `contentType` fallback because the TrueFoundry attachment adapter
+  tags all uploads as `type: "file"`.
 - **`AskUserPrompt`** uses a select-then-submit radio flow, not the reference
   app's immediate-click-to-answer buttons.
 - **`ThreadListContainer`** renders one flat list, not grouped by
   Today/Yesterday/Earlier.
-- Message-bubble attachment rendering is intentionally **not** implemented —
-  the runtime's own README documents user-message attachments as "text only,"
-  and this SDK preserves that rather than adding new scope.
 - Several `AtomSlots` entries (`Button`, `IconButton`, `Tooltip*`, `Dialog*`,
   `Avatar*`, `Collapsible*`, `Skeleton`, `CodeBlockHeader`) are declared and
   populated in `defaultSlots`, but no shipped atom currently resolves them via

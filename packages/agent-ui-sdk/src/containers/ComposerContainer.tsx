@@ -6,6 +6,7 @@ import { useThreadIsRunning } from "@assistant-ui/core/react";
 import { useTrueFoundryToolResponses } from "truefoundry-agents-assistant-ui-runtime";
 
 import { useSlot } from "../theme/SlotsProvider.js";
+import { ComposerAttachmentsContainer } from "./AttachmentsContainer.js";
 import { AskUserContainer } from "./AskUserContainer.js";
 import { McpAuthContainer } from "./McpAuthContainer.js";
 
@@ -35,13 +36,6 @@ export function ComposerContainer() {
 
     return (
         <>
-            {/*
-             * ComposerShell's contract (Section 6) has no attachment-tray slot, so
-             * staged attachments aren't shown visually here -- they're still
-             * forwarded to the gateway via addAttachment(). Consumers wanting a
-             * visible tray should compose ComposerAttachmentsContainer /
-             * ComposerAttachmentPickerContainer directly instead of ComposerShell.
-             */}
             <input
                 ref={fileInputRef}
                 type="file"
@@ -53,6 +47,7 @@ export function ComposerContainer() {
                 }}
             />
             <ComposerShell
+                attachments={<ComposerAttachmentsContainer />}
                 value={text}
                 placeholder="Ask anything... (Shift+Enter for new line)"
                 disabled={isRunning}

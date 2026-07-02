@@ -129,8 +129,11 @@ export { AskUserPrompt } from "./atoms/AskUserPrompt.js";
 export type { AskUserOption, AskUserPromptProps } from "./atoms/AskUserPrompt.js";
 export { McpAuthPrompt } from "./atoms/McpAuthPrompt.js";
 export type { McpAuthServer, McpAuthPromptProps } from "./atoms/McpAuthPrompt.js";
-export { AttachmentCard } from "./atoms/AttachmentCard.js";
-export type { AttachmentCardProps } from "./atoms/AttachmentCard.js";
+export {
+    AttachmentCard,
+    USER_MESSAGE_ATTACHMENT_PREVIEW_REM,
+} from "./atoms/AttachmentCard.js";
+export type { AttachmentCardProps, AttachmentCardSize } from "./atoms/AttachmentCard.js";
 export { AttachmentPreviewDialog } from "./atoms/AttachmentPreviewDialog.js";
 export type { AttachmentPreviewDialogProps } from "./atoms/AttachmentPreviewDialog.js";
 export { AttachmentPickerButton } from "./atoms/AttachmentPickerButton.js";
@@ -167,6 +170,7 @@ export { McpAuthContainer } from "./containers/McpAuthContainer.js";
 export {
     ComposerAttachmentsContainer,
     ComposerAttachmentPickerContainer,
+    MessageAttachmentsContainer,
 } from "./containers/AttachmentsContainer.js";
 export { ThreadListContainer } from "./containers/ThreadListContainer.js";
 export { ErrorToasterProvider, useErrorToaster } from "./containers/ErrorToasterContainer.js";

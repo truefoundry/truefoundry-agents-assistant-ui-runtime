@@ -8,6 +8,7 @@ export type ComposerShellProps = {
     value: string;
     placeholder: string;
     disabled: boolean;
+    attachments?: ReactNode;
     modelLabel?: string;
     modelIcon?: ReactNode;
     connectorStatusLabel?: string;
@@ -21,6 +22,7 @@ export function ComposerShell({
     value,
     placeholder,
     disabled,
+    attachments,
     modelLabel,
     modelIcon,
     connectorStatusLabel,
@@ -37,6 +39,7 @@ export function ComposerShell({
                 className,
             )}
         >
+            {attachments}
             <textarea
                 value={value}
                 placeholder={placeholder}

@@ -4,6 +4,7 @@ import { MessagePrimitive } from "@assistant-ui/react";
 import { useMessageBranching } from "@assistant-ui/core/react";
 
 import { useSlot } from "../theme/SlotsProvider.js";
+import { MessageAttachmentsContainer } from "./AttachmentsContainer.js";
 import { AssistantTextContainer } from "./AssistantTextContainer.js";
 
 export function UserMessageContainer() {
@@ -15,6 +16,7 @@ export function UserMessageContainer() {
         <MessagePrimitive.Root data-role="user">
             <MessageBubble
                 variant="user"
+                attachments={<MessageAttachmentsContainer />}
                 branchIndicator={
                     <BranchIndicator
                         index={branchNumber}

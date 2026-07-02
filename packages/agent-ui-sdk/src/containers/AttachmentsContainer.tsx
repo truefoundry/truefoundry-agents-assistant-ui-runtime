@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ComposerPrimitive, useAui, useAuiState } from "@assistant-ui/react";
+import { ComposerPrimitive, MessagePrimitive, useAui, useAuiState } from "@assistant-ui/react";
 
+import { USER_MESSAGE_ATTACHMENT_PREVIEW_REM } from "../atoms/AttachmentCard.js";
 import { useSlot } from "../theme/SlotsProvider.js";
+import { isImageAttachment, useAttachmentPreviewSrc } from "./useAttachmentPreviewSrc.js";
 
 function ComposerAttachmentItem() {
     const AttachmentCard = useSlot("AttachmentCard");
@@ -11,19 +12,9 @@ function ComposerAttachmentItem() {
     const aui = useAui();
     const name = useAuiState((s) => s.attachment.name);
     const contentType = useAuiState((s) => s.attachment.contentType);
-    const isImage = useAuiState((s) => s.attachment.type === "image");
-    const file = useAuiState((s) => ("file" in s.attachment ? s.attachment.file : undefined));
-    const [previewSrc, setPreviewSrc] = useState<string | undefined>(undefined);
-
-    useEffect(() => {
-        if (!isImage || !file) {
-            setPreviewSrc(undefined);
-            return;
-        }
-        const objectUrl = URL.createObjectURL(file);
-        setPreviewSrc(objectUrl);
-        return () => URL.revokeObjectURL(objectUrl);
-    }, [isImage, file]);
+    const type = useAuiState((s) => s.attachment.type);
+    const isImage = isImageAttachment(type, contentType);
+    const previewSrc = useAttachmentPreviewSrc();
 
     return (
         <AttachmentPreviewDialog previewSrc={previewSrc}>
@@ -31,19 +22,55 @@ function ComposerAttachmentItem() {
                 name={name}
                 contentType={contentType}
                 previewSrc={previewSrc}
+                isImage={isImage}
+                size="chip"
                 onRemove={() => void aui.attachment().remove()}
             />
         </AttachmentPreviewDialog>
     );
 }
 
-/**
- * Attachments forwarded to the gateway on send render only in the composer's
- * staging tray; the runtime's own README documents user-message bubbles as
- * text-only, so no message-side attachment rendering is implemented here.
- */
+function MessageAttachmentItem() {
+    const AttachmentCard = useSlot("AttachmentCard");
+    const AttachmentPreviewDialog = useSlot("AttachmentPreviewDialog");
+    const name = useAuiState((s) => s.attachment.name);
+    const contentType = useAuiState((s) => s.attachment.contentType);
+    const type = useAuiState((s) => s.attachment.type);
+    const isImage = isImageAttachment(type, contentType);
+    const previewSrc = useAttachmentPreviewSrc();
+
+    const card = (
+        <AttachmentCard
+            name={name}
+            contentType={contentType}
+            previewSrc={previewSrc}
+            isImage={isImage}
+            size={isImage ? "preview" : "chip"}
+            previewRem={USER_MESSAGE_ATTACHMENT_PREVIEW_REM}
+        />
+    );
+
+    if (isImage && previewSrc) {
+        return <AttachmentPreviewDialog previewSrc={previewSrc}>{card}</AttachmentPreviewDialog>;
+    }
+
+    return card;
+}
+
 export function ComposerAttachmentsContainer() {
-    return <ComposerPrimitive.Attachments>{() => <ComposerAttachmentItem />}</ComposerPrimitive.Attachments>;
+    return (
+        <div className="aui-composer-attachments flex w-full flex-row flex-wrap items-center gap-2 empty:hidden">
+            <ComposerPrimitive.Attachments>{() => <ComposerAttachmentItem />}</ComposerPrimitive.Attachments>
+        </div>
+    );
+}
+
+export function MessageAttachmentsContainer() {
+    return (
+        <div className="aui-user-message-attachments-end col-span-full col-start-1 row-start-1 flex w-full flex-row justify-end gap-2">
+            <MessagePrimitive.Attachments>{() => <MessageAttachmentItem />}</MessagePrimitive.Attachments>
+        </div>
+    );
 }
 
 export function ComposerAttachmentPickerContainer() {
