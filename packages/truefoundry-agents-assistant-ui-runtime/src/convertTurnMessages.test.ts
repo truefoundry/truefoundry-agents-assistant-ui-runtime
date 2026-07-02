@@ -342,6 +342,37 @@ describe("convertTurnMessages", () => {
             expect(message.attachments).toHaveLength(1);
             expect(message.attachments[0]?.name).toBe("doc.pdf");
         });
+
+        it("maps gateway image_url parts to assistant-ui image attachments", () => {
+            const message = buildUserMessageFromTurnInput(
+                "turn-1",
+                [
+                    {
+                        type: "user.message",
+                        content: [
+                            { type: "text", text: "see attached" },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: "data:image/jpeg;base64,/9j/4AAQ",
+                                },
+                            },
+                        ] as never,
+                    },
+                ],
+                createdAt,
+            );
+
+            if (message.role !== "user") {
+                throw new Error("expected user message");
+            }
+            expect(message.attachments).toHaveLength(1);
+            expect(message.attachments[0]?.type).toBe("image");
+            expect(message.attachments[0]?.content[0]).toMatchObject({
+                type: "image",
+                image: "data:image/jpeg;base64,/9j/4AAQ",
+            });
+        });
     });
 
     describe("turnStreamUpdateToAssistantMessage", () => {
@@ -1214,6 +1245,53 @@ describe("convertTurnMessages", () => {
                 fold: foldState,
             };
         }
+
+        it("keeps streamed images on the assistant message for text-only user prompts", () => {
+            const imageDataUri = "data:image/jpeg;base64,/9j/4AAQ";
+            const messages = projectSessionMessages(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    pendingUser: {
+                        turnId,
+                        content: "Create image of dog",
+                        createdAt: new Date(createdAt),
+                    },
+                    activeStream: {
+                        turnId,
+                        update: {
+                            content: [
+                                {
+                                    type: "image",
+                                    image: imageDataUri,
+                                    filename: "image-1.jpeg",
+                                },
+                            ],
+                        },
+                        isContinuation: false,
+                        streamComplete: true,
+                    },
+                }),
+            );
+
+            expect(messages).toHaveLength(2);
+            const user = messages[0];
+            const assistant = messages[1];
+            expect(user?.role).toBe("user");
+            if (user?.role !== "user") {
+                return;
+            }
+            expect(user.attachments).toEqual([]);
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.content).toEqual([
+                {
+                    type: "image",
+                    image: imageDataUri,
+                    filename: "image-1.jpeg",
+                },
+            ]);
+        });
 
         it("preserves requires-action when streamComplete and update has approval status", async () => {
             const foldState = new PeerThreadFoldState();

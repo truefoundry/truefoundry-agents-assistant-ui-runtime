@@ -44,7 +44,7 @@ export function AttachmentCard({
                     className,
                 )}
             >
-                <img src={previewSrc} alt={name} className="h-12 w-12 object-cover" />
+                <img src={previewSrc} alt={name} className="h-full w-full object-cover" />
             </div>
         );
     }

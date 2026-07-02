@@ -2,7 +2,6 @@ import type { MessageStatus, ThreadMessage } from "@assistant-ui/core";
 import type { ThreadCreatedEvent, ToolResponseRequiredEvent } from "truefoundry-gateway-sdk/agents";
 import {
     isEventDelta,
-    mergeEventDelta,
     type TurnEvent,
     type TurnStreamingEvent,
 } from "truefoundry-gateway-sdk/agents";
@@ -14,6 +13,7 @@ import {
     type AssistantContentPart,
     type SdkToolCall,
 } from "./modelMessageContent.js";
+import { mergeStreamEventDelta } from "./modelMessageImageContent.js";
 import { ROOT_THREAD_ID } from "./constants.js";
 import type { SubAgentMessageCustomMetadata } from "./messageCustomMetadata.js";
 import { toolApprovalMessageCustom, toolApprovalStatus } from "./toolApproval.js";
@@ -134,7 +134,7 @@ function ingestEventIntoBucket(
     if (isEventDelta(message)) {
         const base = bucket.events.get(message.id);
         if (base != null) {
-            mergeEventDelta(base, message);
+            mergeStreamEventDelta(base, message);
         }
         return;
     }

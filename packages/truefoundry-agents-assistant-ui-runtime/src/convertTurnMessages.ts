@@ -31,6 +31,10 @@ import {
 } from "./turnEventHelpers.js";
 import type { AssistantContentPart } from "./modelMessageContent.js";
 import {
+    extractImageUrlFromUserContentItem,
+    imageUrlToAttachment,
+} from "./modelMessageImageContent.js";
+import {
     type SessionSnapshot,
     type ProjectSessionMessagesOptions,
     type SessionTurnRecord,
@@ -290,6 +294,16 @@ export function buildUserMessageFromTurnInput(
                         `${turnId}-file-${attachments.length}`,
                     ),
                 );
+            } else {
+                const imageUrl = extractImageUrlFromUserContentItem(part);
+                if (imageUrl != null) {
+                    attachments.push(
+                        imageUrlToAttachment(
+                            imageUrl,
+                            `${turnId}-file-${attachments.length}`,
+                        ),
+                    );
+                }
             }
         }
     }
@@ -683,6 +697,7 @@ export function projectSessionMessages(
             snapshot.activeStream;
         const resolvedUpdate =
             streamComplete === true ? projectActiveStreamUpdate(snapshot) : update;
+
         const last = messages.at(-1);
         const existingAssistant =
             isContinuation && last?.role === "assistant" ? last : undefined;

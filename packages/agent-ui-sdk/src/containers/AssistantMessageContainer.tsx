@@ -10,6 +10,7 @@ import {
 
 import { useSlot } from "../theme/SlotsProvider.js";
 import { AssistantTextContainer } from "./AssistantTextContainer.js";
+import { MessageImageContainer } from "./MessageImageContainer.js";
 import { ReasoningContainer } from "./ReasoningContainer.js";
 import { ToolCallContainer } from "./ToolCallContainer.js";
 import { ToolGroupContainer, type ThreadGroupPart } from "./ToolGroupContainer.js";
@@ -23,6 +24,8 @@ function AssistantLeafPartContainer({ part }: { part: EnrichedPartState }) {
         case "text":
         case "reasoning":
             return <AssistantTextContainer />;
+        case "image":
+            return <MessageImageContainer />;
         case "tool-call":
             return <ToolCallContainer {...part} />;
         default:
@@ -103,6 +106,7 @@ export function AssistantMessageContainer() {
                             case "text":
                             case "reasoning":
                             case "tool-call":
+                            case "image":
                             case "data":
                                 return <AssistantLeafPartContainer part={part} />;
                             case "indicator":
