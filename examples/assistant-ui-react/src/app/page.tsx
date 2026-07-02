@@ -1,5 +1,4 @@
-import { ThreadList } from "@/components/assistant-ui/thread-list";
-import { Thread } from "@/components/assistant-ui/thread";
+import { Thread, ThreadListContainer as ThreadList } from "@truefoundry/agent-ui-sdk";
 
 export default function Home() {
     return (

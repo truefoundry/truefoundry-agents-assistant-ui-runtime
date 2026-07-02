@@ -7,7 +7,7 @@ import {
     useTrueFoundryAgentRuntime,
 } from "truefoundry-agents-assistant-ui-runtime";
 
-import { useErrorToaster } from "@/components/assistant-ui/error-toaster";
+import { useErrorToaster } from "@truefoundry/agent-ui-sdk";
 import { getAgentSessionClient } from "@/lib/chat/agentClient";
 import { useGatewayCredentials } from "@/lib/chat/gatewayCredentials";
 
