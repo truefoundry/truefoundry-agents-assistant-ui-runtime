@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreVerticalIcon } from "lucide-react";
+import { LogOutIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -25,7 +25,7 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
                 onClick={() => void logout()}
                 aria-label="Log out"
             >
-                <MoreVerticalIcon className="size-4" />
+                <LogOutIcon className="size-4" />
             </Button>
         </div>
     );

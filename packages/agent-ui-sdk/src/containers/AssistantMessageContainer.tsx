@@ -54,7 +54,9 @@ export function AssistantMessageContainer() {
     const aui = useAui();
     const isRunning = useThreadIsRunning();
     const error = useMessageError();
-    const { copy, isCopied } = useActionBarCopy();
+    const { copy, isCopied } = useActionBarCopy({
+        copyToClipboard: (text) => navigator.clipboard.writeText(text),
+    });
     const { branchNumber, branchCount, goToPrev, goToNext } = useMessageBranching();
 
     return (
