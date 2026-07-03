@@ -15,8 +15,10 @@ import {
     DraftSelectorRow,
     DraftSelectorSearch,
     DraftSelectorSectionHeader,
+    draftMutedTextClassName,
     selectorPanelClassName,
 } from "@/components/draft/DraftSelectorPanel";
+import { cn } from "@/lib/utils";
 
 type DraftConnectorSelectorPanelProps = {
     selected: NonNullable<AgentSpec["mcpServers"]>;
@@ -57,7 +59,7 @@ export function DraftConnectorSelectorPanel({
             <DraftSelectorSectionHeader label={`AVAILABLE (${filtered.length})`} />
             <DraftSelectorList isLoading={isLoading} error={error}>
                 {filtered.length === 0 && !isLoading && !error ? (
-                    <p className="px-2 py-2 text-xs text-[#5e7baa]">No connectors found.</p>
+                    <p className={cn("px-2 py-2 text-xs", draftMutedTextClassName)}>No connectors found.</p>
                 ) : (
                     filtered.map((connector) => {
                         const checked = isConnectorSelected(selected, connector.mcpName);

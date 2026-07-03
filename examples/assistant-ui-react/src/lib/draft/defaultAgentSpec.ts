@@ -6,13 +6,9 @@ export const DEFAULT_DRAFT_AGENT_SPEC: AgentSpec = {
     model: {
         name: "anthropic/claude-sonnet-4-6",
         params: {
-            maxTokens: 4096,
-            temperature: 1.0,
             reasoningEffort: "low",
         },
     },
-    instructions:
-        "You are a helpful support assistant that helps customers file issues.",
     skills: [],
     mcpServers: [],
 };

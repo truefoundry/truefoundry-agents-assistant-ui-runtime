@@ -4,6 +4,7 @@ import { ScrollTextIcon } from "lucide-react";
 import type { AgentSpec } from "truefoundry-agents-assistant-ui-runtime";
 
 import { useDraftComposerCatalog } from "@/components/draft/DraftComposerCatalog";
+import { draftChipClassName, draftIconClassName } from "@/components/draft/draftComposerStyles";
 import {
     Tooltip,
     TooltipContent,
@@ -39,11 +40,11 @@ export function DraftSkillChips({ selected }: DraftSkillChipsProps) {
                     <span
                         aria-label={badgeLabel}
                         className={cn(
-                            "flex h-6 shrink-0 cursor-default items-center gap-1 rounded-md border border-[#cee0f8] bg-[#f0f7ff] px-1.5",
-                            "text-xs font-medium text-[#162236]",
+                            draftChipClassName,
+                            "flex h-6 shrink-0 cursor-default items-center gap-1 rounded-md px-1.5",
                         )}
                     >
-                        <ScrollTextIcon className="size-3.5 shrink-0 text-[#4d6896]" />
+                        <ScrollTextIcon className={cn("size-3.5 shrink-0", draftIconClassName)} />
                         <span>{badgeLabel}</span>
                     </span>
                 </TooltipTrigger>

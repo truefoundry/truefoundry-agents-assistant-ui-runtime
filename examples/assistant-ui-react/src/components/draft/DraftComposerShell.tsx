@@ -2,11 +2,7 @@
 
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
-
-const composerShellClassName = cn(
-    "flex w-full flex-col gap-3 rounded-2xl border border-[#cee0f8] bg-white p-3",
-);
+import { draftInputClassName, draftShellClassName } from "@/components/draft/draftComposerStyles";
 
 type DraftComposerShellProps = {
     value: string;
@@ -31,7 +27,7 @@ export function DraftComposerShell({
 }: DraftComposerShellProps) {
     return (
         <div className="flex w-full flex-col gap-2">
-            <div data-slot="aui_draft-composer-shell" className={composerShellClassName}>
+            <div data-slot="aui_draft-composer-shell" className={draftShellClassName}>
                 {attachments}
                 <textarea
                     value={value}
@@ -46,13 +42,10 @@ export function DraftComposerShell({
                             onSubmit();
                         }
                     }}
-                    className={cn(
-                        "aui-composer-input max-h-32 min-h-5 w-full resize-none bg-transparent text-base leading-5 outline-none",
-                        "placeholder:text-[#6f8ebd]",
-                    )}
+                    className={draftInputClassName}
                 />
-                <div className="aui-composer-action-wrapper flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center">{attachControl}</div>
+                <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
+                    <div className="relative flex min-w-0 flex-1 items-center">{attachControl}</div>
                     <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
                         {toolbarEnd}
                     </div>

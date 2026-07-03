@@ -3,21 +3,27 @@
 import type { ReactNode } from "react";
 import { SearchIcon } from "lucide-react";
 
+import {
+    draftCheckboxCheckedClassName,
+    draftCheckboxClassName,
+    draftConnectButtonClassName,
+    draftDividerClassName,
+    draftMutedTextClassName,
+    draftPanelClassName,
+    draftRowHoverClassName,
+    draftSearchClassName,
+} from "@/components/draft/draftComposerStyles";
 import { cn } from "@/lib/utils";
 
-export const selectorPanelClassName = cn(
-    "relative z-10 bg-white border border-[#e0ecfd] text-[#162235]",
-    "flex w-[17.5rem] flex-col gap-1 rounded-lg px-3 py-4",
-    "shadow-[0px_2px_3px_rgba(0,52,102,0.06),0px_8px_10px_rgba(0,52,102,0.1)]",
-);
+export const selectorPanelClassName = cn(draftPanelClassName, "relative z-10 flex w-[17.5rem] flex-col gap-1 rounded-lg px-3 py-4");
 
-export const selectorSearchClassName = cn(
-    "flex w-full items-center gap-1.5 rounded border border-[#cee0f8] bg-[#f0f7ff] px-1.5 py-2 text-xs",
-);
+export const selectorSearchClassName = draftSearchClassName;
+
+export { draftMutedTextClassName } from "@/components/draft/draftComposerStyles";
 
 const selectorRowClassName = cn(
     "flex items-center gap-2 rounded px-2 py-1 text-left outline-none cursor-pointer",
-    "hover:bg-[#e8f2fe]/60 focus-visible:bg-[#e8f2fe]/60",
+    draftRowHoverClassName,
 );
 
 type DraftSelectorSearchProps = {
@@ -35,14 +41,18 @@ export function DraftSelectorSearch({
 }: DraftSelectorSearchProps) {
     return (
         <label className={selectorSearchClassName}>
-            <SearchIcon className="size-3.5 shrink-0 text-[#82a0ce]" />
+            <SearchIcon className={cn("size-3.5 shrink-0", draftMutedTextClassName)} />
             <input
                 type="search"
                 value={value}
                 disabled={disabled}
                 placeholder={placeholder}
                 onChange={(event) => onChange(event.target.value)}
-                className="min-w-0 flex-1 bg-transparent text-[#5e7baa] outline-none placeholder:text-[#5e7baa]"
+                className={cn(
+                    "min-w-0 flex-1 bg-transparent outline-none",
+                    draftMutedTextClassName,
+                    "placeholder:text-muted-foreground",
+                )}
             />
         </label>
     );
@@ -55,10 +65,10 @@ type DraftSelectorSectionHeaderProps = {
 export function DraftSelectorSectionHeader({ label }: DraftSelectorSectionHeaderProps) {
     return (
         <>
-            <p className="px-2 py-1 text-[11px] font-medium tracking-[-0.22px] text-[#3e5680]">
+            <p className={cn("px-2 py-1 text-[11px] font-medium tracking-[-0.22px]", draftMutedTextClassName)}>
                 {label}
             </p>
-            <div className="mx-2 h-px bg-[#e0ecfd]" />
+            <div className={cn("mx-2 h-px bg-border")} />
         </>
     );
 }
@@ -75,10 +85,10 @@ export function DraftSelectorList({
     children,
 }: DraftSelectorListProps) {
     if (isLoading) {
-        return <p className="px-2 py-2 text-xs text-[#5e7baa]">Loading…</p>;
+        return <p className={cn("px-2 py-2 text-xs", draftMutedTextClassName)}>Loading…</p>;
     }
     if (error) {
-        return <p className="px-2 py-2 text-xs text-red-600">{error}</p>;
+        return <p className="px-2 py-2 text-xs text-red-600 dark:text-red-400">{error}</p>;
     }
     return <div className="flex max-h-56 flex-col overflow-y-auto">{children}</div>;
 }
@@ -113,24 +123,23 @@ export function DraftSelectorRow({
                 onClick={handleToggle}
                 className={cn(
                     selectorRowClassName,
-                    "min-w-0 flex-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
+                    "min-w-0 flex-1 text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
                 )}
             >
-                <span className="flex size-4 shrink-0 items-center justify-center text-[#4d6896]">
+                <span className={cn("flex size-4 shrink-0 items-center justify-center", draftMutedTextClassName)}>
                     {icon}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#162236]">
-                    {label}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
                 <span
                     className={cn(
-                        "flex size-4 shrink-0 items-center justify-center rounded-[2px] border border-[#cee0f8] bg-white",
-                        "shadow-[0px_1px_1px_rgba(0,0,0,0.05)]",
-                        checked && "border-[#4d6896] bg-[#4d6896]",
+                        draftCheckboxClassName,
+                        checked && draftCheckboxCheckedClassName,
                     )}
                     aria-hidden
                 >
-                    {checked ? <span className="size-2 rounded-[1px] bg-white" /> : null}
+                    {checked ? (
+                        <span className="size-2 rounded-[1px] bg-primary-foreground" />
+                    ) : null}
                 </span>
             </button>
             {trailing != null ? <div className="shrink-0">{trailing}</div> : null}
@@ -152,11 +161,7 @@ export function DraftSelectorConnectButton({
             type="button"
             disabled={disabled || loading}
             onClick={onClick}
-            className={cn(
-                "shrink-0 rounded-[2px] border border-[#cee0f8] bg-white px-2 py-1",
-                "text-xs font-medium text-[#263755] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]",
-                "hover:bg-[#e8f2fe]/60 disabled:cursor-not-allowed disabled:opacity-50",
-            )}
+            className={draftConnectButtonClassName}
         >
             {loading ? "…" : "Connect"}
         </button>

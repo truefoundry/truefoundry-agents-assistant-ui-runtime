@@ -18,7 +18,6 @@ import { DraftComposerCatalogProvider } from "@/components/draft/DraftComposerCa
 import { DraftComposerShell } from "@/components/draft/DraftComposerShell";
 import { DraftModelSelector } from "@/components/draft/DraftModelSelector";
 import {
-    DraftMicButton,
     DraftReasoningSelector,
     DraftSendButton,
 } from "@/components/draft/DraftComposerToolbar";
@@ -114,7 +113,6 @@ export function DraftComposerContainer() {
                                 disabled={disabled}
                                 onChange={(model) => updateAgentSpec({ model })}
                             />
-                            <DraftMicButton disabled={disabled} />
                             <DraftSendButton
                                 disabled={disabled || text.trim().length === 0}
                                 onClick={() => aui.composer().send()}

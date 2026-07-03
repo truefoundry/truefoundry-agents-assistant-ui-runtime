@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { draftChipClassName } from "@/components/draft/draftComposerStyles";
 import {
     Tooltip,
     TooltipContent,
@@ -23,8 +24,8 @@ export function DraftSelectionChip({ label, children }: DraftSelectionChipProps)
                     <span
                         aria-label={label}
                         className={cn(
+                            draftChipClassName,
                             "flex size-6 shrink-0 cursor-default items-center justify-center rounded-md",
-                            "border border-[#cee0f8] bg-[#f0f7ff] text-xs font-medium text-[#162236]",
                         )}
                     >
                         {children}

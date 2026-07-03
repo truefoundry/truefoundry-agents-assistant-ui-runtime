@@ -14,6 +14,13 @@ import type { AgentSpec } from "truefoundry-agents-assistant-ui-runtime";
 import { DraftConnectorSelectorPanel } from "@/components/draft/DraftConnectorSelectorPanel";
 import { DraftSkillsSelectorPanel } from "@/components/draft/DraftSkillsSelectorPanel";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import {
+    draftIconClassName,
+    draftMenuClassName,
+    draftMenuItemClassName,
+    draftRowActiveClassName,
+    draftTriggerButtonClassName,
+} from "@/components/draft/draftComposerStyles";
 import { cn } from "@/lib/utils";
 
 type SubmenuView = "connectors" | "skills" | null;
@@ -27,24 +34,14 @@ export type DraftAttachmentSelectorProps = {
     onPickFile: () => void;
 };
 
-const popoverSurfaceClassName = cn(
-    "pointer-events-auto flex items-start gap-2 rounded-lg",
-);
+const popoverSurfaceClassName = cn("pointer-events-auto flex items-end gap-2");
 
 const mainMenuClassName = cn(
-    "bg-white border border-[#e0ecfd] text-[#162235]",
-    "flex min-w-[11rem] shrink-0 flex-col gap-1 rounded-lg px-3 py-4",
-    "shadow-[0px_2px_3px_rgba(0,52,102,0.06),0px_8px_10px_rgba(0,52,102,0.1)]",
+    draftMenuClassName,
+    "flex min-w-[11rem] shrink-0 flex-col gap-1 px-3 py-4",
 );
 
-const menuItemClassName = cn(
-    "flex w-full cursor-pointer items-center gap-1 rounded px-2 py-1.5 text-xs font-medium outline-none select-none",
-    "hover:bg-[#e8f2fe]/60 focus-visible:bg-[#e8f2fe]/60",
-);
-
-const menuItemActiveClassName = "bg-[#e8f2fe]/60";
-
-const menuItemWithChevronClassName = cn(menuItemClassName, "justify-between");
+const menuItemWithChevronClassName = cn(draftMenuItemClassName, "justify-between");
 
 export function DraftAttachmentSelector({
     disabled,
@@ -74,18 +71,19 @@ export function DraftAttachmentSelector({
                     variant="ghost"
                     size="icon"
                     disabled={disabled}
-                    className="size-6 rounded-2xl p-1.5 hover:bg-[#e8f2fe]/60 data-[state=open]:bg-[#e8f2fe]/60"
+                    className={draftTriggerButtonClassName}
                     aria-label="Add attachment"
                     aria-haspopup="dialog"
                 >
-                    <PlusIcon className="size-3 stroke-[1.75px] text-[#162235]" />
+                    <PlusIcon className="size-3 stroke-[1.75px] text-foreground" />
                 </TooltipIconButton>
             </Popover.Trigger>
             <Popover.Portal>
                 <Popover.Content
                     side="top"
                     align="start"
-                    sideOffset={8}
+                    sideOffset={6}
+                    collisionPadding={16}
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     onCloseAutoFocus={(event) => event.preventDefault()}
                     className="z-50 border-0 bg-transparent p-0 shadow-none outline-none"
@@ -94,43 +92,43 @@ export function DraftAttachmentSelector({
                         <div className={mainMenuClassName}>
                             <button
                                 type="button"
-                                className={menuItemClassName}
+                                className={draftMenuItemClassName}
                                 onClick={() => {
                                     setOpen(false);
                                     setSubmenu(null);
                                     onPickFile();
                                 }}
                             >
-                                <PaperclipIcon className="size-3.5 text-[#4d6896]" />
+                                <PaperclipIcon className={cn("size-3.5", draftIconClassName)} />
                                 Add Files or photos
                             </button>
                             <button
                                 type="button"
                                 className={cn(
                                     menuItemWithChevronClassName,
-                                    submenu === "connectors" && menuItemActiveClassName,
+                                    submenu === "connectors" && draftRowActiveClassName,
                                 )}
                                 onClick={() => setSubmenu("connectors")}
                             >
                                 <span className="flex items-center gap-1">
-                                    <PlugIcon className="size-3.5 text-[#4d6896]" />
+                                    <PlugIcon className={cn("size-3.5", draftIconClassName)} />
                                     Connectors
                                 </span>
-                                <ChevronRightIcon className="size-3 text-[#4d6896]" />
+                                <ChevronRightIcon className={cn("size-3", draftIconClassName)} />
                             </button>
                             <button
                                 type="button"
                                 className={cn(
                                     menuItemWithChevronClassName,
-                                    submenu === "skills" && menuItemActiveClassName,
+                                    submenu === "skills" && draftRowActiveClassName,
                                 )}
                                 onClick={() => setSubmenu("skills")}
                             >
                                 <span className="flex items-center gap-1">
-                                    <ScrollTextIcon className="size-3.5 text-[#4d6896]" />
+                                    <ScrollTextIcon className={cn("size-3.5", draftIconClassName)} />
                                     Skills
                                 </span>
-                                <ChevronRightIcon className="size-3 text-[#4d6896]" />
+                                <ChevronRightIcon className={cn("size-3", draftIconClassName)} />
                             </button>
                         </div>
 

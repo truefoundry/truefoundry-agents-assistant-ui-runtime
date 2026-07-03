@@ -11,8 +11,10 @@ import {
     DraftSelectorRow,
     DraftSelectorSearch,
     DraftSelectorSectionHeader,
+    draftMutedTextClassName,
     selectorPanelClassName,
 } from "@/components/draft/DraftSelectorPanel";
+import { cn } from "@/lib/utils";
 
 type DraftSkillsSelectorPanelProps = {
     selected: NonNullable<AgentSpec["skills"]>;
@@ -49,7 +51,7 @@ export function DraftSkillsSelectorPanel({
             <DraftSelectorSectionHeader label={`AVAILABLE (${filtered.length})`} />
             <DraftSelectorList isLoading={isLoading} error={error}>
                 {filtered.length === 0 && !isLoading && !error ? (
-                    <p className="px-2 py-2 text-xs text-[#5e7baa]">No skills found.</p>
+                    <p className={cn("px-2 py-2 text-xs", draftMutedTextClassName)}>No skills found.</p>
                 ) : (
                     filtered.map((skill) => (
                         <DraftSelectorRow

@@ -3,25 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { Popover } from "radix-ui";
 import { ChevronUpIcon, SearchIcon, SparklesIcon } from "lucide-react";
-import type { AgentSpec } from "truefoundry-agents-assistant-ui-runtime";
+import type { AgentSpec, AgentSpecUpdate } from "truefoundry-agents-assistant-ui-runtime";
 
+import {
+    draftIconClassName,
+    draftMutedTextClassName,
+    draftPillClassName,
+    draftPopoverPanelClassName,
+    draftRowActiveClassName,
+    draftRowHoverClassName,
+    draftSearchClassName,
+} from "@/components/draft/draftComposerStyles";
 import { cn } from "@/lib/utils";
 import { useEnabledModels } from "@/lib/models/useEnabledModels";
 import type { ModelEntry } from "@/lib/models/listEnabledModels";
 
-const pillClassName = cn(
-    "flex h-6 items-center gap-1 rounded-2xl px-1.5 text-xs font-medium text-[#162235]",
-    "hover:bg-[#e8f2fe]/60 data-[state=open]:bg-[#e8f2fe]/60",
-);
+const panelClassName = cn(draftPopoverPanelClassName, "flex w-[30rem] flex-col");
 
-const panelClassName = cn(
-    "z-50 flex w-[30rem] flex-col overflow-hidden rounded-lg border border-[#e0ecfd] bg-white text-[#162235]",
-    "shadow-[0px_2px_3px_rgba(0,52,102,0.06),0px_8px_10px_rgba(0,52,102,0.1)]",
-);
-
-const searchClassName = cn(
-    "mx-3 flex items-center gap-1.5 rounded border border-[#cee0f8] bg-[#f0f7ff] px-2 py-1.5 text-xs",
-);
+const searchClassName = cn(draftSearchClassName, "mx-3 px-2 py-1.5");
 
 const PROVIDER_ICON_COLORS = [
     "#6366f1",
@@ -109,7 +108,7 @@ function matchesQuery(entry: ModelEntry, query: string): boolean {
 type DraftModelSelectorProps = {
     model: AgentSpec["model"];
     disabled?: boolean;
-    onChange: (model: AgentSpec["model"]) => void;
+    onChange: (model: NonNullable<AgentSpecUpdate["model"]>) => void;
 };
 
 export function DraftModelSelector({
@@ -170,17 +169,17 @@ export function DraftModelSelector({
     }, [models, model.name]);
 
     function handleSelect(entry: ModelEntry) {
-        onChange({ ...model, name: entry.apiModel });
+        onChange({ name: entry.apiModel });
         setOpen(false);
     }
 
     return (
         <Popover.Root open={open} onOpenChange={setOpen}>
             <Popover.Trigger asChild disabled={disabled}>
-                <button type="button" className={pillClassName} aria-label="Select model">
-                    <SparklesIcon className="size-3.5 shrink-0 text-[#4d6896]" />
+                <button type="button" className={draftPillClassName} aria-label="Select model">
+                    <SparklesIcon className={cn("size-3.5 shrink-0", draftIconClassName)} />
                     <span className="max-w-[9rem] truncate">{displayLabel}</span>
-                    <ChevronUpIcon className="size-4 shrink-0 text-[#4d6896]" />
+                    <ChevronUpIcon className={cn("size-4 shrink-0", draftIconClassName)} />
                 </button>
             </Popover.Trigger>
             <Popover.Portal>
@@ -191,32 +190,32 @@ export function DraftModelSelector({
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     className={panelClassName}
                 >
-                    <div className="border-b border-[#e0ecfd] px-3 py-2">
-                        <p className="text-xs font-medium text-[#162235]">Select model</p>
+                    <div className="border-b border-border px-3 py-2">
+                        <p className="text-xs font-medium text-foreground">Select model</p>
                     </div>
 
                     <label className={cn(searchClassName, "mt-3")}>
-                        <SearchIcon className="size-3.5 shrink-0 text-[#82a0ce]" />
+                        <SearchIcon className={cn("size-3.5 shrink-0", draftMutedTextClassName)} />
                         <input
                             type="search"
                             value={query}
                             placeholder="Search"
                             onChange={(event) => setQuery(event.target.value)}
-                            className="min-w-0 flex-1 bg-transparent text-[#162235] outline-none placeholder:text-[#5e7baa]"
+                            className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
                         />
                     </label>
 
-                    <div className="mt-3 flex min-h-[16rem] border-t border-[#e0ecfd]">
-                        <div className="flex w-[11.5rem] shrink-0 flex-col border-r border-[#e0ecfd]">
+                    <div className="mt-3 flex min-h-[16rem] border-t border-border">
+                        <div className="flex w-[11.5rem] shrink-0 flex-col border-r border-border">
                             <div className="max-h-64 overflow-y-auto py-1">
                                 {isLoading && filteredGroups.length === 0 ? (
-                                    <p className="px-3 py-2 text-xs text-[#5e7baa]">
+                                    <p className={cn("px-3 py-2 text-xs", draftMutedTextClassName)}>
                                         Loading providers…
                                     </p>
                                 ) : error != null && filteredGroups.length === 0 ? (
-                                    <p className="px-3 py-2 text-xs text-red-600">{error}</p>
+                                    <p className="px-3 py-2 text-xs text-red-600 dark:text-red-400">{error}</p>
                                 ) : filteredGroups.length === 0 ? (
-                                    <p className="px-3 py-2 text-xs text-[#5e7baa]">
+                                    <p className={cn("px-3 py-2 text-xs", draftMutedTextClassName)}>
                                         No providers found.
                                     </p>
                                 ) : (
@@ -231,9 +230,9 @@ export function DraftModelSelector({
                                                     setSelectedAccount(group.providerAccount)
                                                 }
                                                 className={cn(
-                                                    "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
-                                                    "hover:bg-[#e8f2fe]/60",
-                                                    isActive && "bg-[#e8f2fe]",
+                                                    "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground",
+                                                    draftRowHoverClassName,
+                                                    isActive && draftRowActiveClassName,
                                                 )}
                                             >
                                                 <span
@@ -246,7 +245,7 @@ export function DraftModelSelector({
                                                 >
                                                     {providerMonogram(group.providerAccount)}
                                                 </span>
-                                                <span className="min-w-0 truncate font-medium text-[#162235]">
+                                                <span className="min-w-0 truncate font-medium">
                                                     {group.providerAccount}
                                                 </span>
                                             </button>
@@ -258,19 +257,19 @@ export function DraftModelSelector({
 
                         <div className="min-w-0 flex-1">
                             {activeGroup == null ? (
-                                <p className="px-3 py-2 text-xs text-[#5e7baa]">
+                                <p className={cn("px-3 py-2 text-xs", draftMutedTextClassName)}>
                                     Select a provider.
                                 </p>
                             ) : (
                                 <>
-                                    <div className="border-b border-[#e0ecfd] px-3 py-2">
-                                        <p className="truncate text-xs font-medium text-[#162235]">
+                                    <div className="border-b border-border px-3 py-2">
+                                        <p className="truncate text-xs font-medium text-foreground">
                                             {activeGroup.providerAccount}
                                         </p>
                                     </div>
                                     <div className="max-h-[14.5rem] overflow-y-auto py-1">
                                         {activeGroup.models.length === 0 ? (
-                                            <p className="px-3 py-2 text-xs text-[#5e7baa]">
+                                            <p className={cn("px-3 py-2 text-xs", draftMutedTextClassName)}>
                                                 No models found.
                                             </p>
                                         ) : (
@@ -283,9 +282,9 @@ export function DraftModelSelector({
                                                         type="button"
                                                         onClick={() => handleSelect(entry)}
                                                         className={cn(
-                                                            "flex w-full px-3 py-1.5 text-left text-xs text-[#162235]",
-                                                            "hover:bg-[#e8f2fe]/60",
-                                                            isSelected && "bg-[#e8f2fe]",
+                                                            "flex w-full px-3 py-1.5 text-left text-xs text-foreground",
+                                                            draftRowHoverClassName,
+                                                            isSelected && draftRowActiveClassName,
                                                         )}
                                                     >
                                                         <span className="truncate">
