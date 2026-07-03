@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { Popover } from "radix-ui";
 import {
     ChevronRightIcon,
     PaperclipIcon,
@@ -9,10 +7,10 @@ import {
     PlusIcon,
     ScrollTextIcon,
 } from "lucide-react";
+import { Popover } from "radix-ui";
+import { useState } from "react";
 import type { AgentSpec } from "truefoundry-agents-assistant-ui-runtime";
 
-import { DraftConnectorSelectorPanel } from "@/components/draft/DraftConnectorSelectorPanel";
-import { DraftSkillsSelectorPanel } from "@/components/draft/DraftSkillsSelectorPanel";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import {
     draftIconClassName,
@@ -21,6 +19,8 @@ import {
     draftRowActiveClassName,
     draftTriggerButtonClassName,
 } from "@/components/draft/draftComposerStyles";
+import { DraftConnectorSelectorPanel } from "@/components/draft/DraftConnectorSelectorPanel";
+import { DraftSkillsSelectorPanel } from "@/components/draft/DraftSkillsSelectorPanel";
 import { cn } from "@/lib/utils";
 
 type SubmenuView = "connectors" | "skills" | null;

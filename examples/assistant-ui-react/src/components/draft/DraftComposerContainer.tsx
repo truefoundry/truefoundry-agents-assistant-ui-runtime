@@ -1,26 +1,26 @@
 "use client";
 
-import { useCallback, useRef } from "react";
-import { useAui, useAuiState } from "@assistant-ui/react";
 import { useThreadIsRunning } from "@assistant-ui/core/react";
-import {
-    useTrueFoundryAgentSpec,
-    useTrueFoundryToolResponses,
-} from "truefoundry-agents-assistant-ui-runtime";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import {
     AskUserContainer,
     ComposerAttachmentsContainer,
     McpAuthContainer,
 } from "@truefoundry/agent-ui-sdk";
+import { useCallback, useRef } from "react";
+import {
+    useTrueFoundryAgentSpec,
+    useTrueFoundryToolResponses,
+} from "truefoundry-agents-assistant-ui-runtime";
 
 import { DraftComposerAttachBar } from "@/components/draft/DraftComposerAttachBar";
 import { DraftComposerCatalogProvider } from "@/components/draft/DraftComposerCatalog";
 import { DraftComposerShell } from "@/components/draft/DraftComposerShell";
-import { DraftModelSelector } from "@/components/draft/DraftModelSelector";
 import {
     DraftReasoningSelector,
     DraftSendButton,
 } from "@/components/draft/DraftComposerToolbar";
+import { DraftModelSelector } from "@/components/draft/DraftModelSelector";
 
 const threadHasPendingMcpAuth = (s: {
     thread: {
