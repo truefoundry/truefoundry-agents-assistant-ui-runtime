@@ -7,7 +7,13 @@ import { useAui } from "@assistant-ui/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export function NewChatButton({ collapsed }: { collapsed: boolean }) {
+export function NewChatButton({
+    collapsed,
+    onNavigate,
+}: {
+    collapsed: boolean;
+    onNavigate?: () => void;
+}) {
     const aui = useAui();
 
     return (
@@ -19,7 +25,13 @@ export function NewChatButton({ collapsed }: { collapsed: boolean }) {
                 collapsed && "justify-center px-0",
             )}
         >
-            <Link href="/" onClick={() => aui.threads().switchToNewThread()}>
+            <Link
+                href="/"
+                onClick={() => {
+                    aui.threads().switchToNewThread();
+                    onNavigate?.();
+                }}
+            >
                 <PlusIcon className="size-4 shrink-0" />
                 {!collapsed && <span>New Chat</span>}
             </Link>

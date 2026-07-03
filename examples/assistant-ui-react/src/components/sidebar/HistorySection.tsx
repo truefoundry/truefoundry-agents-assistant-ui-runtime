@@ -12,7 +12,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export function HistorySection({ collapsed }: { collapsed: boolean }) {
+export function HistorySection({
+    collapsed,
+    onNavigate,
+}: {
+    collapsed: boolean;
+    onNavigate?: () => void;
+}) {
     const aui = useAui();
     const isLoading = useAuiState((s) => s.threads.isLoading);
     const isLoadingMore = useAuiState((s) => s.threads.isLoadingMore);
@@ -49,7 +55,10 @@ export function HistorySection({ collapsed }: { collapsed: boolean }) {
                             <button
                                 key={id}
                                 type="button"
-                                onClick={() => aui.threads().switchToThread(id)}
+                                onClick={() => {
+                                    aui.threads().switchToThread(id);
+                                    onNavigate?.();
+                                }}
                                 className={cn(
                                     "hover:bg-muted truncate rounded-md px-2.5 py-1.5 text-start text-sm",
                                     id === mainThreadId && "bg-muted font-medium",

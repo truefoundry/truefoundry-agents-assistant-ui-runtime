@@ -20,7 +20,13 @@ function initials(title: string): string {
     return (words[0]![0]! + words[words.length - 1]![0]!).toUpperCase();
 }
 
-export function AgentsSection({ collapsed }: { collapsed: boolean }) {
+export function AgentsSection({
+    collapsed,
+    onNavigate,
+}: {
+    collapsed: boolean;
+    onNavigate?: () => void;
+}) {
     const params = useParams<{ agentName?: string }>();
     const { agents, isLoading, error } = useAgents();
 
@@ -53,6 +59,7 @@ export function AgentsSection({ collapsed }: { collapsed: boolean }) {
                             <Link
                                 key={agent.id}
                                 href={`/agents/${agent.name}`}
+                                onClick={() => onNavigate?.()}
                                 className={cn(
                                     "hover:bg-muted flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm",
                                     active && "bg-muted font-medium",

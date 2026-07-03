@@ -65,8 +65,8 @@ export function DraftComposerShell({
                 }}
                 className="placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
             />
-            <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                <div className="flex flex-wrap items-center gap-2">
                     {onAttach != null && (
                         <button
                             type="button"
