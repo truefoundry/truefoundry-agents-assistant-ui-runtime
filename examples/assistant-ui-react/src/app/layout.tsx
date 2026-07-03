@@ -4,7 +4,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { TrueFoundryAgentRuntimeProvider } from "@/app/TrueFoundryAgentRuntimeProvider";
 import { ErrorToasterProvider, TooltipProvider } from "@truefoundry/agent-ui-sdk";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
-import { GatewayCredentialsProvider } from "@/lib/chat/gatewayCredentials";
 import { ThemeProvider, themeInitScript } from "@/lib/theme";
 
 import "./globals.css";
@@ -45,13 +44,11 @@ export default function RootLayout({
             >
                 <ThemeProvider>
                     <AuthProvider>
-                        <GatewayCredentialsProvider>
-                            <ErrorToasterProvider>
-                                <TrueFoundryAgentRuntimeProvider>
-                                    <TooltipProvider>{children}</TooltipProvider>
-                                </TrueFoundryAgentRuntimeProvider>
-                            </ErrorToasterProvider>
-                        </GatewayCredentialsProvider>
+                        <ErrorToasterProvider>
+                            <TrueFoundryAgentRuntimeProvider>
+                                <TooltipProvider>{children}</TooltipProvider>
+                            </TrueFoundryAgentRuntimeProvider>
+                        </ErrorToasterProvider>
                     </AuthProvider>
                 </ThemeProvider>
             </body>

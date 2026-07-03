@@ -10,6 +10,21 @@ export function getControlPlaneUrl(): string {
     return url.replace(/\/+$/, "");
 }
 
+export function getGatewayUrl(): string {
+    const url = process.env.NEXT_PUBLIC_TF_GATEWAY_URL;
+    if (!url) {
+        throw new Error(
+            "NEXT_PUBLIC_TF_GATEWAY_URL is not set. Configure it in .env.local.",
+        );
+    }
+    return url.replace(/\/+$/, "");
+}
+
+export function getDefaultAgentName(): string | undefined {
+    const name = process.env.NEXT_PUBLIC_TF_AGENT_NAME?.trim();
+    return name ? name : undefined;
+}
+
 export function getAgentModeEnv(): string {
     return process.env.NEXT_PUBLIC_AGENT_MODE ?? "STANDALONE";
 }
