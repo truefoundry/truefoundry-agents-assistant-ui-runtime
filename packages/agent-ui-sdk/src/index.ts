@@ -172,6 +172,11 @@ export { ToolGroupContainer } from "./containers/ToolGroupContainer.js";
 export type { ThreadGroupPart } from "./containers/ToolGroupContainer.js";
 export { ReasoningContainer } from "./containers/ReasoningContainer.js";
 export { ComposerContainer } from "./containers/ComposerContainer.js";
+export {
+    ComposerBusyProvider,
+    useComposerBusyState,
+} from "./hooks/useComposerBusyState.js";
+export type { ComposerBusyState } from "./hooks/useComposerBusyState.js";
 export { AskUserContainer } from "./containers/AskUserContainer.js";
 export { McpAuthContainer } from "./containers/McpAuthContainer.js";
 export {

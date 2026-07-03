@@ -2,9 +2,9 @@
 
 import { useRef } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
-import { useThreadIsRunning } from "@assistant-ui/core/react";
 import { useTrueFoundryCancel, useTrueFoundryToolResponses } from "truefoundry-agents-assistant-ui-runtime";
 
+import { useComposerBusyState } from "../hooks/useComposerBusyState.js";
 import { useSlot } from "../theme/SlotsProvider.js";
 import { ComposerAttachmentsContainer } from "./AttachmentsContainer.js";
 import { AskUserContainer } from "./AskUserContainer.js";
@@ -22,7 +22,7 @@ export function ComposerContainer() {
     const ComposerShell = useSlot("ComposerShell");
     const aui = useAui();
     const text = useAuiState((s) => s.composer.text);
-    const isRunning = useThreadIsRunning();
+    const { isBusy, send, resetBusy } = useComposerBusyState();
     const mcpPending = useAuiState(threadHasPendingMcpAuth);
     const { pending: toolResponsesPending } = useTrueFoundryToolResponses();
     const cancel = useTrueFoundryCancel();
@@ -51,11 +51,14 @@ export function ComposerContainer() {
                 attachments={<ComposerAttachmentsContainer />}
                 value={text}
                 placeholder="Ask anything... (Shift+Enter for new line)"
-                disabled={isRunning}
-                isRunning={isRunning}
+                disabled={isBusy}
+                isRunning={isBusy}
                 onValueChange={(value) => aui.composer().setText(value)}
-                onSubmit={() => aui.composer().send()}
-                onCancel={() => void cancel()}
+                onSubmit={() => send(() => aui.composer().send())}
+                onCancel={() => {
+                    resetBusy();
+                    void cancel();
+                }}
                 onAttach={() => fileInputRef.current?.click()}
             />
         </>

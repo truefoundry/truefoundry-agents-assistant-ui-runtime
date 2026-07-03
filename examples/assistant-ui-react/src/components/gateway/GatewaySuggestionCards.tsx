@@ -1,6 +1,7 @@
 "use client";
 
 import { useAui } from "@assistant-ui/react";
+import { useComposerBusyState } from "@truefoundry/agent-ui-sdk";
 
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ const SUGGESTIONS = [
 
 export function GatewaySuggestionCards({ className }: { className?: string }) {
     const aui = useAui();
+    const { send } = useComposerBusyState();
 
     return (
         <div
@@ -38,7 +40,7 @@ export function GatewaySuggestionCards({ className }: { className?: string }) {
                     type="button"
                     onClick={() => {
                         aui.composer().setText(item.prompt);
-                        void aui.composer().send();
+                        send(() => aui.composer().send());
                     }}
                     className={cn(
                         "flex w-[180px] flex-col gap-1 rounded-lg border px-2.5 py-2 text-left transition-colors",

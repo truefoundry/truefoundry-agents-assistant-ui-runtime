@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ThreadPrimitive, useAuiState, type AssistantState } from "@assistant-ui/react";
 
 import { useSlot } from "../theme/SlotsProvider.js";
+import { ComposerBusyProvider } from "../hooks/useComposerBusyState.js";
 import { AssistantMessageContainer } from "./AssistantMessageContainer.js";
 import { UserEditComposerContainer } from "./UserEditComposerContainer.js";
 import { UserMessageContainer } from "./UserMessageContainer.js";
@@ -46,7 +47,8 @@ export function ThreadContainer({ composer }: ThreadContainerProps) {
     const isLoading = useAuiState((s) => s.thread.isLoading);
 
     return (
-        <ThreadPrimitive.Root asChild>
+        <ComposerBusyProvider>
+            <ThreadPrimitive.Root asChild>
             <ThreadRootShell>
                 <ThreadPrimitive.Viewport asChild turnAnchor="top">
                     <ThreadViewportShell isEmpty={isEmpty}>
@@ -80,5 +82,6 @@ export function ThreadContainer({ composer }: ThreadContainerProps) {
                 )}
             </ThreadRootShell>
         </ThreadPrimitive.Root>
+        </ComposerBusyProvider>
     );
 }

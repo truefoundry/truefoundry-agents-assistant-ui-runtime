@@ -1,11 +1,11 @@
 "use client";
 
-import { useThreadIsRunning } from "@assistant-ui/core/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import {
     AskUserContainer,
     ComposerAttachmentsContainer,
     McpAuthContainer,
+    useComposerBusyState,
 } from "@truefoundry/agent-ui-sdk";
 import { useCallback, useRef } from "react";
 import {
@@ -46,7 +46,7 @@ const threadHasPendingMcpAuth = (s: {
 export function DraftComposerContainer() {
     const aui = useAui();
     const text = useAuiState((s) => s.composer.text);
-    const isRunning = useThreadIsRunning();
+    const { isBusy, send, resetBusy } = useComposerBusyState();
     const mcpPending = useAuiState(threadHasPendingMcpAuth);
     const { pending: toolResponsesPending } = useTrueFoundryToolResponses();
     const { agentSpec, isSpecSyncing, updateAgentSpec } = useTrueFoundryAgentSpec();
@@ -77,8 +77,17 @@ export function DraftComposerContainer() {
         return <AskUserContainer />;
     }
 
-    const disabled = isRunning;
+    const disabled = isBusy;
     const spec = agentSpec;
+
+    const handleSend = () => {
+        send(() => aui.composer().send());
+    };
+
+    const handleCancel = () => {
+        resetBusy();
+        void cancel();
+    };
 
     return (
         <DraftComposerCatalogProvider>
@@ -129,15 +138,15 @@ export function DraftComposerContainer() {
                                 onChange={handleModelChange}
                             />
                             <DraftSendButton
-                                disabled={isRunning ? false : disabled || text.trim().length === 0}
-                                isRunning={isRunning}
-                                onClick={() => (isRunning ? void cancel() : aui.composer().send())}
+                                disabled={isBusy ? false : disabled || text.trim().length === 0}
+                                isRunning={isBusy}
+                                onClick={() => (isBusy ? handleCancel() : handleSend())}
                             />
                         </>
                     )
                 }
                 onValueChange={(value) => aui.composer().setText(value)}
-                onSubmit={() => aui.composer().send()}
+                onSubmit={handleSend}
             />
         </DraftComposerCatalogProvider>
     );

@@ -1,14 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { SlotsProvider } from "@truefoundry/agent-ui-sdk";
+import type { ReactNode } from "react";
 
-import { GatewayWelcomeScreen } from "@/components/gateway/GatewayWelcomeScreen";
 import {
     GatewayThreadComposerAreaShell,
     GatewayThreadRootShell,
     GatewayThreadViewportShell,
 } from "@/components/gateway/GatewayThreadShell";
+import { GatewayWelcomeScreen } from "@/components/gateway/GatewayWelcomeScreen";
 
 const gatewaySlotOverrides = {
     WelcomeScreen: GatewayWelcomeScreen,
