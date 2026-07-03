@@ -10,7 +10,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
     const [mobileOpen, setMobileOpen] = useState(false);
 
     return (
-        <main className="flex h-dvh overflow-hidden">
+        <main className="flex h-dvh overflow-hidden bg-background">
             {mobileOpen && (
                 <div
                     className="fixed inset-0 z-30 bg-black/40 md:hidden"
@@ -30,7 +30,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
                     >
                         <MenuIcon className="size-4" />
                     </Button>
-                    <span className="truncate text-sm font-semibold">TrueFoundry</span>
+                    <span className="truncate text-sm font-semibold">truefoundry</span>
                 </div>
                 {children}
             </div>

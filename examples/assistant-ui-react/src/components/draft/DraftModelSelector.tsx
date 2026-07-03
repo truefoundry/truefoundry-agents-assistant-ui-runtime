@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Popover } from "radix-ui";
-import { ChevronUpIcon, SearchIcon, SparklesIcon } from "lucide-react";
+import { ChevronUpIcon, SearchIcon } from "lucide-react";
 import type { AgentSpec, AgentSpecUpdate } from "truefoundry-agents-assistant-ui-runtime";
 
 import {
@@ -168,6 +168,8 @@ export function DraftModelSelector({
         return slash > 0 ? model.name.slice(slash + 1) : model.name;
     }, [models, model.name]);
 
+    const providerAccount = parseProviderAccount(model.name);
+
     function handleSelect(entry: ModelEntry) {
         onChange({ name: entry.apiModel });
         setOpen(false);
@@ -177,7 +179,12 @@ export function DraftModelSelector({
         <Popover.Root open={open} onOpenChange={setOpen}>
             <Popover.Trigger asChild disabled={disabled}>
                 <button type="button" className={draftPillClassName} aria-label="Select model">
-                    <SparklesIcon className={cn("size-3.5 shrink-0", draftIconClassName)} />
+                    <span
+                        className="flex size-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold text-white"
+                        style={{ backgroundColor: providerIconColor(providerAccount) }}
+                    >
+                        {providerMonogram(providerAccount)}
+                    </span>
                     <span className="max-w-[9rem] truncate">{displayLabel}</span>
                     <ChevronUpIcon className={cn("size-4 shrink-0", draftIconClassName)} />
                 </button>

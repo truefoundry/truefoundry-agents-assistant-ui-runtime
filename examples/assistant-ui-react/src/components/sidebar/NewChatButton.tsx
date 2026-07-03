@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { PlusIcon } from "lucide-react";
+import { SquarePenIcon } from "lucide-react";
 import { useAui } from "@assistant-ui/react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function NewChatButton({
@@ -17,24 +16,19 @@ export function NewChatButton({
     const aui = useAui();
 
     return (
-        <Button
-            asChild
-            variant="ghost"
+        <Link
+            href="/"
+            onClick={() => {
+                aui.threads().switchToNewThread();
+                onNavigate?.();
+            }}
             className={cn(
-                "mb-2 h-8 w-full justify-start gap-2 px-2.5 text-sm font-normal",
-                collapsed && "justify-center px-0",
+                "flex shrink-0 h-4 items-center gap-1.5 text-sm font-medium text-sidebar-foreground hover:opacity-80",
+                collapsed && "justify-center",
             )}
         >
-            <Link
-                href="/"
-                onClick={() => {
-                    aui.threads().switchToNewThread();
-                    onNavigate?.();
-                }}
-            >
-                <PlusIcon className="size-4 shrink-0" />
-                {!collapsed && <span>New Chat</span>}
-            </Link>
-        </Button>
+            <SquarePenIcon className="size-4 shrink-0" />
+            {!collapsed && <span>New Chat</span>}
+        </Link>
     );
 }

@@ -33,7 +33,7 @@ export function DraftComposerShell({
                     value={value}
                     placeholder={placeholder}
                     disabled={disabled}
-                    rows={2}
+                    rows={3}
                     aria-label="Message input"
                     onChange={(event) => onValueChange(event.target.value)}
                     onKeyDown={(event) => {

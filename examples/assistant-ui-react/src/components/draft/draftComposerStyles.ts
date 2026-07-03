@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
 
-/** Shared draft composer surfaces — use semantic tokens for light/dark. */
+/** Shared draft composer surfaces aligned with Gateway Figma tokens. */
 export const draftShellClassName = cn(
     "flex w-full flex-col gap-3 rounded-2xl border border-border bg-card p-3 text-card-foreground",
+    "shadow-none dark:shadow-none",
 );
 
 export const draftInputClassName = cn(
     "aui-composer-input max-h-32 min-h-5 w-full resize-none bg-transparent text-base leading-5 outline-none",
-    "text-foreground placeholder:text-muted-foreground",
+    "text-foreground placeholder:text-[var(--composer-placeholder)]",
 );
 
 export const draftPillClassName = cn(
@@ -18,7 +19,7 @@ export const draftPillClassName = cn(
 export const draftPanelClassName = cn(
     "border border-border bg-popover text-popover-foreground",
     "shadow-[0px_2px_3px_rgba(0,52,102,0.06),0px_8px_10px_rgba(0,52,102,0.1)]",
-    "dark:shadow-[0px_2px_3px_rgba(0,0,0,0.2),0px_8px_10px_rgba(0,0,0,0.35)]",
+    "dark:shadow-[0px_2px_3px_rgba(31,31,34,0.06),0px_8px_10px_rgba(31,31,34,0.1)]",
 );
 
 export const draftMenuClassName = cn(draftPanelClassName, "rounded-lg");
@@ -39,6 +40,10 @@ export const draftChipClassName = cn(
 export const draftMenuItemClassName = cn(
     "flex w-full cursor-pointer items-center gap-1 rounded px-2 py-1.5 text-xs font-medium text-foreground outline-none select-none",
     "hover:bg-accent/60 focus-visible:bg-accent/60",
+);
+
+export const draftMenuSectionClassName = cn(
+    "px-2 py-1 text-[11px] font-medium tracking-tight text-muted-foreground uppercase",
 );
 
 export const draftRowHoverClassName = "hover:bg-accent/60 focus-visible:bg-accent/60";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 
 import {
@@ -11,6 +11,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+    sidebarSectionCollapsibleClassName,
+    sidebarSectionContentClassName,
+} from "@/components/sidebar/sidebarSectionLayout";
 
 export function HistorySection({
     collapsed,
@@ -32,22 +36,21 @@ export function HistorySection({
     const itemsById = new Map(threadItems.map((item) => [item.id, item]));
 
     return (
-        <Collapsible defaultOpen className="mb-2">
-            <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-                <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-                History
+        <Collapsible defaultOpen className={sidebarSectionCollapsibleClassName}>
+            <CollapsibleTrigger className="group flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <span>Chats</span>
+                <ChevronDownIcon className="size-3 shrink-0 transition-transform group-data-[state=closed]:-rotate-90" />
             </CollapsibleTrigger>
-            <CollapsibleContent className="flex flex-col gap-0.5 pt-0.5">
+            <CollapsibleContent className={cn("mt-4", sidebarSectionContentClassName)}>
+                <div className="flex flex-col gap-4 pr-1">
                 {isLoading ? (
                     Array.from({ length: 4 }, (_, i) => (
-                        <div key={i} className="px-2.5 py-1.5">
+                        <div key={i}>
                             <Skeleton className="h-3.5 w-full" />
                         </div>
                     ))
                 ) : threadIds.length === 0 ? (
-                    <p className="text-muted-foreground px-2.5 py-1.5 text-xs">
-                        No history yet.
-                    </p>
+                    <p className="text-muted-foreground text-xs">No chats yet.</p>
                 ) : (
                     threadIds.map((id) => {
                         const item = itemsById.get(id);
@@ -60,8 +63,8 @@ export function HistorySection({
                                     onNavigate?.();
                                 }}
                                 className={cn(
-                                    "hover:bg-muted truncate rounded-md px-2.5 py-1.5 text-start text-sm",
-                                    id === mainThreadId && "bg-muted font-medium",
+                                    "truncate text-left text-sm text-foreground hover:opacity-90",
+                                    id === mainThreadId && "font-medium",
                                 )}
                             >
                                 {item?.title ?? "New Chat"}
@@ -72,19 +75,18 @@ export function HistorySection({
                 {!isLoading &&
                     hasMore &&
                     (isLoadingMore ? (
-                        <div className="px-2.5 py-1.5">
-                            <Skeleton className="h-3.5 w-full" />
-                        </div>
+                        <Skeleton className="h-3.5 w-full" />
                     ) : (
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="text-muted-foreground justify-center"
+                            className="text-muted-foreground h-auto justify-start px-0 py-0 text-xs"
                             onClick={() => void aui.threads().loadMore()}
                         >
                             Load more
                         </Button>
                     ))}
+                </div>
             </CollapsibleContent>
         </Collapsible>
     );
