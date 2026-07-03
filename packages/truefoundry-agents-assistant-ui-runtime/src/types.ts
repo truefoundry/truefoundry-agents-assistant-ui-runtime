@@ -10,7 +10,6 @@ import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import type { AgentSpec } from "./agentSpec.js";
-import type { DraftSessionBridge } from "./draftSessionBridge.js";
 
 export type NamedAgentConfig = {
     mode: "named";
@@ -55,7 +54,6 @@ export type UseTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptio
 export type ResolvedTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptions & {
     agent: TrueFoundryAgentConfig;
     gateway?: TrueFoundryGateway | undefined;
-    draftBridge?: DraftSessionBridge | undefined;
 };
 
 export function resolveTrueFoundryAgentConfig(

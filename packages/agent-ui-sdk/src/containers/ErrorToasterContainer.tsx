@@ -69,3 +69,8 @@ export function useErrorToaster(): ErrorToasterContextValue {
     }
     return context;
 }
+
+/** Same as `useErrorToaster`, but returns `null` instead of throwing outside `ErrorToasterProvider`. */
+export function useErrorToasterOptional(): ErrorToasterContextValue | null {
+    return useContext(ErrorToasterContext);
+}

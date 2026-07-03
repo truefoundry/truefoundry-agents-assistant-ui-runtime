@@ -17,7 +17,7 @@ describe("bindDraftAgentSession", () => {
     it("validates the draft and binds turns to the draft session id", async () => {
         const get = vi.fn().mockResolvedValue({ data: draft });
         const gateway = {
-            agents: { draftSessions: { get } },
+            agents: { private: { draftSessions: { get } } },
         } as unknown as TrueFoundryGateway;
         const client = {
             client: gateway,
@@ -36,9 +36,11 @@ describe("createDraftSessionBridge", () => {
         const update = vi.fn().mockResolvedValue({ data: draft });
         const gateway = {
             agents: {
-                draftSessions: {
-                    get: vi.fn().mockResolvedValue({ data: draft }),
-                    update,
+                private: {
+                    draftSessions: {
+                        get: vi.fn().mockResolvedValue({ data: draft }),
+                        update,
+                    },
                 },
             },
         } as unknown as TrueFoundryGateway;

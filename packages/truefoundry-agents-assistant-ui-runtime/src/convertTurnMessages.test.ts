@@ -3,6 +3,7 @@ import type { AppendMessage } from "@assistant-ui/core";
 import type {
     AgentSession,
     ModelMessageEvent,
+    SandboxCreatedEvent,
     ThreadCreatedEvent,
     ToolApprovalRequiredEvent,
     ToolResponseRequiredEvent,
@@ -56,6 +57,12 @@ function threadCreated(
     event: Omit<ThreadCreatedEvent, "type" | "createdAt">,
 ): ThreadCreatedEvent {
     return { type: "thread.created", createdAt, ...event };
+}
+
+function sandboxCreated(
+    event: Omit<SandboxCreatedEvent, "type" | "createdAt">,
+): SandboxCreatedEvent {
+    return { type: "sandbox.created", createdAt, ...event };
 }
 
 function responseRequired(
@@ -458,6 +465,31 @@ describe("convertTurnMessages", () => {
                 status: { type: "complete", reason: "stop" },
             });
             expect(result.runningTurn).toBeUndefined();
+        });
+
+        it("carries sandboxId from a historical sandbox.created event onto the assistant message", async () => {
+            const result = await convertTurnsToThreadMessages(
+                mockSession([
+                    mockTurn({
+                        id: "turn-1",
+                        createdAt,
+                        input: [{ type: "user.message", content: "hello" }],
+                        listEvents: eventsPage([
+                            sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                            modelMessage({
+                                id: "m1",
+                                threadId: ROOT_THREAD_ID,
+                                content: "assistant reply",
+                            }),
+                        ]) as unknown as Turn["listEvents"],
+                    }),
+                ]),
+            );
+
+            expect(result.messages[1]).toMatchObject({
+                role: "assistant",
+                metadata: { custom: { sandboxId: "sbx-123" } },
+            });
         });
 
         it("returns runningTurn and unstable_resume for an in-flight turn", async () => {
@@ -1218,6 +1250,85 @@ describe("convertTurnMessages", () => {
                 type: "text",
                 text: expect.stringContaining("Authorize github"),
             });
+        });
+
+        it("stamps sandboxId onto every content yield after sandbox.created is seen", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "before sandbox",
+                        }),
+                        sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                        modelMessage({
+                            id: "m2",
+                            threadId: ROOT_THREAD_ID,
+                            content: "after sandbox",
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            expect(updates).toHaveLength(2);
+            expect(updates[0]?.metadata?.custom?.sandboxId).toBeUndefined();
+            expect(updates[1]?.metadata?.custom?.sandboxId).toBe("sbx-123");
+        });
+
+        it("yields a trailing update carrying sandboxId when sandbox.created is the last event", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "some content",
+                        }),
+                        sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const final = updates.at(-1);
+            expect(final?.metadata?.custom?.sandboxId).toBe("sbx-123");
+        });
+
+        it("keeps sandboxId on the final mcp auth yield when both occur in the same stream", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "before auth",
+                        }),
+                        {
+                            type: "mcp.auth_required",
+                            id: "mcp-auth",
+                            createdAt,
+                            mcpServers: [
+                                {
+                                    id: "github-auth",
+                                    name: "github",
+                                    authUrl: "https://example.com/auth",
+                                },
+                            ],
+                        },
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const final = updates.at(-1);
+            expect(final?.metadata?.custom?.sandboxId).toBe("sbx-123");
+            expect(final?.status).toEqual({ type: "requires-action", reason: "interrupt" });
         });
     });
 

@@ -3,6 +3,7 @@ import type { ThreadMessage } from "@assistant-ui/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionClient, Turn } from "truefoundry-gateway-sdk/agents";
+import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
@@ -394,6 +395,31 @@ describe("useTrueFoundryAgentMessages", () => {
         });
     });
 
+    it("carries a streamed sandboxId through commit so it survives after the stream completes", async () => {
+        vi.mocked(streamTurnContent).mockReturnValue(
+            (async function* () {
+                yield {
+                    content: [{ type: "text" as const, text: "streamed reply" }],
+                    metadata: { custom: { sandboxId: "sbx-123" } },
+                };
+            })(),
+        );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            await result.current.sendTurn({ userMessage: "hello there" });
+        });
+
+        expect(result.current.messages[1]).toMatchObject({
+            role: "assistant",
+            metadata: { custom: { sandboxId: "sbx-123" } },
+        });
+    });
+
     it("sendTurn with approvals streams a continuation without adding a user message", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
             snapshotWithAssistantMessage(assistantMessageWithPendingApproval()),
@@ -669,5 +695,29 @@ describe("useTrueFoundryAgentMessages", () => {
         // No reconcile is triggered by cancel; the session was only loaded once
         // on mount and reconciles against the event log on the next page load.
         expect(loadSessionSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancel resolves the session through the draft gateway in draft mode", async () => {
+        const cancel = vi.fn().mockResolvedValue(undefined);
+        vi.mocked(getSession).mockResolvedValue({ cancel } as never);
+        const draftGateway = {} as TrueFoundryGateway;
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                client: mockClient,
+                sessionId: "draft-session-1",
+                draftGateway,
+            }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            await result.current.cancel();
+        });
+
+        expect(cancel).toHaveBeenCalled();
+        expect(getSession).toHaveBeenCalledWith(mockClient, "draft-session-1", {
+            draftGateway,
+        });
     });
 });

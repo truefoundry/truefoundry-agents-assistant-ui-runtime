@@ -17,6 +17,7 @@ import {
     collectPendingApprovals,
     collectPendingToolResponses,
     derivePendingMcpAuth,
+    deriveSandboxId,
 } from "./collectPending.js";
 import {
     buildUserMessageContent,
@@ -108,10 +109,31 @@ function useTrueFoundryAgentRuntimeImpl(
         [messages],
     );
     const pendingMcpAuth = useMemo(() => derivePendingMcpAuth(messages), [messages]);
+    const sandboxId = useMemo(() => deriveSandboxId(messages), [messages]);
 
     const resumeMcpAuth = useMemo(
         () => () => sendTurn({ resumeMcpAuth: true }),
         [sendTurn],
+    );
+
+    const downloadSandboxFile = useCallback(
+        async (path: string) => {
+            if (gateway == null) {
+                const error = new Error(
+                    "Downloading a sandbox file requires a `gateway` TrueFoundryGateway client.",
+                );
+                onError?.(error);
+                throw error;
+            }
+            if (sandboxId == null) {
+                const error = new Error("No sandbox is available yet for this session.");
+                onError?.(error);
+                throw error;
+            }
+            const response = await gateway.agents.downloadSandboxFile(sandboxId, { path });
+            return await response.blob();
+        },
+        [gateway, sandboxId, onError],
     );
 
     const draftExtras = useMemo(() => {
@@ -136,9 +158,11 @@ function useTrueFoundryAgentRuntimeImpl(
             pendingApprovals,
             pendingToolResponses,
             pendingMcpAuth,
+            sandboxId,
             respondToToolApproval,
             respondToToolResponse,
             resumeMcpAuth,
+            downloadSandboxFile,
             cancel,
             resetFromTurn: (turnId: string) =>
                 resetFromTurn(turnId).catch((error) => {

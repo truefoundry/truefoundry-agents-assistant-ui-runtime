@@ -14,7 +14,7 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
 
     return {
         async list({ after } = {}) {
-            const page = await gateway.agents.draftSessions.list({
+            const page = await gateway.agents.private.draftSessions.list({
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),
@@ -32,7 +32,7 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
         },
 
         async initialize(_threadId: string) {
-            const response = await gateway.agents.draftSessions.create({
+            const response = await gateway.agents.private.draftSessions.create({
                 agentSpec: defaultAgentSpec,
             });
             const draft = response.data;
@@ -40,7 +40,7 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
         },
 
         async fetch(remoteId) {
-            const response = await gateway.agents.draftSessions.get(remoteId);
+            const response = await gateway.agents.private.draftSessions.get(remoteId);
             const draft = response.data;
             return {
                 status: "regular" as const,

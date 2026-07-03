@@ -45,7 +45,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             ),
         );
         const gateway = {
-            agents: { draftSessions: { list, create: vi.fn(), get: vi.fn() } },
+            agents: { private: { draftSessions: { list, create: vi.fn(), get: vi.fn() } } },
         } as unknown as TrueFoundryGateway;
 
         const adapter = createTrueFoundryDraftThreadListAdapter({
@@ -81,7 +81,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             data: mockDraft("d-new", undefined, "2026-06-30T12:00:00.000Z"),
         });
         const gateway = {
-            agents: { draftSessions: { list: vi.fn(), create, get: vi.fn() } },
+            agents: { private: { draftSessions: { list: vi.fn(), create, get: vi.fn() } } },
         } as unknown as TrueFoundryGateway;
 
         const adapter = createTrueFoundryDraftThreadListAdapter({
@@ -100,7 +100,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             data: mockDraft("d1", undefined, "2026-06-30T10:00:00.000Z"),
         });
         const gateway = {
-            agents: { draftSessions: { list: vi.fn(), create: vi.fn(), get } },
+            agents: { private: { draftSessions: { list: vi.fn(), create: vi.fn(), get } } },
         } as unknown as TrueFoundryGateway;
 
         const adapter = createTrueFoundryDraftThreadListAdapter({

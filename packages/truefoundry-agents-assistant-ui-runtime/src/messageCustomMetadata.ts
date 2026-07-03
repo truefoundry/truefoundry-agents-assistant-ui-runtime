@@ -9,6 +9,7 @@ export type TrueFoundryMessageCustomMetadata = {
     subAgent?: SubAgentCustomMetadata;
     pendingMcpAuth?: true;
     mcpServers?: McpAuthRequiredEvent["mcpServers"];
+    sandboxId?: string;
     [TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY]?: string;
     [TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY]?: string;
 };
@@ -22,6 +23,8 @@ export type McpAuthMessageCustomMetadata = Pick<
     TrueFoundryMessageCustomMetadata,
     "pendingMcpAuth" | "mcpServers"
 >;
+
+export type SandboxMessageCustomMetadata = Pick<TrueFoundryMessageCustomMetadata, "sandboxId">;
 
 export type ToolApprovalMessageCustomMetadata = Pick<
     TrueFoundryMessageCustomMetadata,

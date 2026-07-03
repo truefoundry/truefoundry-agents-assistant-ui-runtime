@@ -20,9 +20,11 @@ export type TrueFoundryRuntimeExtras = {
     pendingApprovals: PendingApproval[];
     pendingToolResponses: PendingToolResponse[];
     pendingMcpAuth: { mcpServers: McpAuthRequiredEvent["mcpServers"] } | null;
+    sandboxId: string | undefined;
     respondToToolApproval: (response: RespondToToolApprovalOptions) => void;
     respondToToolResponse: (response: RespondToToolResponseOptions) => void;
     resumeMcpAuth: () => Promise<void>;
+    downloadSandboxFile: (path: string) => Promise<Blob>;
     cancel: () => Promise<void>;
     resetFromTurn: (turnId: string) => Promise<void>;
     draft: TrueFoundryDraftRuntimeExtras | null;

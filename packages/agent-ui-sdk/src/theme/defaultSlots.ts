@@ -29,6 +29,7 @@ import { BranchIndicator } from "../atoms/BranchIndicator.js";
 import { CodeBlockHeader } from "../atoms/CodeBlockHeader.js";
 import { Markdown } from "../atoms/Markdown.js";
 import { OpenUIBlock } from "../atoms/OpenUIBlock.js";
+import { SandboxArtifactList } from "../atoms/SandboxArtifactList.js";
 import { MessageActionBar } from "../atoms/MessageActionBar.js";
 import { UserMessageActionBar } from "../atoms/UserMessageActionBar.js";
 import { MessageBubble } from "../atoms/MessageBubble.js";
@@ -95,6 +96,7 @@ export const defaultSlots: AtomSlots = {
     Skeleton,
     Markdown,
     OpenUIBlock,
+    SandboxArtifactList,
     CodeBlockHeader,
     MessageBubble,
     MessageErrorBanner,

@@ -33,7 +33,7 @@
     "@types/react": "*",
     "react": "^18 || ^19",
     "truefoundry-agents-assistant-ui-runtime": "workspace:*",
-    "truefoundry-gateway-sdk": "^0.1.0"
+    "truefoundry-gateway-sdk": "0.2.0-rc.1"
   },
   "peerDependenciesMeta": {
     "@types/react": {
@@ -62,7 +62,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "truefoundry-agents-assistant-ui-runtime": "workspace:*",
-    "truefoundry-gateway-sdk": "^0.1.0",
+    "truefoundry-gateway-sdk": "0.2.0-rc.1",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9"

@@ -56,8 +56,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/truefoundry-agents-assistant-ui-runtime
       truefoundry-gateway-sdk:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: 0.2.0-rc.1
+        version: 0.2.0-rc.1
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
@@ -154,8 +154,8 @@ importers:
         specifier: workspace:*
         version: link:../truefoundry-agents-assistant-ui-runtime
       truefoundry-gateway-sdk:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: 0.2.0-rc.1
+        version: 0.2.0-rc.1
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(typescript@5.9.3)
@@ -191,8 +191,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.4
       truefoundry-gateway-sdk:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: 0.2.0-rc.1
+        version: 0.2.0-rc.1
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(typescript@5.9.3)
@@ -5184,8 +5184,8 @@ packages:
   trough@2.2.0:
     resolution: {integrity: sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==}
 
-  truefoundry-gateway-sdk@0.1.0:
-    resolution: {integrity: sha512-DeOfcSX5fActQ8bkmOvp189MOihWgokPel2A4hzGnEylcqgj4fDa/Z0s87JwISX4Os8TT73tDNeCxJ2VM/KNww==}
+  truefoundry-gateway-sdk@0.2.0-rc.1:
+    resolution: {integrity: sha512-MLweGhyy0J6jBpUNpa7IKYymmM575DSHDAfHTIJEin3DLOamjSj1pR+xJSzyzvSMW9JmKvRotp/xd23RC2lTWQ==}
     engines: {node: '>=18.0.0'}
 
   ts-api-utils@2.5.0:
@@ -11189,7 +11189,7 @@ snapshots:
 
   trough@2.2.0: {}
 
-  truefoundry-gateway-sdk@0.1.0: {}
+  truefoundry-gateway-sdk@0.2.0-rc.1: {}
 
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:

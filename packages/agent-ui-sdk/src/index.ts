@@ -76,6 +76,8 @@ export { Markdown } from "./atoms/Markdown.js";
 export type { MarkdownProps } from "./atoms/Markdown.js";
 export { OpenUIBlock } from "./atoms/OpenUIBlock.js";
 export type { OpenUIBlockProps } from "./atoms/OpenUIBlock.js";
+export { SandboxArtifactList } from "./atoms/SandboxArtifactList.js";
+export type { SandboxArtifactListProps, SandboxArtifactLink } from "./atoms/SandboxArtifactList.js";
 export { CodeBlockHeader } from "./atoms/CodeBlockHeader.js";
 export type { CodeBlockHeaderProps } from "./atoms/CodeBlockHeader.js";
 export { MessageBubble } from "./atoms/MessageBubble.js";
@@ -178,5 +180,9 @@ export {
     MessageAttachmentsContainer,
 } from "./containers/AttachmentsContainer.js";
 export { ThreadListContainer } from "./containers/ThreadListContainer.js";
-export { ErrorToasterProvider, useErrorToaster } from "./containers/ErrorToasterContainer.js";
+export {
+    ErrorToasterProvider,
+    useErrorToaster,
+    useErrorToasterOptional,
+} from "./containers/ErrorToasterContainer.js";
 export { Thread } from "./containers/Thread.js";

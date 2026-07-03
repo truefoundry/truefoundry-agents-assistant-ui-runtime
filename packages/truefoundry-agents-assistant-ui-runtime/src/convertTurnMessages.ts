@@ -604,11 +604,13 @@ function projectHistoryTurns(
             content = applyApprovalDecisionsToContent(content, currentDecisions);
         }
 
-        const { status, custom } = resolveProjectedRequiredActionState(
+        const { status, custom: baseCustom } = resolveProjectedRequiredActionState(
             turnUpdate,
             content,
             record,
         );
+        const custom =
+            record.sandboxId != null ? { ...baseCustom, sandboxId: record.sandboxId } : baseCustom;
 
         if (record.userText) {
             messages.push(
@@ -749,9 +751,15 @@ function ingestTurnsIntoSnapshot(
             beforeCount,
         );
 
+        const sandboxEvent = (eventArrays[i] ?? []).find(
+            (event): event is Extract<TurnEvent, { type: "sandbox.created" }> =>
+                event.type === "sandbox.created",
+        );
+
         snapshot.turns.push({
             ...turnToSessionRecord(turn),
             rootModelMessageIds,
+            ...(sandboxEvent != null ? { sandboxId: sandboxEvent.sandboxId } : {}),
         });
 
         if (turn.state.status === "running") {
@@ -1095,6 +1103,19 @@ export async function* streamTurnEvents(
     groupRootBaseline?: readonly string[],
 ): AsyncGenerator<TurnStreamUpdate> {
     let pendingMcpAuth: McpAuthRequiredEvent | undefined;
+    let sandboxId: string | undefined;
+    let sandboxIdYielded = false;
+
+    const withSandbox = (update: TurnStreamUpdate): TurnStreamUpdate => {
+        if (sandboxId == null) {
+            return update;
+        }
+        sandboxIdYielded = true;
+        return {
+            ...update,
+            metadata: { ...update.metadata, custom: { ...update.metadata?.custom, sandboxId } },
+        };
+    };
 
     const yieldContent = (): AssistantContentPart[] | undefined => {
         const ids =
@@ -1107,6 +1128,11 @@ export async function* streamTurnEvents(
 
     for await (const data of stream) {
         const event = data.event;
+
+        if (event.type === "sandbox.created") {
+            sandboxId = event.sandboxId;
+            continue;
+        }
 
         if (event.type === "mcp.auth_required") {
             pendingMcpAuth = event;
@@ -1126,12 +1152,12 @@ export async function* streamTurnEvents(
 
         const content = yieldContent();
         if (content != null) {
-            yield { content };
+            yield withSandbox({ content });
         }
     }
 
     if (pendingMcpAuth != null) {
-        yield buildMcpAuthUpdate(pendingMcpAuth, foldState, groupRootBaseline);
+        yield withSandbox(buildMcpAuthUpdate(pendingMcpAuth, foldState, groupRootBaseline));
         return;
     }
 
@@ -1159,12 +1185,21 @@ export async function* streamTurnEvents(
             groupRootBaseline != null
                 ? rootModelMessageIdsSinceBaseline(foldState, groupRootBaseline)
                 : foldState.threads.get(ROOT_THREAD_ID)?.modelMessageIds ?? [];
-        yield {
+        yield withSandbox({
             content: buildRootAssistantContentForIds(foldState, ids),
             status:
                 approvalThreadId != null ? toolApprovalStatus() : toolResponseStatus(),
             metadata: { custom },
-        };
+        });
+        return;
+    }
+
+    if (sandboxId != null && !sandboxIdYielded) {
+        const ids =
+            groupRootBaseline != null
+                ? rootModelMessageIdsSinceBaseline(foldState, groupRootBaseline)
+                : foldState.threads.get(ROOT_THREAD_ID)?.modelMessageIds ?? [];
+        yield withSandbox({ content: buildRootAssistantContentForIds(foldState, ids) });
     }
 }
 

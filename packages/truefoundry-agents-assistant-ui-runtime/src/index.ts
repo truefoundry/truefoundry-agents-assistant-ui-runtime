@@ -28,9 +28,11 @@ export type {
     TrueFoundryMessageCustomMetadata,
     SubAgentMessageCustomMetadata,
     McpAuthMessageCustomMetadata,
+    SandboxMessageCustomMetadata,
     ToolApprovalMessageCustomMetadata,
     ToolResponseMessageCustomMetadata,
 } from "./messageCustomMetadata.js";
+export type { SandboxCreatedEvent } from "truefoundry-gateway-sdk/agents";
 export type { PendingApproval, PendingToolResponse } from "./collectPending.js";
 export type { TrueFoundryRuntimeExtras } from "./truefoundryExtras.js";
 export { trueFoundryExtras } from "./truefoundryExtras.js";
@@ -41,6 +43,8 @@ export {
     useTrueFoundryRespondToToolApproval,
     useTrueFoundryRespondToToolResponse,
     useTrueFoundryResumeMcpAuth,
+    useTrueFoundrySandboxId,
+    useTrueFoundryDownloadSandboxFile,
     useTrueFoundryCancel,
     useTrueFoundryResetFromTurn,
 } from "./hooks.js";

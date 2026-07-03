@@ -50,7 +50,7 @@ export async function bindDraftAgentSession(
     let inflight = inflightByDraftId.get(draftSessionId);
     if (inflight == null) {
         inflight = (async () => {
-            const response = await gateway.agents.draftSessions.get(draftSessionId);
+            const response = await gateway.agents.private.draftSessions.get(draftSessionId);
             return new AgentSessionClass(
                 draftToSessionRecord(response.data),
                 getGatewayFromSessionClient(client),

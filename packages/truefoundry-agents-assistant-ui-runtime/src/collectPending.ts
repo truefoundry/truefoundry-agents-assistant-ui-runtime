@@ -144,3 +144,22 @@ export function derivePendingMcpAuth(
     }
     return null;
 }
+
+/**
+ * Most recent `sandboxId` observed anywhere in the conversation, scanning backward.
+ * Unlike `derivePendingMcpAuth`, this isn't gated on message status: once a sandbox
+ * is created it stays valid for the rest of the session, not just the paused message.
+ */
+export function deriveSandboxId(messages: readonly ThreadMessage[]): string | undefined {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message?.role !== "assistant") {
+            continue;
+        }
+        const custom = message.metadata.custom as TrueFoundryMessageCustomMetadata;
+        if (typeof custom.sandboxId === "string") {
+            return custom.sandboxId;
+        }
+    }
+    return undefined;
+}

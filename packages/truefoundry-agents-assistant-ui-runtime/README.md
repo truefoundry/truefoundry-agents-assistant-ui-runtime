@@ -87,7 +87,7 @@ See the assistant-ui [Thread UI guide](https://www.assistant-ui.com/docs/ui/thre
 | `client` | `AgentSessionClient` | Yes | Pre-built gateway client. The runtime never reads credentials itself. |
 | `agent` | `{ mode: "named", agentName }` \| `{ mode: "draft", defaultAgentSpec }` | Yes* | Discriminated agent source. *Or legacy `agentName` for named mode. |
 | `agentName` | `string` | Named only | Legacy shorthand for `agent: { mode: "named", agentName }`. |
-| `gateway` | `TrueFoundryGateway` | Draft only | Low-level gateway client for `draftSessions` CRUD. |
+| `gateway` | `TrueFoundryGateway` | Draft only | Low-level gateway client for `agents.private.draftSessions` CRUD. |
 | `initialSessionId` | `string` | No | Pin an existing session once on mount (uncontrolled). |
 | `threadId` | `string` | No | Controlled active session id; reactive and URL-syncable. |
 | `onThreadIdChange` | `(threadId: string \| undefined) => void` | No | Fires when the active session changes. |
@@ -107,7 +107,7 @@ Legacy `agentName` shorthand is still supported.
 
 ### Draft agent mode (inline `AgentSpec`)
 
-Draft mode lists **draft sessions** (`draftSessions.*`) in the thread list. Each thread's `remoteId` is a `DraftSession.id`. The runtime syncs `AgentSpec` edits via `draftSessions.update`. Turns and history use `/agents/sessions/{draftSessionId}/turns` after validating the draft via `draftSessions.get` — no separate conversation session is created.
+Draft mode lists **draft sessions** (`agents.private.draftSessions.*`) in the thread list. Each thread's `remoteId` is a `DraftSession.id`. The runtime syncs `AgentSpec` edits via `agents.private.draftSessions.update`. Turns and history use `/agents/sessions/{draftSessionId}/turns` after validating the draft via `agents.private.draftSessions.get` — no separate conversation session is created.
 
 ```tsx
 import { TrueFoundryGateway } from "truefoundry-gateway-sdk";
@@ -459,8 +459,8 @@ Everything below is exported from the package root (`truefoundry-agents-assistan
 | `TrueFoundryRuntimeExtras` | type | Shape provided into the runtime extras slot. |
 | `PendingApproval`, `PendingToolResponse` | types | Derived pending items for UI rendering. |
 | `createTrueFoundryThreadListAdapter` | fn | Builds the cursor-paginated `RemoteThreadListAdapter` powering `<ThreadList>` (`list({ after })` → `nextCursor`). Used internally; exported for custom wiring. |
-| `createTrueFoundryDraftThreadListAdapter` | fn | Draft-session variant of the thread-list adapter (`draftSessions.list/create/get`). |
-| `createDraftSessionBridge` | fn | Resolves a draft session id to a conversation `AgentSession` and syncs `AgentSpec` updates. |
+| `createTrueFoundryDraftThreadListAdapter` | fn | Draft-session variant of the thread-list adapter (`agents.private.draftSessions.list/create/get`). |
+| `createDraftSessionBridge` | fn | Reads and syncs a draft session's `AgentSpec` (`agents.private.draftSessions.get/update`). |
 | `mergeAgentSpec` | fn | Immutable merge helper for partial `AgentSpec` updates. |
 | `AgentSpec`, `AgentSpecUpdate`, `DraftSession` | types | Gateway inline agent definition types (re-exported). |
 | `getSession` | fn | `(client, sessionId) => Promise<AgentSession>` convenience wrapper. |
@@ -495,9 +495,10 @@ For contributors and agents working inside this package. Source lives in `src/`;
 | `collectPending.ts` | Derives `pendingApprovals`, `pendingToolResponses`, `pendingMcpAuth` from messages. |
 | `requiredActionInputs.ts` | Combined gate + `collectRequiredActionInputs` for batched resume. |
 | `truefoundryThreadListAdapter.ts` | `RemoteThreadListAdapter` — cursor-paginated session list (`list({ after })` → `nextCursor`), create/fetch sessions. |
-| `truefoundryDraftThreadListAdapter.ts` | Draft-session `RemoteThreadListAdapter` backed by `draftSessions.*`. |
-| `draftSessionBridge.ts` | Validates draft sessions and syncs `AgentSpec`; turns use the draft id at `/agents/sessions/{draftSessionId}/turns`. |
-| `useDraftAgentSpec.ts` | Debounced draft spec state + `draftSessions.update` wiring. |
+| `truefoundryDraftThreadListAdapter.ts` | Draft-session `RemoteThreadListAdapter` backed by `agents.private.draftSessions.*`. |
+| `draftSessionBridge.ts` | Reads and syncs a draft session's `AgentSpec` via `agents.private.draftSessions.get/update`. |
+| `bindDraftAgentSession.ts` | Validates a draft session via `agents.private.draftSessions.get`, then binds turns to it at `/agents/sessions/{draftSessionId}/turns`. |
+| `useDraftAgentSpec.ts` | Debounced draft spec state + `agents.private.draftSessions.update` wiring. |
 | `agentSpec.ts` | `AgentSpec` helpers and `mergeAgentSpec`. |
 | `convertTurnMessages.ts` | `projectSessionMessages` pure projector; `buildSnapshotFromSession` history ingest; `convertTurnsToThreadMessages` wrapper; stream-event aggregation. |
 | `foldPeerThreads.ts` | `PeerThreadFoldState` — folds peer/sub-agent threads under their spawning tool call. |

@@ -15,6 +15,8 @@ export type SessionTurnRecord = Pick<
     userText?: string;
     /** Root-thread `model.message` ids ingested with this turn (for per-group projection). */
     rootModelMessageIds?: readonly string[];
+    /** sandboxId observed via a `sandbox.created` event during this turn (session-scoped, latest wins). */
+    sandboxId?: string;
 };
 
 export type RequiredActionsOverlay = {

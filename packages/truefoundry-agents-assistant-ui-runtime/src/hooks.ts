@@ -3,7 +3,11 @@
 import { useMemo } from "react";
 import { useAui } from "@assistant-ui/store";
 
-import { trueFoundryExtras, type TrueFoundryDraftRuntimeExtras } from "./truefoundryExtras.js";
+import {
+    EMPTY_DRAFT_EXTRAS,
+    trueFoundryExtras,
+    type TrueFoundryDraftRuntimeExtras,
+} from "./truefoundryExtras.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
@@ -78,6 +82,16 @@ export const useTrueFoundryResumeMcpAuth = () => {
     return () => trueFoundryExtras.get(aui).resumeMcpAuth();
 };
 
+/** Current sandboxId for this session, if a sandbox has been created. */
+export const useTrueFoundrySandboxId = (): string | undefined =>
+    trueFoundryExtras.use((e) => e.sandboxId, undefined);
+
+/** Returns a function to download a sandbox file by path from any render context. */
+export const useTrueFoundryDownloadSandboxFile = () => {
+    const aui = useAui();
+    return (path: string) => trueFoundryExtras.get(aui).downloadSandboxFile(path);
+};
+
 /** Returns a function to cancel the current run from any render context. */
 export const useTrueFoundryCancel = () => {
     const aui = useAui();
@@ -95,17 +109,7 @@ export const useTrueFoundryAgentSpec = () => {
     const extras = trueFoundryExtras.use((e) => e.draft, null);
 
     return useMemo(
-        () => ({
-            agentSpec: extras?.agentSpec ?? null,
-            draftSessionId: extras?.draftSessionId,
-            isSpecSyncing: extras?.isSpecSyncing ?? false,
-            specError: extras?.specError ?? null,
-            updateAgentSpec:
-                extras?.updateAgentSpec ??
-                (() => {
-                    throw new Error("Draft agent extras are only available in draft mode.");
-                }),
-        }),
+        () => ({ ...EMPTY_DRAFT_EXTRAS, ...extras }),
         [extras],
     );
 };

@@ -97,6 +97,10 @@ function commitActiveStream(
         return snapshot;
     }
 
+    const activeSandboxId = (
+        active.update.metadata?.custom as { sandboxId?: string } | undefined
+    )?.sandboxId;
+
     const completedState = buildCompletedTurnState(new Date().toISOString());
     const baseline =
         snapshot.groupRootBaseline ?? computeGroupRootBaseline(snapshot.turns);
@@ -117,6 +121,7 @@ function commitActiveStream(
                           ...(rootModelMessageIds != null
                               ? { rootModelMessageIds }
                               : {}),
+                          ...(activeSandboxId != null ? { sandboxId: activeSandboxId } : {}),
                       }
                     : turn,
             ),
@@ -140,6 +145,7 @@ function commitActiveStream(
             ? { userText: userMessageContentToText(snapshot.pendingUser.content) }
             : {}),
         ...(rootModelMessageIds != null ? { rootModelMessageIds } : {}),
+        ...(activeSandboxId != null ? { sandboxId: activeSandboxId } : {}),
     };
 
     return replaceSessionSnapshot(snapshot, {
@@ -486,7 +492,7 @@ export function useTrueFoundryAgentMessages({
             sessionId,
             resolveConversationSessionId,
         );
-        const session = await getSession(client, conversationSessionId);
+        const session = await getSession(client, conversationSessionId, sessionOptions);
         // Request cancellation but keep consuming the stream. After cancel(),
         // the backend gracefully closes the SSE stream: it emits a terminal
         // turn.done event and then ends the stream, which lets the active run

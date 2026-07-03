@@ -1,10 +1,11 @@
-import { isValidElement, useMemo, type ReactNode } from "react";
+import { Children, isValidElement, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "./lib/cn.js";
 import { CodeBlockHeader } from "./CodeBlockHeader.js";
 import { OpenUIBlock } from "./OpenUIBlock.js";
+import { SandboxArtifactList, type SandboxArtifactLink } from "./SandboxArtifactList.js";
 
 function extractCodeText(node: ReactNode): string {
     if (typeof node === "string") return node;
@@ -16,7 +17,61 @@ function extractCodeText(node: ReactNode): string {
     return "";
 }
 
-function createMarkdownComponents(isStreaming?: boolean): Components {
+const SANDBOX_ARTIFACT_TOKEN = "sandbox_artifact";
+
+/**
+ * By the time this runs, `[Label](path)` has already been parsed into a real
+ * `<a href="path">Label</a>` element by react-markdown — the raw path text is
+ * gone from any flattened string, only present as the anchor's `href` prop.
+ * So detection walks `children` as React elements, not a flattened string.
+ */
+/**
+ * The gateway emits sandbox artifact links as a fenced code block tagged
+ * ```sandbox_artifact(s)``` containing raw `[label](path)` markdown-link text
+ * (never parsed into real anchors, since it's inside a code fence).
+ */
+function parseSandboxArtifactCodeBlock(code: string): SandboxArtifactLink[] | null {
+    const links: SandboxArtifactLink[] = [];
+    for (const match of code.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
+        links.push({ label: match[1]!, path: match[2]! });
+    }
+    return links.length > 0 ? links : null;
+}
+
+function parseSandboxArtifactParagraph(children: ReactNode): SandboxArtifactLink[] | null {
+    const items = Children.toArray(children);
+    if (items.length === 0) return null;
+
+    const first = items[0];
+    if (typeof first !== "string") return null;
+    const stripped = first.replace(/^\s*/, "");
+    if (!stripped.startsWith(SANDBOX_ARTIFACT_TOKEN)) return null;
+    if (!/^\s*$/.test(stripped.slice(SANDBOX_ARTIFACT_TOKEN.length))) return null;
+
+    const links: SandboxArtifactLink[] = [];
+    for (let i = 1; i < items.length; i++) {
+        const item = items[i];
+        if (typeof item === "string") {
+            const trimmed = item.trim();
+            if (trimmed === "" || trimmed === SANDBOX_ARTIFACT_TOKEN) continue;
+            return null;
+        }
+        if (isValidElement(item) && typeof (item.props as { href?: unknown }).href === "string") {
+            links.push({
+                label: extractCodeText((item.props as { children?: ReactNode }).children),
+                path: (item.props as { href: string }).href,
+            });
+            continue;
+        }
+        return null;
+    }
+    return links.length > 0 ? links : null;
+}
+
+function createMarkdownComponents(
+    isStreaming?: boolean,
+    onDownloadArtifact?: (path: string) => void,
+): Components {
     return {
     h1: ({ className, ...props }) => (
         <h1
@@ -66,9 +121,17 @@ function createMarkdownComponents(isStreaming?: boolean): Components {
             {...props}
         />
     ),
-    p: ({ className, ...props }) => (
-        <p className={cn("aui-md-p my-3 leading-relaxed first:mt-0 last:mb-0", className)} {...props} />
-    ),
+    p: ({ className, children, ...props }) => {
+        const artifacts = parseSandboxArtifactParagraph(children);
+        if (artifacts != null) {
+            return <SandboxArtifactList artifacts={artifacts} onDownload={onDownloadArtifact} />;
+        }
+        return (
+            <p className={cn("aui-md-p my-3 leading-relaxed first:mt-0 last:mb-0", className)} {...props}>
+                {children}
+            </p>
+        );
+    },
     a: ({ className, ...props }) => (
         <a
             className={cn(
@@ -161,6 +224,12 @@ function createMarkdownComponents(isStreaming?: boolean): Components {
         if (language === "openui") {
             return <OpenUIBlock source={code} isStreaming={isStreaming} />;
         }
+        if (language === "sandbox_artifact" || language === "sandbox_artifacts") {
+            const artifacts = parseSandboxArtifactCodeBlock(code);
+            if (artifacts != null) {
+                return <SandboxArtifactList artifacts={artifacts} onDownload={onDownloadArtifact} />;
+            }
+        }
         return (
             <>
                 <CodeBlockHeader language={language} code={code} />
@@ -195,10 +264,14 @@ export type MarkdownProps = {
     content: string;
     className?: string;
     isStreaming?: boolean;
+    onDownloadArtifact?: (path: string) => void;
 };
 
-export function Markdown({ content, className, isStreaming }: MarkdownProps) {
-    const components = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
+export function Markdown({ content, className, isStreaming, onDownloadArtifact }: MarkdownProps) {
+    const components = useMemo(
+        () => createMarkdownComponents(isStreaming, onDownloadArtifact),
+        [isStreaming, onDownloadArtifact],
+    );
     return (
         <div className={cn("aui-md", className)}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
