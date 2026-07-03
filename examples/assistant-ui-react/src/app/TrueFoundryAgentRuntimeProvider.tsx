@@ -15,6 +15,8 @@ import {
 } from "@/lib/chat/agentClient";
 import { useGatewayCredentials } from "@/lib/chat/gatewayCredentials";
 import { DEFAULT_DRAFT_AGENT_SPEC } from "@/lib/draft/defaultAgentSpec";
+import { getStoredModelPreference } from "@/lib/draft/modelPreference";
+import { useEnabledModels } from "@/lib/models/useEnabledModels";
 
 const DEFAULT_AGENT_NAME = "agent-sdk-test";
 
@@ -34,6 +36,22 @@ export function TrueFoundryAgentRuntimeProvider({
         () => getGatewayClient(credentials),
         [credentials],
     );
+    const { models: enabledModels } = useEnabledModels();
+
+    const defaultDraftAgentSpec = useMemo(() => {
+        const storedModel = getStoredModelPreference();
+        if (storedModel != null) {
+            return { ...DEFAULT_DRAFT_AGENT_SPEC, model: storedModel };
+        }
+        const firstModel = enabledModels[0];
+        if (firstModel != null) {
+            return {
+                ...DEFAULT_DRAFT_AGENT_SPEC,
+                model: { ...DEFAULT_DRAFT_AGENT_SPEC.model, name: firstModel.apiModel },
+            };
+        }
+        return DEFAULT_DRAFT_AGENT_SPEC;
+    }, [enabledModels]);
 
     const runtimeOptions = useMemo(() => {
         const shared = {
@@ -48,7 +66,7 @@ export function TrueFoundryAgentRuntimeProvider({
                 gateway,
                 agent: {
                     mode: "draft" as const,
-                    defaultAgentSpec: DEFAULT_DRAFT_AGENT_SPEC,
+                    defaultAgentSpec: defaultDraftAgentSpec,
                 },
             };
         }
@@ -60,7 +78,7 @@ export function TrueFoundryAgentRuntimeProvider({
                 agentName: routeAgentName ?? credentials.agentName ?? DEFAULT_AGENT_NAME,
             },
         };
-    }, [client, credentials.agentName, gateway, mode, routeAgentName, showError]);
+    }, [client, credentials.agentName, defaultDraftAgentSpec, gateway, mode, routeAgentName, showError]);
 
     const runtime = useTrueFoundryAgentRuntime(runtimeOptions);
 

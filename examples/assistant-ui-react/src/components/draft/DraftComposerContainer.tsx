@@ -9,9 +9,11 @@ import {
 } from "@truefoundry/agent-ui-sdk";
 import { useCallback, useRef } from "react";
 import {
+    mergeAgentSpec,
     useTrueFoundryAgentSpec,
     useTrueFoundryCancel,
     useTrueFoundryToolResponses,
+    type AgentSpecUpdate,
 } from "truefoundry-agents-assistant-ui-runtime";
 
 import { DraftComposerAttachBar } from "@/components/draft/DraftComposerAttachBar";
@@ -22,6 +24,7 @@ import {
     DraftSendButton,
 } from "@/components/draft/DraftComposerToolbar";
 import { DraftModelSelector } from "@/components/draft/DraftModelSelector";
+import { setStoredModelPreference } from "@/lib/draft/modelPreference";
 
 const threadHasPendingMcpAuth = (s: {
     thread: {
@@ -56,6 +59,16 @@ export function DraftComposerContainer() {
         input.accept = "";
         input.click();
     }, []);
+
+    const handleModelChange = useCallback(
+        (model: NonNullable<AgentSpecUpdate["model"]>) => {
+            updateAgentSpec({ model });
+            if (agentSpec != null) {
+                setStoredModelPreference(mergeAgentSpec(agentSpec, { model }).model);
+            }
+        },
+        [agentSpec, updateAgentSpec],
+    );
 
     if (mcpPending) {
         return <McpAuthContainer />;
@@ -108,12 +121,12 @@ export function DraftComposerContainer() {
                             <DraftModelSelector
                                 model={spec.model}
                                 disabled={disabled}
-                                onChange={(model) => updateAgentSpec({ model })}
+                                onChange={handleModelChange}
                             />
                             <DraftReasoningSelector
                                 model={spec.model}
                                 disabled={disabled}
-                                onChange={(model) => updateAgentSpec({ model })}
+                                onChange={handleModelChange}
                             />
                             <DraftSendButton
                                 disabled={isRunning ? false : disabled || text.trim().length === 0}
