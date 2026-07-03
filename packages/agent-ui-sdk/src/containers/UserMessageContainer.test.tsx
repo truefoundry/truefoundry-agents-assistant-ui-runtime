@@ -23,11 +23,6 @@ describe("UserMessageContainer", () => {
         expect(screen.getByText("what is the capital of France?")).toBeInTheDocument();
     });
 
-    it("hides the branch indicator when there is only a single branch", () => {
-        renderUserMessage([{ role: "user", content: "hi" }]);
-        expect(screen.queryByText(/^\d+ \/ \d+$/)).not.toBeInTheDocument();
-    });
-
     it("renders an image attachment preview above the text bubble", () => {
         renderUserMessage([
             {

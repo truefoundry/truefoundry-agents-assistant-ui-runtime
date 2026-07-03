@@ -30,7 +30,7 @@ export function UserMessageActionBar({ className }: UserMessageActionBarProps) {
                 "aui-user-action-bar-root text-muted-foreground animate-in fade-in flex gap-1 duration-200",
                 className,
             )}
-        >
+        >    
             <ActionBarPrimitive.Edit asChild>
                 <IconButton tooltip="Edit">
                     <PencilIcon />
