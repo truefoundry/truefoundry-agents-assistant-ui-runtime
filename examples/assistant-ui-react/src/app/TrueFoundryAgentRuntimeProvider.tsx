@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
+import { useParams } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
     trueFoundryAttachmentAdapter,
@@ -13,7 +14,6 @@ import {
     getGatewayClient,
 } from "@/lib/chat/agentClient";
 import { useGatewayCredentials } from "@/lib/chat/gatewayCredentials";
-import { useAgentMode } from "@/lib/draft/agentMode";
 import { DEFAULT_DRAFT_AGENT_SPEC } from "@/lib/draft/defaultAgentSpec";
 
 const DEFAULT_AGENT_NAME = "agent-sdk-test";
@@ -22,7 +22,9 @@ export function TrueFoundryAgentRuntimeProvider({
     children,
 }: Readonly<{ children: ReactNode }>) {
     const credentials = useGatewayCredentials();
-    const { mode } = useAgentMode();
+    const params = useParams<{ agentName?: string }>();
+    const routeAgentName = params.agentName;
+    const mode = routeAgentName != null ? "named" : "draft";
     const { showError } = useErrorToaster();
     const client = useMemo(
         () => getAgentSessionClient(credentials),
@@ -55,15 +57,15 @@ export function TrueFoundryAgentRuntimeProvider({
             ...shared,
             agent: {
                 mode: "named" as const,
-                agentName: credentials.agentName ?? DEFAULT_AGENT_NAME,
+                agentName: routeAgentName ?? credentials.agentName ?? DEFAULT_AGENT_NAME,
             },
         };
-    }, [client, credentials.agentName, gateway, mode, showError]);
+    }, [client, credentials.agentName, gateway, mode, routeAgentName, showError]);
 
     const runtime = useTrueFoundryAgentRuntime(runtimeOptions);
 
     return (
-        <AssistantRuntimeProvider key={mode} runtime={runtime}>
+        <AssistantRuntimeProvider key={`${mode}:${routeAgentName ?? "draft"}`} runtime={runtime}>
             {children}
         </AssistantRuntimeProvider>
     );

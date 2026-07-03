@@ -5,7 +5,6 @@ import { TrueFoundryAgentRuntimeProvider } from "@/app/TrueFoundryAgentRuntimePr
 import { ErrorToasterProvider, TooltipProvider } from "@truefoundry/agent-ui-sdk";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { GatewayCredentialsProvider } from "@/lib/chat/gatewayCredentials";
-import { AgentModeProvider } from "@/lib/draft/agentMode";
 import { ThemeProvider, themeInitScript } from "@/lib/theme";
 
 import "./globals.css";
@@ -48,11 +47,9 @@ export default function RootLayout({
                     <AuthProvider>
                         <GatewayCredentialsProvider>
                             <ErrorToasterProvider>
-                                <AgentModeProvider>
-                                    <TrueFoundryAgentRuntimeProvider>
-                                        <TooltipProvider>{children}</TooltipProvider>
-                                    </TrueFoundryAgentRuntimeProvider>
-                                </AgentModeProvider>
+                                <TrueFoundryAgentRuntimeProvider>
+                                    <TooltipProvider>{children}</TooltipProvider>
+                                </TrueFoundryAgentRuntimeProvider>
                             </ErrorToasterProvider>
                         </GatewayCredentialsProvider>
                     </AuthProvider>

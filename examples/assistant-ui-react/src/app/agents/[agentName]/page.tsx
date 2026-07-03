@@ -1,16 +1,15 @@
 "use client";
 
-import { ThreadContainer } from "@truefoundry/agent-ui-sdk";
+import { Thread } from "@truefoundry/agent-ui-sdk";
 
 import { Sidebar } from "@/components/sidebar/Sidebar";
-import { DraftComposerContainer } from "@/components/draft/DraftComposerContainer";
 
-export default function Home() {
+export default function AgentChatPage() {
     return (
         <main className="flex h-dvh overflow-hidden">
             <Sidebar />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <ThreadContainer composer={<DraftComposerContainer />} />
+                <Thread />
             </div>
         </main>
     );
