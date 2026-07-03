@@ -7,22 +7,45 @@ import {
     type ReactNode,
 } from "react";
 
-import { parseEnvCredentials } from "@/lib/chat/parseEnvCredentials";
-import type { GatewayCredentials } from "@/lib/chat/parseEnvCredentials";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
-export type { GatewayCredentials };
+const GATEWAY_URL_STORAGE_KEY = "tf_gateway_url_v1";
+
+export type GatewayCredentials = {
+    apiKey: string;
+    gatewayUrl: string;
+    agentName?: string;
+};
 
 const GatewayCredentialsContext = createContext<GatewayCredentials | null>(null);
 
-export function GatewayCredentialsProvider({ children }: { children: ReactNode }) {
-    const [credentials, setCredentials] = useState<GatewayCredentials | null>(null);
+function readStoredGatewayUrl(): string {
+    if (typeof window === "undefined") return "";
+    return (
+        window.localStorage.getItem(GATEWAY_URL_STORAGE_KEY) ??
+        process.env.NEXT_PUBLIC_TF_GATEWAY_URL ??
+        ""
+    );
+}
 
-    if (credentials == null) {
-        return <ConnectGateway onConnect={setCredentials} />;
+export function GatewayCredentialsProvider({ children }: { children: ReactNode }) {
+    const { token } = useAuth();
+    const [gatewayDetails, setGatewayDetails] = useState<{
+        gatewayUrl: string;
+        agentName?: string;
+    } | null>(() => {
+        const gatewayUrl = readStoredGatewayUrl();
+        return gatewayUrl ? { gatewayUrl } : null;
+    });
+
+    if (gatewayDetails == null) {
+        return <GatewayDetailsForm onSubmit={setGatewayDetails} />;
     }
 
     return (
-        <GatewayCredentialsContext.Provider value={credentials}>
+        <GatewayCredentialsContext.Provider
+            value={{ apiKey: token, ...gatewayDetails }}
+        >
             {children}
         </GatewayCredentialsContext.Provider>
     );
@@ -36,57 +59,72 @@ export function useGatewayCredentials(): GatewayCredentials {
     return credentials;
 }
 
-function ConnectGateway({
-    onConnect,
+function GatewayDetailsForm({
+    onSubmit,
 }: {
-    onConnect: (credentials: GatewayCredentials) => void;
+    onSubmit: (details: { gatewayUrl: string; agentName?: string }) => void;
 }) {
-    const [envText, setEnvText] = useState("");
+    const [gatewayUrl, setGatewayUrl] = useState(
+        process.env.NEXT_PUBLIC_TF_GATEWAY_URL ?? "",
+    );
+    const [agentName, setAgentName] = useState(
+        process.env.NEXT_PUBLIC_TF_AGENT_NAME ?? "",
+    );
     const [error, setError] = useState<string | null>(null);
 
-    function handleConnect() {
-        try {
-            setError(null);
-            onConnect(parseEnvCredentials(envText));
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Invalid .env content.");
+    function handleSubmit() {
+        const trimmedUrl = gatewayUrl.trim();
+        if (!trimmedUrl) {
+            setError("Gateway URL is required.");
+            return;
         }
+        window.localStorage.setItem(GATEWAY_URL_STORAGE_KEY, trimmedUrl);
+        onSubmit({
+            gatewayUrl: trimmedUrl,
+            agentName: agentName.trim() || undefined,
+        });
     }
 
     return (
         <main className="flex h-dvh flex-col items-center justify-center gap-6 p-8">
             <div className="w-full max-w-lg space-y-4">
-                <h1 className="text-xl font-semibold">Connect to TrueFoundry Gateway</h1>
+                <h1 className="text-xl font-semibold">Gateway settings</h1>
                 <p className="text-sm text-muted-foreground">
-                    Paste your <code className="text-xs">.env</code> content (
-                    <code className="text-xs">TFY_API_KEY</code>,{" "}
-                    <code className="text-xs">TFY_GATEWAY_URL</code>, and optionally{" "}
-                    <code className="text-xs">TFY_AGENT_NAME</code>).
+                    Enter the TrueFoundry gateway URL for your tenant.
                 </p>
                 <label className="block space-y-1">
-                    <span className="text-sm text-muted-foreground">.env</span>
-                    <textarea
-                        value={envText}
+                    <span className="text-sm text-muted-foreground">Gateway URL</span>
+                    <input
+                        value={gatewayUrl}
                         onChange={(e) => {
-                            setEnvText(e.target.value);
+                            setGatewayUrl(e.target.value);
                             setError(null);
                         }}
-                        placeholder={"TFY_API_KEY=your-api-key\nTFY_GATEWAY_URL=https://gateway.truefoundry.ai/<tenant>\nTFY_AGENT_NAME=your-agent-name"}
-                        rows={6}
+                        placeholder="https://gateway.truefoundry.ai/<tenant>"
                         spellCheck={false}
                         className="w-full rounded-md border px-3 py-2 font-mono text-sm"
                     />
                 </label>
-                {error != null && (
-                    <p className="text-sm text-red-600">{error}</p>
-                )}
+                <label className="block space-y-1">
+                    <span className="text-sm text-muted-foreground">
+                        Agent name (optional)
+                    </span>
+                    <input
+                        value={agentName}
+                        onChange={(e) => setAgentName(e.target.value)}
+                        placeholder="your-agent-name"
+                        spellCheck={false}
+                        className="w-full rounded-md border px-3 py-2 font-mono text-sm"
+                    />
+                </label>
+                {error != null && <p className="text-sm text-red-600">{error}</p>}
                 <button
                     type="button"
-                    disabled={!envText.trim()}
-                    onClick={handleConnect}
+                    disabled={!gatewayUrl.trim()}
+                    onClick={handleSubmit}
                     className="rounded-md bg-foreground px-4 py-2 text-sm text-background disabled:opacity-50"
                 >
-                    Connect
+                    Continue
                 </button>
             </div>
         </main>

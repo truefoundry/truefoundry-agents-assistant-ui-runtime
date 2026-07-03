@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { TrueFoundryAgentRuntimeProvider } from "@/app/TrueFoundryAgentRuntimeProvider";
 import { ErrorToasterProvider, TooltipProvider } from "@truefoundry/agent-ui-sdk";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { GatewayCredentialsProvider } from "@/lib/chat/gatewayCredentials";
 import { AgentModeProvider } from "@/lib/draft/agentMode";
 import { ThemeProvider, themeInitScript } from "@/lib/theme";
@@ -44,15 +45,17 @@ export default function RootLayout({
                 suppressHydrationWarning
             >
                 <ThemeProvider>
-                    <GatewayCredentialsProvider>
-                        <ErrorToasterProvider>
-                            <AgentModeProvider>
-                                <TrueFoundryAgentRuntimeProvider>
-                                    <TooltipProvider>{children}</TooltipProvider>
-                                </TrueFoundryAgentRuntimeProvider>
-                            </AgentModeProvider>
-                        </ErrorToasterProvider>
-                    </GatewayCredentialsProvider>
+                    <AuthProvider>
+                        <GatewayCredentialsProvider>
+                            <ErrorToasterProvider>
+                                <AgentModeProvider>
+                                    <TrueFoundryAgentRuntimeProvider>
+                                        <TooltipProvider>{children}</TooltipProvider>
+                                    </TrueFoundryAgentRuntimeProvider>
+                                </AgentModeProvider>
+                            </ErrorToasterProvider>
+                        </GatewayCredentialsProvider>
+                    </AuthProvider>
                 </ThemeProvider>
             </body>
         </html>
