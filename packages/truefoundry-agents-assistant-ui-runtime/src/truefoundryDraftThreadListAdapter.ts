@@ -9,8 +9,9 @@ const THREAD_LIST_PAGE_SIZE = 20;
 export function createTrueFoundryDraftThreadListAdapter(options: {
     gateway: TrueFoundryGateway;
     defaultAgentSpec: AgentSpec;
+    getAgentSpec?: () => AgentSpec;
 }): RemoteThreadListAdapter {
-    const { gateway, defaultAgentSpec } = options;
+    const { gateway, defaultAgentSpec, getAgentSpec } = options;
 
     return {
         async list({ after } = {}) {
@@ -33,7 +34,7 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
 
         async initialize(_threadId: string) {
             const response = await gateway.agents.private.draftSessions.create({
-                agentSpec: defaultAgentSpec,
+                agentSpec: getAgentSpec?.() ?? defaultAgentSpec,
             });
             const draft = response.data;
             return { remoteId: draft.id, externalId: undefined };

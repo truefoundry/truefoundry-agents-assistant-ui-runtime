@@ -11,8 +11,10 @@ import {
     useRuntimeAdapters,
 } from "@assistant-ui/core/react";
 import { useAui, useAuiState } from "@assistant-ui/store";
+import type { MutableRefObject } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import type { AgentSpec } from "./agentSpec.js";
 import {
     collectPendingApprovals,
     collectPendingToolResponses,
@@ -36,6 +38,7 @@ import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
 
 function useTrueFoundryAgentRuntimeImpl(
     options: ReturnType<typeof resolveTrueFoundryAgentRuntimeOptions>,
+    pendingAgentSpecRef: MutableRefObject<AgentSpec | undefined>,
 ) {
     const {
         client,
@@ -99,6 +102,10 @@ function useTrueFoundryAgentRuntimeImpl(
         initializeSession,
         draftGateway: agent.mode === "draft" ? gateway : undefined,
     });
+
+    if (agent.mode === "draft" && draftSpec.agentSpec != null) {
+        pendingAgentSpecRef.current = draftSpec.agentSpec;
+    }
 
     const pendingApprovals = useMemo(
         () => collectPendingApprovals(messages),
@@ -227,6 +234,10 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     );
     const { client, agent, gateway } = resolved;
 
+    const pendingAgentSpecRef = useRef<AgentSpec | undefined>(
+        agent.mode === "draft" ? agent.defaultAgentSpec : undefined,
+    );
+
     const threadListAdapter = useMemo(() => {
         if (agent.mode === "draft") {
             if (gateway == null) {
@@ -237,6 +248,7 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
             return createTrueFoundryDraftThreadListAdapter({
                 gateway,
                 defaultAgentSpec: agent.defaultAgentSpec,
+                getAgentSpec: () => pendingAgentSpecRef.current ?? agent.defaultAgentSpec,
             });
         }
         return createTrueFoundryThreadListAdapter({
@@ -251,6 +263,6 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
         initialThreadId: resolved.initialSessionId,
         threadId: resolved.threadId,
         onThreadIdChange: resolved.onThreadIdChange,
-        runtimeHook: () => useTrueFoundryAgentRuntimeImpl(resolved),
+        runtimeHook: () => useTrueFoundryAgentRuntimeImpl(resolved, pendingAgentSpecRef),
     });
 }

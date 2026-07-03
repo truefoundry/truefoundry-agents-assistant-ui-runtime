@@ -95,6 +95,31 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
         expect(result).toEqual({ remoteId: "d-new", externalId: undefined });
     });
 
+    it("creates a draft session with the live agent spec when getAgentSpec is provided", async () => {
+        const liveAgentSpec: AgentSpec = {
+            model: { name: "anthropic/claude-opus-4-8" },
+            instructions: "You are helpful.",
+            mcpServers: [{ name: "github", enableTools: ["@all"] }],
+            skills: [{ fqn: "acme/skill-a:1", preload: false }],
+        };
+        const create = vi.fn().mockResolvedValue({
+            data: mockDraft("d-new", undefined, "2026-06-30T12:00:00.000Z"),
+        });
+        const gateway = {
+            agents: { private: { draftSessions: { list: vi.fn(), create, get: vi.fn() } } },
+        } as unknown as TrueFoundryGateway;
+
+        const adapter = createTrueFoundryDraftThreadListAdapter({
+            gateway,
+            defaultAgentSpec,
+            getAgentSpec: () => liveAgentSpec,
+        });
+
+        await adapter.initialize("local-thread-id");
+
+        expect(create).toHaveBeenCalledWith({ agentSpec: liveAgentSpec });
+    });
+
     it("falls back to model name for title when draft has no title", async () => {
         const get = vi.fn().mockResolvedValue({
             data: mockDraft("d1", undefined, "2026-06-30T10:00:00.000Z"),
