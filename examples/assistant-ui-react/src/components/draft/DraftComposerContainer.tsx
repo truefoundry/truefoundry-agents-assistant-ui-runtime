@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { useThreadIsRunning } from "@assistant-ui/core/react";
 import {
@@ -9,17 +9,19 @@ import {
 } from "truefoundry-agents-assistant-ui-runtime";
 import {
     AskUserContainer,
+    ComposerAttachmentsContainer,
     McpAuthContainer,
 } from "@truefoundry/agent-ui-sdk";
 
-import {
-    InstructionsEditor,
-    McpServersPanel,
-    SkillsPanel,
-} from "@/components/draft/DraftConfigPanels";
+import { DraftComposerAttachBar } from "@/components/draft/DraftComposerAttachBar";
+import { DraftComposerCatalogProvider } from "@/components/draft/DraftComposerCatalog";
 import { DraftComposerShell } from "@/components/draft/DraftComposerShell";
-import { ModelPicker } from "@/components/draft/ModelPicker";
-import { connectorStatusLabel } from "@/lib/draft/defaultAgentSpec";
+import { DraftModelSelector } from "@/components/draft/DraftModelSelector";
+import {
+    DraftMicButton,
+    DraftReasoningSelector,
+    DraftSendButton,
+} from "@/components/draft/DraftComposerToolbar";
 
 const threadHasPendingMcpAuth = (s: {
     thread: {
@@ -47,6 +49,13 @@ export function DraftComposerContainer() {
     const { agentSpec, isSpecSyncing, updateAgentSpec } = useTrueFoundryAgentSpec();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const handlePickFile = useCallback(() => {
+        const input = fileInputRef.current;
+        if (input == null) return;
+        input.accept = "";
+        input.click();
+    }, []);
+
     if (mcpPending) {
         return <McpAuthContainer />;
     }
@@ -54,61 +63,68 @@ export function DraftComposerContainer() {
         return <AskUserContainer />;
     }
 
-    const disabled = isRunning || isSpecSyncing;
+    const disabled = isRunning;
     const spec = agentSpec;
 
     return (
-        <>
+        <DraftComposerCatalogProvider>
             <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 hidden
                 onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void aui.composer().addAttachment(file);
+                    const files = event.target.files;
+                    if (files == null) return;
+                    for (const file of files) {
+                        void aui.composer().addAttachment(file);
+                    }
                     event.target.value = "";
                 }}
             />
             <DraftComposerShell
                 value={text}
-                placeholder="Test your draft agent... (Shift+Enter for new line)"
+                placeholder="Ask anything or describe the task you want to accomplish..."
                 disabled={disabled}
-                modelLabel={spec?.model.name}
-                connectorStatusLabel={connectorStatusLabel(spec)}
-                configPanels={
+                attachments={<ComposerAttachmentsContainer />}
+                attachControl={
+                    spec == null ? null : (
+                        <DraftComposerAttachBar
+                            disabled={disabled}
+                            mcpServers={spec.mcpServers ?? []}
+                            skills={spec.skills ?? []}
+                            onMcpServersChange={(mcpServers) =>
+                                updateAgentSpec({ mcpServers })
+                            }
+                            onSkillsChange={(skills) => updateAgentSpec({ skills })}
+                            onPickFile={handlePickFile}
+                        />
+                    )
+                }
+                toolbarEnd={
                     spec == null ? null : (
                         <>
-                            <ModelPicker
+                            <DraftModelSelector
                                 model={spec.model}
                                 disabled={disabled}
                                 onChange={(model) => updateAgentSpec({ model })}
                             />
-                            <InstructionsEditor
-                                value={spec.instructions ?? ""}
+                            <DraftReasoningSelector
+                                model={spec.model}
                                 disabled={disabled}
-                                onChange={(instructions) =>
-                                    updateAgentSpec({ instructions })
-                                }
+                                onChange={(model) => updateAgentSpec({ model })}
                             />
-                            <McpServersPanel
-                                mcpServers={spec.mcpServers ?? []}
-                                disabled={disabled}
-                                onChange={(mcpServers) =>
-                                    updateAgentSpec({ mcpServers })
-                                }
-                            />
-                            <SkillsPanel
-                                skills={spec.skills ?? []}
-                                disabled={disabled}
-                                onChange={(skills) => updateAgentSpec({ skills })}
+                            <DraftMicButton disabled={disabled} />
+                            <DraftSendButton
+                                disabled={disabled || text.trim().length === 0}
+                                onClick={() => aui.composer().send()}
                             />
                         </>
                     )
                 }
                 onValueChange={(value) => aui.composer().setText(value)}
                 onSubmit={() => aui.composer().send()}
-                onAttach={() => fileInputRef.current?.click()}
             />
-        </>
+        </DraftComposerCatalogProvider>
     );
 }

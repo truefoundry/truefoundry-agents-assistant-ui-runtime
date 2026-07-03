@@ -49,4 +49,40 @@ describe("mergeAgentSpec", () => {
         });
         expect(next.model.params).toEqual({ maxTokens: 1024, temperature: 1.0 });
     });
+
+    it("replaces mcpServers array wholesale", () => {
+        const base = {
+            model: { name: "openai/gpt-4o" },
+            mcpServers: [{ name: "github", enableTools: ["@all"] }],
+        };
+        const next = mergeAgentSpec(base, {
+            mcpServers: [{ name: "slack", enableTools: ["@all"] }],
+        });
+        expect(next.mcpServers).toEqual([{ name: "slack", enableTools: ["@all"] }]);
+    });
+
+    it("replaces skills array wholesale", () => {
+        const base = {
+            model: { name: "openai/gpt-4o" },
+            skills: [{ fqn: "acme/skill-a:1", preload: false }],
+        };
+        const next = mergeAgentSpec(base, {
+            skills: [{ fqn: "acme/skill-b:2", preload: true }],
+        });
+        expect(next.skills).toEqual([{ fqn: "acme/skill-b:2", preload: true }]);
+    });
+
+    it("model partial update does not clear mcpServers or skills", () => {
+        const base = {
+            model: { name: "openai/gpt-4o", params: { maxTokens: 1024 } },
+            mcpServers: [{ name: "github", enableTools: ["@all"] }],
+            skills: [{ fqn: "acme/skill-a:1", preload: false }],
+        };
+        const next = mergeAgentSpec(base, {
+            model: { name: "anthropic/claude-sonnet-4-6" },
+        });
+        expect(next.model.name).toBe("anthropic/claude-sonnet-4-6");
+        expect(next.mcpServers).toEqual(base.mcpServers);
+        expect(next.skills).toEqual(base.skills);
+    });
 });

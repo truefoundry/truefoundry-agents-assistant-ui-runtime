@@ -37,6 +37,7 @@ export function useDraftAgentSpec({
     const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const syncGenerationRef = useRef(0);
     const loadedDraftIdRef = useRef<string | undefined>(undefined);
+    const localDirtyRef = useRef(false);
 
     useEffect(() => {
         if (!enabled || draftBridge == null) {
@@ -45,6 +46,7 @@ export function useDraftAgentSpec({
         if (draftSessionId == null) {
             loadedDraftIdRef.current = undefined;
             setAgentSpec(defaultAgentSpec);
+            localDirtyRef.current = false;
             setSpecError(null);
             return;
         }
@@ -61,6 +63,14 @@ export function useDraftAgentSpec({
                     return;
                 }
                 loadedDraftIdRef.current = draftSessionId;
+
+                if (localDirtyRef.current) {
+                    scheduleSpecSyncRef.current?.(draftSessionId, agentSpecRef.current);
+                    localDirtyRef.current = false;
+                    setSpecError(null);
+                    return;
+                }
+
                 setAgentSpec(loaded);
                 setSpecError(null);
             } catch (error) {
@@ -116,6 +126,9 @@ export function useDraftAgentSpec({
         [flushSpecSync],
     );
 
+    const scheduleSpecSyncRef = useRef(scheduleSpecSync);
+    scheduleSpecSyncRef.current = scheduleSpecSync;
+
     useEffect(
         () => () => {
             if (syncTimeoutRef.current != null) {
@@ -127,14 +140,17 @@ export function useDraftAgentSpec({
 
     const updateAgentSpec = useCallback(
         (update: AgentSpecUpdate) => {
-            if (!enabled || draftSessionId == null || draftBridge == null) {
+            if (!enabled || draftBridge == null) {
                 return;
             }
             const next = mergeAgentSpec(agentSpecRef.current, update);
             setAgentSpec(next);
-            scheduleSpecSync(draftSessionId, next);
+            localDirtyRef.current = true;
+            if (draftSessionId != null) {
+                scheduleSpecSync(draftSessionId, next);
+            }
         },
-        [draftSessionId, enabled, draftBridge, scheduleSpecSync],
+        [draftBridge, draftSessionId, enabled, scheduleSpecSync],
     );
 
     return useMemo(
