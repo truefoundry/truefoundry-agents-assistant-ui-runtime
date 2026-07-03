@@ -71,7 +71,7 @@ export function DraftConnectorSelectorPanel({
                                 icon={<PlugIcon className="size-3.5" />}
                                 label={connector.name}
                                 checked={checked}
-                                disabled={disabled || needsConnect}
+                                disabled={disabled}
                                 trailing={
                                     needsConnect ? (
                                         <DraftSelectorConnectButton
