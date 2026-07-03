@@ -10,6 +10,7 @@ import {
 import { useCallback, useRef } from "react";
 import {
     useTrueFoundryAgentSpec,
+    useTrueFoundryCancel,
     useTrueFoundryToolResponses,
 } from "truefoundry-agents-assistant-ui-runtime";
 
@@ -46,6 +47,7 @@ export function DraftComposerContainer() {
     const mcpPending = useAuiState(threadHasPendingMcpAuth);
     const { pending: toolResponsesPending } = useTrueFoundryToolResponses();
     const { agentSpec, isSpecSyncing, updateAgentSpec } = useTrueFoundryAgentSpec();
+    const cancel = useTrueFoundryCancel();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handlePickFile = useCallback(() => {
@@ -114,8 +116,9 @@ export function DraftComposerContainer() {
                                 onChange={(model) => updateAgentSpec({ model })}
                             />
                             <DraftSendButton
-                                disabled={disabled || text.trim().length === 0}
-                                onClick={() => aui.composer().send()}
+                                disabled={isRunning ? false : disabled || text.trim().length === 0}
+                                isRunning={isRunning}
+                                onClick={() => (isRunning ? void cancel() : aui.composer().send())}
                             />
                         </>
                     )

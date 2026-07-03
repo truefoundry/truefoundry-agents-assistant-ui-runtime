@@ -57,6 +57,12 @@ export const draftSendButtonClassName = cn(
     "disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
 );
 
+export const draftCancelButtonClassName = cn(
+    "flex h-6 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium",
+    "bg-primary text-primary-foreground shadow-sm",
+    "disabled:opacity-70",
+);
+
 export const draftTriggerButtonClassName = cn(
     "size-6 rounded-2xl p-1.5 hover:bg-accent/60 data-[state=open]:bg-accent/60",
 );

@@ -1,19 +1,22 @@
 import type { ReactNode } from "react";
-import { ArrowUpIcon, PlusIcon } from "lucide-react";
+import { ArrowUpIcon, LoaderIcon, PlusIcon } from "lucide-react";
 
 import { cn } from "./lib/cn.js";
+import { Button } from "./primitives/Button.js";
 import { IconButton } from "./primitives/IconButton.js";
 
 export type ComposerShellProps = {
     value: string;
     placeholder: string;
     disabled: boolean;
+    isRunning?: boolean;
     attachments?: ReactNode;
     modelLabel?: string;
     modelIcon?: ReactNode;
     connectorStatusLabel?: string;
     onValueChange: (value: string) => void;
     onSubmit: () => void;
+    onCancel?: () => void;
     onAttach?: () => void;
     className?: string;
 };
@@ -22,12 +25,14 @@ export function ComposerShell({
     value,
     placeholder,
     disabled,
+    isRunning = false,
     attachments,
     modelLabel,
     modelIcon,
     connectorStatusLabel,
     onValueChange,
     onSubmit,
+    onCancel,
     onAttach,
     className,
 }: ComposerShellProps) {
@@ -73,14 +78,27 @@ export function ComposerShell({
                             {modelLabel}
                         </span>
                     )}
-                    <IconButton
-                        tooltip="Send message"
-                        variant="default"
-                        disabled={disabled || value.trim().length === 0}
-                        onClick={onSubmit}
-                    >
-                        <ArrowUpIcon />
-                    </IconButton>
+                    {isRunning ? (
+                        <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 rounded-full"
+                            disabled={!onCancel}
+                            onClick={onCancel}
+                        >
+                            <LoaderIcon className="size-3.5 animate-spin [animation-duration:0.6s]" />
+                            Cancel
+                        </Button>
+                    ) : (
+                        <IconButton
+                            tooltip="Send message"
+                            variant="default"
+                            disabled={disabled || value.trim().length === 0}
+                            onClick={onSubmit}
+                        >
+                            <ArrowUpIcon />
+                        </IconButton>
+                    )}
                 </div>
             </div>
         </div>

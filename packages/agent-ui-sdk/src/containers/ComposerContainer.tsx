@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { useThreadIsRunning } from "@assistant-ui/core/react";
-import { useTrueFoundryToolResponses } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryCancel, useTrueFoundryToolResponses } from "truefoundry-agents-assistant-ui-runtime";
 
 import { useSlot } from "../theme/SlotsProvider.js";
 import { ComposerAttachmentsContainer } from "./AttachmentsContainer.js";
@@ -25,6 +25,7 @@ export function ComposerContainer() {
     const isRunning = useThreadIsRunning();
     const mcpPending = useAuiState(threadHasPendingMcpAuth);
     const { pending: toolResponsesPending } = useTrueFoundryToolResponses();
+    const cancel = useTrueFoundryCancel();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     if (mcpPending) {
@@ -51,8 +52,10 @@ export function ComposerContainer() {
                 value={text}
                 placeholder="Ask anything... (Shift+Enter for new line)"
                 disabled={isRunning}
+                isRunning={isRunning}
                 onValueChange={(value) => aui.composer().setText(value)}
                 onSubmit={() => aui.composer().send()}
+                onCancel={() => void cancel()}
                 onAttach={() => fileInputRef.current?.click()}
             />
         </>
