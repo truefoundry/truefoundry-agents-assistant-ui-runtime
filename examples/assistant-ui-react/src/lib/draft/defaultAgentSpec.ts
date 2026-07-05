@@ -20,12 +20,6 @@ export const EXAMPLE_SKILL_FQNS = [
     "agent-skill:truefoundry/skills/code-interpreter:2",
 ] as const;
 
-export const EXAMPLE_MODEL_NAMES = [
-    "anthropic/claude-sonnet-4-6",
-    "openai-main/gpt-4o",
-    "openai-main/gpt-4o-mini",
-] as const;
-
 export function connectorStatusLabel(spec: AgentSpec | null): string | undefined {
     if (spec == null) {
         return undefined;
