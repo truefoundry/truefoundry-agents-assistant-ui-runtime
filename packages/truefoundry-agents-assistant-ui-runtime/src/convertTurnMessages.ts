@@ -1143,7 +1143,13 @@ export async function* streamTurnEvents(
             if (event.state.status === "error") {
                 throw new Error(event.state.message);
             }
-            continue;
+            // The turn is logically complete once `turn.done` is observed. The
+            // resumed-turn transport (`subscribeToTurn`) is a reconnectable live
+            // tail and is not guaranteed to close its SSE body right after this
+            // event, so we must stop consuming explicitly rather than waiting
+            // for the underlying stream to end — otherwise `isRunning` never
+            // clears and the composer's cancel/spinner button gets stuck.
+            break;
         }
 
         if (!ingestStreamEvent(foldState, event)) {
