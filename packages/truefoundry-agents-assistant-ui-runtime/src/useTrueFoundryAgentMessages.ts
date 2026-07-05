@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
     AgentSessionClient,
     McpAuthRequiredEvent,
+    ToolApprovalRequiredEvent,
+    ToolResponseRequiredEvent,
     Turn,
     TurnInputItem,
     TurnStateDone,
@@ -41,9 +43,13 @@ import {
     type SessionTurnRecord,
 } from "./sessionSnapshot.js";
 import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
-import type { RespondToToolApprovalOptions } from "./toolApproval.js";
+import {
+    TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY,
+    type RespondToToolApprovalOptions,
+} from "./toolApproval.js";
 import {
     applyUserToolResponsesToFold,
+    TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY,
     type RespondToToolResponseOptions,
 } from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
@@ -80,28 +86,68 @@ function buildCompletedTurnState(
 }
 
 /**
- * Reconstructs an `mcp.auth_required` required action from the custom metadata
- * an in-flight update carried, so the pause survives `commitActiveStream`'s
- * synthetic "done" state. Unlike tool approvals/responses, MCP auth has no
- * durable fold-level tracking — it only ever exists on the ephemeral
- * `activeStream` update — so without this it would be silently dropped the
- * instant the SSE stream ends (see `buildMcpAuthUpdate`/`ingestStreamEvent`,
- * which never persists `mcp.auth_required` into the fold).
+ * Reconstructs the pending required actions a paused in-flight update carried,
+ * so the pause survives `commitActiveStream`'s synthetic "done" state.
+ *
+ * `commitActiveStream` fabricates a `TurnStateDone` for the just-finished
+ * stream, and the projection derives an assistant message's `requires-action`
+ * status from `turn.state.requiredActions` (see `findApprovalRequiredInTurn` /
+ * `findResponseRequiredInTurn` / `findMcpAuthRequired`). If we returned an empty
+ * list here, the committed turn would look "complete", the projected message
+ * would lose its `requires-action` status, and `findPausedAssistantMessage`
+ * (used by `trySendCollectedRequiredActions`) would never see it — so answering
+ * a tool approval or an `ask_user_question` would never send the resume turn.
+ *
+ * The paused update already carries the pause state: `status` is
+ * `requires-action` and `metadata.custom` holds the pending thread id(s) (and,
+ * for MCP, the server list). Only the thread id is read downstream, so an empty
+ * `toolCalls` list is sufficient here — the resume inputs are collected from the
+ * message content, not from these reconstructed actions.
  */
-function requiredActionsFromActiveUpdate(
+export function requiredActionsFromActiveUpdate(
     update: TurnStreamUpdate,
 ): TurnStateDone["requiredActions"] {
     const custom = update.metadata?.custom as TrueFoundryMessageCustomMetadata | undefined;
-    if (custom?.pendingMcpAuth !== true || !Array.isArray(custom.mcpServers)) {
-        return [];
+    const requiredActions: TurnStateDone["requiredActions"] = [];
+    const createdAt = new Date().toISOString();
+
+    if (custom?.pendingMcpAuth === true && Array.isArray(custom.mcpServers)) {
+        const mcpAuthRequired: McpAuthRequiredEvent = {
+            type: "mcp.auth_required",
+            id: generateId(),
+            createdAt,
+            mcpServers: custom.mcpServers,
+        };
+        requiredActions.push(mcpAuthRequired);
     }
-    const mcpAuthRequired: McpAuthRequiredEvent = {
-        type: "mcp.auth_required",
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-        mcpServers: custom.mcpServers,
-    };
-    return [mcpAuthRequired];
+
+    if (update.status?.type === "requires-action") {
+        const approvalThreadId = custom?.[TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY];
+        if (typeof approvalThreadId === "string") {
+            const approvalRequired: ToolApprovalRequiredEvent = {
+                type: "tool.approval_required",
+                id: generateId(),
+                createdAt,
+                threadId: approvalThreadId,
+                toolCalls: [],
+            };
+            requiredActions.push(approvalRequired);
+        }
+
+        const responseThreadId = custom?.[TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY];
+        if (typeof responseThreadId === "string") {
+            const responseRequired: ToolResponseRequiredEvent = {
+                type: "tool.response_required",
+                id: generateId(),
+                createdAt,
+                threadId: responseThreadId,
+                toolCalls: [],
+            };
+            requiredActions.push(responseRequired);
+        }
+    }
+
+    return requiredActions;
 }
 
 function buildUserTurnInput(content: UserMessageContent): TurnInputItem {

@@ -1650,6 +1650,80 @@ describe("convertTurnMessages", () => {
             }
         });
 
+        it("keeps a committed ask-user pause as requires-action so it can be resumed", () => {
+            // Reproduces the live-stream pause path: once the SSE stream ends,
+            // `commitActiveStream` moves the paused turn into `turns` with a
+            // fabricated `TurnStateDone`. The pause must survive as a
+            // `tool.response_required` required action, otherwise the projected
+            // assistant message is not `requires-action` and
+            // `findPausedAssistantMessage` (the gate that fires the resume turn)
+            // never sees it.
+            const fold = new PeerThreadFoldState();
+            const turnId = "turn-ask";
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Pick one",
+                                    options: ["A", "B"],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            );
+            ingestTurnEvent(
+                fold,
+                responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            );
+
+            const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                fold,
+                turns: [
+                    {
+                        id: turnId,
+                        createdAt,
+                        userText: "ask me a question",
+                        state: {
+                            status: "done",
+                            requiredActions: [
+                                responseRequired({
+                                    id: "resp-req-1",
+                                    threadId: ROOT_THREAD_ID,
+                                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                                }),
+                            ],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "ask me a question" }],
+                        rootModelMessageIds: ["model-1"],
+                    },
+                ],
+            });
+
+            const messages = projectSessionMessages(snapshot);
+            const paused = findPausedAssistantMessage(messages);
+            expect(paused).toBeDefined();
+            expect(paused?.status).toMatchObject({ type: "requires-action" });
+        });
+
         it("rebuilds paused activeStream content from fold after an ask-user answer is recorded", () => {
             const fold = new PeerThreadFoldState();
             const turnId = "turn-ask";
