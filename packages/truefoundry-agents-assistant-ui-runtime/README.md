@@ -275,6 +275,8 @@ Do not send partial resumes; the backend rejects incomplete input sets.
 
 When MCP OAuth is required, the paused assistant message has `metadata.custom.pendingMcpAuth === true` and structured `metadata.custom.mcpServers` (`{ id, name, authUrl }[]`) — both fields are on `TrueFoundryMessageCustomMetadata`. After the user completes OAuth in the browser, call `resumeMcpAuth()` from extras (or `startRun` with `runConfig.custom.resumeMcpAuth: true`).
 
+This package only exposes the raw pending state and a resume action — the per-server authorize links and the "Continue" button live in `packages/agent-ui-sdk`'s `McpAuthContainer`/`McpAuthPrompt` (see that package's README). Resuming is always a manual user action; there is no background polling or auto-resume.
+
 ## Runtime extras
 
 Typed escape hatch for adapter-specific state and actions — same pattern as `@assistant-ui/react-google-adk`. Read pending state with selector hooks; call actions via `trueFoundryExtras.get(aui)` when rendering inside nested sub-agent threads (readonly context).

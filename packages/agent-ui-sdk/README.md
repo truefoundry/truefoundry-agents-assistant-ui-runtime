@@ -520,7 +520,7 @@ a future design system has a token surface to bind to without inventing one.
 | Messages | `AssistantMessageContainer`, `UserMessageContainer`, `AssistantTextContainer` | Text, branch picker, error banner, copy/export action bar; ` ```openui ` fences render via `OpenUIBlock` |
 | Tools | `ToolCallContainer`, `ToolGroupContainer` | Tool-call rendering, approval flow, sub-agent nesting (recursive) |
 | Reasoning | `ReasoningContainer` | Streaming-aware collapsible reasoning blocks |
-| Composer | `ComposerContainer`, `AskUserContainer`, `McpAuthContainer` | Message input; auto-swaps to ask-user / MCP-auth prompts when a turn is paused |
+| Composer | `ComposerContainer`, `AskUserContainer`, `McpAuthContainer` | Message input; auto-swaps to ask-user / MCP-auth prompts when a turn is paused. `McpAuthContainer` renders a real per-server "Authorize" link (not just names); the user always confirms with "Continue" — no background polling or auto-resume |
 | Attachments | `ComposerAttachmentsContainer`, `MessageAttachmentsContainer`, `ComposerAttachmentPickerContainer` | Staging tray in composer; image/file chips in user message bubbles |
 | Thread list | `ThreadListContainer` | Flat list (not grouped by date), new/select/archive/delete |
 | Errors | `ErrorToasterProvider`, `useErrorToaster` | Global toast for gateway/runtime errors |
@@ -548,6 +548,11 @@ dropped:
   app's immediate-click-to-answer buttons.
 - **`ThreadListContainer`** renders one flat list, not grouped by
   Today/Yesterday/Earlier.
+- **`McpAuthContainer`** has no per-server auth status. The underlying
+  `McpServerAuthInfo` type (`{ id, name, authUrl }`) carries no
+  authorized/pending flag, so multi-server auth is all-or-nothing: one shared
+  Continue button and no way to tell which of several servers the user has
+  already finished authorizing.
 - Several `AtomSlots` entries (`Button`, `IconButton`, `Tooltip*`, `Dialog*`,
   `Avatar*`, `Collapsible*`, `Skeleton`, `CodeBlockHeader`) are declared and
   populated in `defaultSlots`, but no shipped atom currently resolves them via

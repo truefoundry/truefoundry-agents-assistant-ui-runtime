@@ -4,6 +4,7 @@ import { generateId } from "@assistant-ui/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
     AgentSessionClient,
+    McpAuthRequiredEvent,
     Turn,
     TurnInputItem,
     TurnStateDone,
@@ -25,6 +26,7 @@ import {
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
+import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     collectRequiredActionInputs,
     findPausedAssistantMessage,
@@ -66,12 +68,40 @@ export type SendTurnOptions =
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
 
-function buildCompletedTurnState(completedAt: string): TurnStateDone {
+function buildCompletedTurnState(
+    completedAt: string,
+    requiredActions: TurnStateDone["requiredActions"] = [],
+): TurnStateDone {
     return {
         status: "done",
-        requiredActions: [],
+        requiredActions,
         completedAt,
     };
+}
+
+/**
+ * Reconstructs an `mcp.auth_required` required action from the custom metadata
+ * an in-flight update carried, so the pause survives `commitActiveStream`'s
+ * synthetic "done" state. Unlike tool approvals/responses, MCP auth has no
+ * durable fold-level tracking — it only ever exists on the ephemeral
+ * `activeStream` update — so without this it would be silently dropped the
+ * instant the SSE stream ends (see `buildMcpAuthUpdate`/`ingestStreamEvent`,
+ * which never persists `mcp.auth_required` into the fold).
+ */
+function requiredActionsFromActiveUpdate(
+    update: TurnStreamUpdate,
+): TurnStateDone["requiredActions"] {
+    const custom = update.metadata?.custom as TrueFoundryMessageCustomMetadata | undefined;
+    if (custom?.pendingMcpAuth !== true || !Array.isArray(custom.mcpServers)) {
+        return [];
+    }
+    const mcpAuthRequired: McpAuthRequiredEvent = {
+        type: "mcp.auth_required",
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        mcpServers: custom.mcpServers,
+    };
+    return [mcpAuthRequired];
 }
 
 function buildUserTurnInput(content: UserMessageContent): TurnInputItem {
@@ -101,7 +131,10 @@ function commitActiveStream(
         active.update.metadata?.custom as { sandboxId?: string } | undefined
     )?.sandboxId;
 
-    const completedState = buildCompletedTurnState(new Date().toISOString());
+    const completedState = buildCompletedTurnState(
+        new Date().toISOString(),
+        requiredActionsFromActiveUpdate(active.update),
+    );
     const baseline =
         snapshot.groupRootBaseline ?? computeGroupRootBaseline(snapshot.turns);
     const rootModelMessageIds = rootModelMessageIdsSinceBaseline(
