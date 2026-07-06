@@ -117,6 +117,7 @@ function RuntimeScope({
 
         return {
             ...shared,
+            gateway,
             agent: {
                 mode: "named" as const,
                 agentName: routeAgentName ?? fallbackAgentName,
