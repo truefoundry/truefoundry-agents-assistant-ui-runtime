@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/). This is a pnpm monorepo with two published packages and one Next.js demo app.
+TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/). This is a pnpm monorepo with two published packages and one Vite demo app.
 
 ```
 truefoundry-gateway-sdk (AgentSessionClient)
   → packages/truefoundry-agents-assistant-ui-runtime (useTrueFoundryAgentRuntime)
     → @assistant-ui/react (primitives, ExternalStoreRuntime)
       → packages/agent-ui-sdk (@truefoundry/agent-ui-sdk — presentation layer)
-        → examples/assistant-ui-react (Next.js demo consuming both)
+        → examples/assistant-ui-vite (Vite demo consuming both)
 ```
 
 - `packages/truefoundry-agents-assistant-ui-runtime` — headless runtime adapter. Maps TrueFoundry gateway sessions/turns/streaming events onto assistant-ui's external-store runtime. No UI.
 - `packages/agent-ui-sdk` (`@truefoundry/agent-ui-sdk`) — design-system-agnostic chat UI built on the runtime adapter (Atom/Container split, see below).
-- `examples/assistant-ui-react` — Next.js demo app wiring both packages together against a live gateway agent.
+- `examples/assistant-ui-vite` — Vite + React demo app wiring both packages together against a live gateway agent.
 
 `truefoundry-gateway-sdk` is an external peer dependency (not in this repo) providing `AgentSessionClient`/`TrueFoundryGateway` and all gateway event/turn types — never redefine those shapes locally.
 
@@ -35,7 +35,7 @@ Run from the repo root:
 | `pnpm build` | Build `agent-ui-sdk` and its dependencies (`tsup → dist/`) |
 | `pnpm test` | Run the runtime package's vitest suite |
 | `pnpm typecheck` | Type-check all `packages/*` (`tsc --noEmit`) |
-| `pnpm dev` | Build, then start the Next.js example at `http://localhost:3000` |
+| `pnpm dev` | Build, then start the Vite example at `http://localhost:5173` |
 
 Scoped to one package (from repo root):
 
@@ -44,7 +44,7 @@ pnpm --filter truefoundry-agents-assistant-ui-runtime test
 pnpm --filter @truefoundry/agent-ui-sdk test
 pnpm --filter @truefoundry/agent-ui-sdk build
 pnpm --filter @truefoundry/agent-ui-sdk typecheck
-pnpm --filter assistant-ui-react dev
+pnpm --filter assistant-ui-vite dev
 ```
 
 Run a single test file (vitest, from inside the package directory):
@@ -54,7 +54,7 @@ cd packages/truefoundry-agents-assistant-ui-runtime
 npx vitest run src/toolApproval.test.ts
 ```
 
-The demo app needs a `.env`-style credentials block (`TFY_API_KEY`, `TFY_GATEWAY_URL`, `TFY_AGENT_NAME`) pasted into its first-load form — see `examples/assistant-ui-react/.env.example`.
+The demo app needs credentials (API key, gateway URL, agent name) entered into its first-load form, which stores them in `localStorage` — see `examples/assistant-ui-vite/README.md`.
 
 ## Architecture
 

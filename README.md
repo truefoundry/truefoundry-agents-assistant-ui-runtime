@@ -10,15 +10,13 @@ Connect `assistant-ui` chat components to TrueFoundry agent sessions via `useTru
 packages/
   truefoundry-agents-assistant-ui-runtime/   # Published npm package
 examples/
-  assistant-ui-react/                        # Next.js demo app
+  assistant-ui-vite/                         # Vite + React demo app
 ```
 
 | Path | README |
 |------|--------|
 | `packages/truefoundry-agents-assistant-ui-runtime` | [Package docs](packages/truefoundry-agents-assistant-ui-runtime/README.md) — installation, API reference, hooks, architecture |
-| `examples/assistant-ui-react` | [Example docs](examples/assistant-ui-react/README.md) — running the demo locally |
-
-![Demo screenshot](examples/assistant-ui-react/assets/image.png)
+| `examples/assistant-ui-vite` | [Example docs](examples/assistant-ui-vite/README.md) — running the demo locally |
 
 ## Quickstart (demo app)
 
@@ -27,20 +25,18 @@ examples/
 pnpm install
 pnpm build
 
-# 2. Start the Next.js dev server
+# 2. Start the Vite dev server
 pnpm dev
-# → http://localhost:3000
+# → http://localhost:5173
 ```
 
-On first load, paste your `.env` content into the credentials form:
+On first load, enter your credentials in the form (stored in `localStorage`):
 
 ```
-TFY_API_KEY=your-api-key-here
-TFY_GATEWAY_URL=https://gateway.truefoundry.ai/<your-tenant>
-TFY_AGENT_NAME=your-agent-name
+API key      your TrueFoundry API key
+Gateway URL  https://gateway.truefoundry.ai/<your-tenant>
+Agent name   a saved agent name, e.g. my-agent
 ```
-
-Copy `.env.example` as a reference.
 
 ## Using the package in your own app
 
