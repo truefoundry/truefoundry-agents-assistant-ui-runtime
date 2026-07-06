@@ -50,7 +50,7 @@ export function ThreadContainer({ composer }: ThreadContainerProps) {
         <ComposerBusyProvider>
             <ThreadPrimitive.Root asChild>
             <ThreadRootShell>
-                <ThreadPrimitive.Viewport asChild turnAnchor="top">
+                <ThreadPrimitive.Viewport asChild turnAnchor="top" autoScroll>
                     <ThreadViewportShell isEmpty={isEmpty}>
                         {isEmpty && <WelcomeScreen />}
                         {isLoading ? (
