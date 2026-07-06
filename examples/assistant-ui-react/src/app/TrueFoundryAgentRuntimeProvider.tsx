@@ -20,7 +20,7 @@ import { DEFAULT_DRAFT_AGENT_SPEC, type AgentSpec } from "@/lib/draft/defaultAge
 import { getStoredModelPreference } from "@/lib/draft/modelPreference";
 import { useEnabledModels } from "@/lib/models/useEnabledModels";
 
-const DEFAULT_AGENT_NAME = "agent-sdk-test";
+const DEFAULT_AGENT_NAME = "my-agent";
 
 export function TrueFoundryAgentRuntimeProvider({
     children,
