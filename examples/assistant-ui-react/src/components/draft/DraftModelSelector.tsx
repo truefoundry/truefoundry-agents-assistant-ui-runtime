@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Popover } from "radix-ui";
-import { ChevronUpIcon, SearchIcon } from "lucide-react";
+import { ChevronRightIcon, ChevronUpIcon, SearchIcon } from "lucide-react";
 import type { AgentSpec, AgentSpecUpdate } from "truefoundry-agents-assistant-ui-runtime";
 
+import { DraftBottomSheet } from "@/components/draft/DraftBottomSheet";
 import {
     draftIconClassName,
     draftMutedTextClassName,
@@ -14,6 +15,7 @@ import {
     draftRowHoverClassName,
     draftSearchClassName,
 } from "@/components/draft/draftComposerStyles";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { cn } from "@/lib/utils";
 import { useEnabledModels } from "@/lib/models/useEnabledModels";
 import type { ModelEntry } from "@/lib/models/listEnabledModels";
@@ -116,10 +118,12 @@ export function DraftModelSelector({
     disabled,
     onChange,
 }: DraftModelSelectorProps) {
+    const isMobile = useIsMobile();
     const { models, isLoading, error } = useEnabledModels();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+    const [mobileStep, setMobileStep] = useState<"providers" | "models">("providers");
 
     const groups = useMemo(
         () => groupModelsByProvider(models, model.name),
@@ -156,6 +160,10 @@ export function DraftModelSelector({
         setSelectedAccount(hasCurrent ? currentAccount : fallback);
     }, [open, model.name, filteredGroups]);
 
+    useEffect(() => {
+        if (open) setMobileStep("providers");
+    }, [open]);
+
     const activeGroup =
         filteredGroups.find((group) => group.providerAccount === selectedAccount) ??
         filteredGroups[0] ??
@@ -175,18 +183,124 @@ export function DraftModelSelector({
         setOpen(false);
     }
 
+    const pillContent = (
+        <>
+            <span
+                className="flex size-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold text-white"
+                style={{ backgroundColor: providerIconColor(providerAccount) }}
+            >
+                {providerMonogram(providerAccount)}
+            </span>
+            <span className="max-w-[9rem] truncate">{displayLabel}</span>
+            <ChevronUpIcon className={cn("size-4 shrink-0", draftIconClassName)} />
+        </>
+    );
+
+    if (isMobile) {
+        const sheetTitle = mobileStep === "models" ? (activeGroup?.providerAccount ?? "Select model") : "Select model";
+
+        return (
+            <>
+                <button
+                    type="button"
+                    className={draftPillClassName}
+                    aria-label="Select model"
+                    onClick={() => setOpen(true)}
+                >
+                    {pillContent}
+                </button>
+                <DraftBottomSheet
+                    open={open}
+                    onOpenChange={setOpen}
+                    title={sheetTitle}
+                    onBack={mobileStep === "models" ? () => setMobileStep("providers") : undefined}
+                >
+                    <label className={cn(searchClassName, "mx-0 mt-2")}>
+                        <SearchIcon className={cn("size-3.5 shrink-0", draftMutedTextClassName)} />
+                        <input
+                            type="search"
+                            value={query}
+                            placeholder="Search"
+                            onChange={(event) => setQuery(event.target.value)}
+                            className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+                        />
+                    </label>
+
+                    <div className="mt-2 flex flex-col py-1">
+                        {mobileStep === "providers" ? (
+                            isLoading && filteredGroups.length === 0 ? (
+                                <p className={cn("px-1 py-2 text-sm", draftMutedTextClassName)}>
+                                    Loading providers…
+                                </p>
+                            ) : error != null && filteredGroups.length === 0 ? (
+                                <p className="px-1 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>
+                            ) : filteredGroups.length === 0 ? (
+                                <p className={cn("px-1 py-2 text-sm", draftMutedTextClassName)}>
+                                    No providers found.
+                                </p>
+                            ) : (
+                                filteredGroups.map((group) => (
+                                    <button
+                                        key={group.providerAccount}
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedAccount(group.providerAccount);
+                                            setMobileStep("models");
+                                        }}
+                                        className={cn(
+                                            "flex w-full items-center gap-2 rounded px-1 py-2.5 text-left text-sm text-foreground",
+                                            draftRowHoverClassName,
+                                        )}
+                                    >
+                                        <span
+                                            className="flex size-6 shrink-0 items-center justify-center rounded text-xs font-semibold text-white"
+                                            style={{
+                                                backgroundColor: providerIconColor(group.providerAccount),
+                                            }}
+                                        >
+                                            {providerMonogram(group.providerAccount)}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate font-medium">
+                                            {group.providerAccount}
+                                        </span>
+                                        <ChevronRightIcon className={cn("size-4 shrink-0", draftIconClassName)} />
+                                    </button>
+                                ))
+                            )
+                        ) : activeGroup == null ? (
+                            <p className={cn("px-1 py-2 text-sm", draftMutedTextClassName)}>Select a provider.</p>
+                        ) : activeGroup.models.length === 0 ? (
+                            <p className={cn("px-1 py-2 text-sm", draftMutedTextClassName)}>No models found.</p>
+                        ) : (
+                            activeGroup.models.map((entry) => {
+                                const isSelected = entry.apiModel === model.name;
+                                return (
+                                    <button
+                                        key={entry.apiModel}
+                                        type="button"
+                                        onClick={() => handleSelect(entry)}
+                                        className={cn(
+                                            "flex w-full rounded px-1 py-2.5 text-left text-sm text-foreground",
+                                            draftRowHoverClassName,
+                                            isSelected && draftRowActiveClassName,
+                                        )}
+                                    >
+                                        <span className="truncate">{entry.modelId}</span>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                </DraftBottomSheet>
+            </>
+        );
+    }
+
     return (
         <Popover.Root open={open} onOpenChange={setOpen}>
             <Popover.Trigger asChild disabled={disabled}>
                 <button type="button" className={draftPillClassName} aria-label="Select model">
-                    <span
-                        className="flex size-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold text-white"
-                        style={{ backgroundColor: providerIconColor(providerAccount) }}
-                    >
-                        {providerMonogram(providerAccount)}
-                    </span>
-                    <span className="max-w-[9rem] truncate">{displayLabel}</span>
-                    <ChevronUpIcon className={cn("size-4 shrink-0", draftIconClassName)} />
+                    {pillContent}
                 </button>
             </Popover.Trigger>
             <Popover.Portal>

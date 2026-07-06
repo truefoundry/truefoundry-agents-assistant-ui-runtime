@@ -12,7 +12,6 @@ import {
     DraftSelectorSearch,
     DraftSelectorSectionHeader,
     draftMutedTextClassName,
-    selectorPanelClassName,
 } from "@/components/draft/DraftSelectorPanel";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +40,7 @@ export function DraftSkillsSelectorPanel({
     }, [skills, query]);
 
     return (
-        <div className={selectorPanelClassName}>
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
             <DraftSelectorSearch
                 value={query}
                 disabled={disabled}
