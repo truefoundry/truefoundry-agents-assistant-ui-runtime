@@ -4,3 +4,7 @@ dist/
 .env*
 *.pem
 *.tsbuildinfo
+.DS_Store
+
+# CodeGraph (local index, daemon, cache — per-machine)
+.codegraph/
