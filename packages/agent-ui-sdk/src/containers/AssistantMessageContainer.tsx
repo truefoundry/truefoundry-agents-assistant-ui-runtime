@@ -92,7 +92,11 @@ export function AssistantMessageContainer() {
                     {({ part, children }) => {
                         switch (part.type) {
                             case "group-chainOfThought":
-                                return <div data-slot="aui_chain-of-thought">{children}</div>;
+                                return (
+                                    <div data-slot="aui_chain-of-thought" className="flex flex-col gap-3">
+                                        {children}
+                                    </div>
+                                );
                             case "group-tool":
                                 return (
                                     <ToolGroupContainer group={part as ThreadGroupPart}>

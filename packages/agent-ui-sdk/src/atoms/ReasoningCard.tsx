@@ -18,7 +18,7 @@ export function ReasoningCard({ streaming, expanded, onToggle, children, classNa
             data-slot="reasoning-card"
             open={expanded}
             onOpenChange={onToggle}
-            className={cn("aui-reasoning-card mb-4 w-full rounded-lg border px-3 py-2", className)}
+            className={cn("aui-reasoning-card w-full rounded-lg border px-3 py-2", className)}
         >
             <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]">
                 <BrainIcon className="size-4 shrink-0" />

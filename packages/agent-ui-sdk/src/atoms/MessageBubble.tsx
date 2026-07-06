@@ -32,7 +32,7 @@ export function MessageBubble(props: MessageBubbleProps) {
             >
                 <div
                     data-slot="aui_assistant-message-content"
-                    className="text-foreground px-2 leading-relaxed wrap-break-word [contain-intrinsic-size:auto_24px] [content-visibility:auto]"
+                    className="text-foreground flex flex-col gap-3 px-2 leading-relaxed wrap-break-word [contain-intrinsic-size:auto_24px] [content-visibility:auto]"
                 >
                     {children}
                     {error}

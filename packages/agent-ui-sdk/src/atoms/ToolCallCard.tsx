@@ -126,16 +126,19 @@ export function ToolCallCard(props: ToolCallCardProps) {
                     <div className="flex flex-col gap-2">
                         {props.approvalSlot}
                         {props.argsText && (
-                            <pre className="bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-                                {props.argsText}
-                            </pre>
+                            <div>
+                                <p className="text-muted-foreground text-xs font-medium">Request:</p>
+                                <pre className="bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs break-words whitespace-pre-wrap">
+                                    {props.argsText}
+                                </pre>
+                            </div>
                         )}
                         {props.result !== undefined && (
                             <div>
                                 <p className="text-muted-foreground text-xs font-medium">Result:</p>
                                 <pre
                                     className={cn(
-                                        "bg-muted/50 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap",
+                                        "bg-muted/50 mt-1 rounded-md p-2.5 text-xs break-words whitespace-pre-wrap",
                                         props.isError ? "text-destructive" : "text-foreground/90",
                                     )}
                                 >
@@ -157,11 +160,17 @@ export function ToolCallCard(props: ToolCallCardProps) {
                 {variant === "mcp-listing" && (
                     <div className="flex flex-col gap-2">
                         <p className="text-muted-foreground text-sm">{props.description}</p>
-                        <pre className="bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-                            {props.argsText}
-                        </pre>
-                        <div className="bg-muted/50 overflow-x-auto rounded-md p-2.5 text-xs whitespace-nowrap">
-                            {props.resultText}
+                        <div>
+                            <p className="text-muted-foreground text-xs font-medium">Request:</p>
+                            <pre className="bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs break-words whitespace-pre-wrap">
+                                {props.argsText}
+                            </pre>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground text-xs font-medium">Result:</p>
+                            <pre className="bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs break-words whitespace-pre-wrap">
+                                {props.resultText}
+                            </pre>
                         </div>
                     </div>
                 )}

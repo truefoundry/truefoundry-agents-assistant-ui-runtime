@@ -31,7 +31,7 @@ export function MessageImageContainer() {
 
     return (
         <AttachmentPreviewDialog previewSrc={image}>
-            <div className="aui-message-image my-2">{card}</div>
+            <div className="aui-message-image">{card}</div>
         </AttachmentPreviewDialog>
     );
 }
