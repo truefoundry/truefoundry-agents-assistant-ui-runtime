@@ -38,7 +38,7 @@ export function AskUserPrompt({
         <div
             data-slot="aui_ask-user-prompt"
             className={cn(
-                "border-border/60 flex w-full flex-col gap-3 rounded-(--composer-radius,1.5rem) border bg-(--composer-bg,var(--muted)) p-(--composer-padding,8px)",
+                "border-border/60 flex w-full flex-col gap-3 rounded-[var(--composer-radius,1.5rem)] border bg-[var(--composer-bg,var(--muted))] p-[var(--composer-padding,8px)]",
                 className,
             )}
         >

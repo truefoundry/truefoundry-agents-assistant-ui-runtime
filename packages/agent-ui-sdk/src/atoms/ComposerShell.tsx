@@ -40,7 +40,7 @@ export function ComposerShell({
         <div
             data-slot="aui_composer-shell"
             className={cn(
-                "border-border/60 flex w-full flex-col gap-2 rounded-(--composer-radius,1.5rem) border bg-(--composer-bg,var(--muted)) p-(--composer-padding,8px) shadow-sm",
+                "border-border/60 focus-within:border-ring focus-within:ring-ring/20 flex w-full flex-col gap-2 rounded-[var(--composer-radius,1.5rem)] border bg-[var(--composer-bg,var(--muted))] p-[var(--composer-padding,8px)] shadow-sm transition-colors focus-within:ring-3",
                 className,
             )}
         >
