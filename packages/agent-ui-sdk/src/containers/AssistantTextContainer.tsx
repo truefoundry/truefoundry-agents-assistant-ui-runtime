@@ -37,7 +37,7 @@ export function AssistantTextContainer() {
     });
 
     const handleDownloadArtifact = useCallback(
-        (path: string) => {
+        (path: string) =>
             downloadSandboxFile(path)
                 .then((blob) => triggerBrowserDownload(blob, filenameFromPath(path)))
                 .catch((error) => {
@@ -46,8 +46,7 @@ export function AssistantTextContainer() {
                     } else {
                         console.error("Failed to download sandbox artifact", error);
                     }
-                });
-        },
+                }),
         [downloadSandboxFile, errorToaster],
     );
 

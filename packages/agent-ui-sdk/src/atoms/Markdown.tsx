@@ -70,7 +70,7 @@ function parseSandboxArtifactParagraph(children: ReactNode): SandboxArtifactLink
 
 function createMarkdownComponents(
     isStreaming?: boolean,
-    onDownloadArtifact?: (path: string) => void,
+    onDownloadArtifact?: (path: string) => void | Promise<unknown>,
 ): Components {
     return {
     h1: ({ className, ...props }) => (
@@ -264,7 +264,7 @@ export type MarkdownProps = {
     content: string;
     className?: string;
     isStreaming?: boolean;
-    onDownloadArtifact?: (path: string) => void;
+    onDownloadArtifact?: (path: string) => void | Promise<unknown>;
 };
 
 export function Markdown({ content, className, isStreaming, onDownloadArtifact }: MarkdownProps) {
