@@ -127,6 +127,51 @@ describe("streamTurn", () => {
             });
         });
 
+        it("forwards an explicit previousTurnId when branching", async () => {
+            const execute = vi.fn(() => (async function* () {})());
+            const prepareTurn = vi.fn(() => ({ execute }));
+            const session = {
+                prepareTurn,
+                cancel: vi.fn().mockResolvedValue(undefined),
+            } as unknown as AgentSession;
+
+            await collectUpdates(
+                streamTurnContent(
+                    session,
+                    new PeerThreadFoldState(),
+                    { userMessage: "edited", previousTurnId: "turn-a" },
+                    new AbortController().signal,
+                ),
+            );
+
+            expect(prepareTurn).toHaveBeenCalledWith({
+                input: [{ type: "user.message", content: "edited" }],
+                previousTurnId: "turn-a",
+            });
+        });
+
+        it("omits previousTurnId when branching from root", async () => {
+            const execute = vi.fn(() => (async function* () {})());
+            const prepareTurn = vi.fn(() => ({ execute }));
+            const session = {
+                prepareTurn,
+                cancel: vi.fn().mockResolvedValue(undefined),
+            } as unknown as AgentSession;
+
+            await collectUpdates(
+                streamTurnContent(
+                    session,
+                    new PeerThreadFoldState(),
+                    { userMessage: "first", previousTurnId: null },
+                    new AbortController().signal,
+                ),
+            );
+
+            expect(prepareTurn).toHaveBeenCalledWith({
+                input: [{ type: "user.message", content: "first" }],
+            });
+        });
+
         it("returns early and cancels the session when already aborted", async () => {
             const execute = vi.fn(() => (async function* () {})());
             const prepareTurn = vi.fn(() => ({ execute }));

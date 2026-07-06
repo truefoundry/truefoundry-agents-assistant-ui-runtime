@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createEmptySessionSnapshot } from "./sessionSnapshot.js";
 

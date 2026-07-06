@@ -3,6 +3,7 @@ import type { AppendMessage } from "@assistant-ui/core";
 import type {
     AgentSession,
     ModelMessageEvent,
+    SandboxCreatedEvent,
     ThreadCreatedEvent,
     ToolApprovalRequiredEvent,
     ToolResponseRequiredEvent,
@@ -56,6 +57,12 @@ function threadCreated(
     event: Omit<ThreadCreatedEvent, "type" | "createdAt">,
 ): ThreadCreatedEvent {
     return { type: "thread.created", createdAt, ...event };
+}
+
+function sandboxCreated(
+    event: Omit<SandboxCreatedEvent, "type" | "createdAt">,
+): SandboxCreatedEvent {
+    return { type: "sandbox.created", createdAt, ...event };
 }
 
 function responseRequired(
@@ -342,6 +349,37 @@ describe("convertTurnMessages", () => {
             expect(message.attachments).toHaveLength(1);
             expect(message.attachments[0]?.name).toBe("doc.pdf");
         });
+
+        it("maps gateway image_url parts to assistant-ui image attachments", () => {
+            const message = buildUserMessageFromTurnInput(
+                "turn-1",
+                [
+                    {
+                        type: "user.message",
+                        content: [
+                            { type: "text", text: "see attached" },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: "data:image/jpeg;base64,/9j/4AAQ",
+                                },
+                            },
+                        ] as never,
+                    },
+                ],
+                createdAt,
+            );
+
+            if (message.role !== "user") {
+                throw new Error("expected user message");
+            }
+            expect(message.attachments).toHaveLength(1);
+            expect(message.attachments[0]?.type).toBe("image");
+            expect(message.attachments[0]?.content[0]).toMatchObject({
+                type: "image",
+                image: "data:image/jpeg;base64,/9j/4AAQ",
+            });
+        });
     });
 
     describe("turnStreamUpdateToAssistantMessage", () => {
@@ -427,6 +465,31 @@ describe("convertTurnMessages", () => {
                 status: { type: "complete", reason: "stop" },
             });
             expect(result.runningTurn).toBeUndefined();
+        });
+
+        it("carries sandboxId from a historical sandbox.created event onto the assistant message", async () => {
+            const result = await convertTurnsToThreadMessages(
+                mockSession([
+                    mockTurn({
+                        id: "turn-1",
+                        createdAt,
+                        input: [{ type: "user.message", content: "hello" }],
+                        listEvents: eventsPage([
+                            sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                            modelMessage({
+                                id: "m1",
+                                threadId: ROOT_THREAD_ID,
+                                content: "assistant reply",
+                            }),
+                        ]) as unknown as Turn["listEvents"],
+                    }),
+                ]),
+            );
+
+            expect(result.messages[1]).toMatchObject({
+                role: "assistant",
+                metadata: { custom: { sandboxId: "sbx-123" } },
+            });
         });
 
         it("returns runningTurn and unstable_resume for an in-flight turn", async () => {
@@ -1188,6 +1251,85 @@ describe("convertTurnMessages", () => {
                 text: expect.stringContaining("Authorize github"),
             });
         });
+
+        it("stamps sandboxId onto every content yield after sandbox.created is seen", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "before sandbox",
+                        }),
+                        sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                        modelMessage({
+                            id: "m2",
+                            threadId: ROOT_THREAD_ID,
+                            content: "after sandbox",
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            expect(updates).toHaveLength(2);
+            expect(updates[0]?.metadata?.custom?.sandboxId).toBeUndefined();
+            expect(updates[1]?.metadata?.custom?.sandboxId).toBe("sbx-123");
+        });
+
+        it("yields a trailing update carrying sandboxId when sandbox.created is the last event", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "some content",
+                        }),
+                        sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const final = updates.at(-1);
+            expect(final?.metadata?.custom?.sandboxId).toBe("sbx-123");
+        });
+
+        it("keeps sandboxId on the final mcp auth yield when both occur in the same stream", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "before auth",
+                        }),
+                        {
+                            type: "mcp.auth_required",
+                            id: "mcp-auth",
+                            createdAt,
+                            mcpServers: [
+                                {
+                                    id: "github-auth",
+                                    name: "github",
+                                    authUrl: "https://example.com/auth",
+                                },
+                            ],
+                        },
+                    ]),
+                    foldState,
+                ),
+            );
+
+            const final = updates.at(-1);
+            expect(final?.metadata?.custom?.sandboxId).toBe("sbx-123");
+            expect(final?.status).toEqual({ type: "requires-action", reason: "interrupt" });
+        });
     });
 
     describe("projectSessionMessages streamComplete", () => {
@@ -1214,6 +1356,53 @@ describe("convertTurnMessages", () => {
                 fold: foldState,
             };
         }
+
+        it("keeps streamed images on the assistant message for text-only user prompts", () => {
+            const imageDataUri = "data:image/jpeg;base64,/9j/4AAQ";
+            const messages = projectSessionMessages(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    pendingUser: {
+                        turnId,
+                        content: "Create image of dog",
+                        createdAt: new Date(createdAt),
+                    },
+                    activeStream: {
+                        turnId,
+                        update: {
+                            content: [
+                                {
+                                    type: "image",
+                                    image: imageDataUri,
+                                    filename: "image-1.jpeg",
+                                },
+                            ],
+                        },
+                        isContinuation: false,
+                        streamComplete: true,
+                    },
+                }),
+            );
+
+            expect(messages).toHaveLength(2);
+            const user = messages[0];
+            const assistant = messages[1];
+            expect(user?.role).toBe("user");
+            if (user?.role !== "user") {
+                return;
+            }
+            expect(user.attachments).toEqual([]);
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.content).toEqual([
+                {
+                    type: "image",
+                    image: imageDataUri,
+                    filename: "image-1.jpeg",
+                },
+            ]);
+        });
 
         it("preserves requires-action when streamComplete and update has approval status", async () => {
             const foldState = new PeerThreadFoldState();
@@ -1459,6 +1648,80 @@ describe("convertTurnMessages", () => {
             if (toolCall?.type === "tool-call") {
                 expect(toolCall.interrupt).toBeUndefined();
             }
+        });
+
+        it("keeps a committed ask-user pause as requires-action so it can be resumed", () => {
+            // Reproduces the live-stream pause path: once the SSE stream ends,
+            // `commitActiveStream` moves the paused turn into `turns` with a
+            // fabricated `TurnStateDone`. The pause must survive as a
+            // `tool.response_required` required action, otherwise the projected
+            // assistant message is not `requires-action` and
+            // `findPausedAssistantMessage` (the gate that fires the resume turn)
+            // never sees it.
+            const fold = new PeerThreadFoldState();
+            const turnId = "turn-ask";
+
+            ingestTurnEvent(
+                fold,
+                modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Pick one",
+                                    options: ["A", "B"],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            );
+            ingestTurnEvent(
+                fold,
+                responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            );
+
+            const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                fold,
+                turns: [
+                    {
+                        id: turnId,
+                        createdAt,
+                        userText: "ask me a question",
+                        state: {
+                            status: "done",
+                            requiredActions: [
+                                responseRequired({
+                                    id: "resp-req-1",
+                                    threadId: ROOT_THREAD_ID,
+                                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                                }),
+                            ],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "ask me a question" }],
+                        rootModelMessageIds: ["model-1"],
+                    },
+                ],
+            });
+
+            const messages = projectSessionMessages(snapshot);
+            const paused = findPausedAssistantMessage(messages);
+            expect(paused).toBeDefined();
+            expect(paused?.status).toMatchObject({ type: "requires-action" });
         });
 
         it("rebuilds paused activeStream content from fold after an ask-user answer is recorded", () => {

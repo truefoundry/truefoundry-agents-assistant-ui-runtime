@@ -3,7 +3,11 @@
 import { useMemo } from "react";
 import { useAui } from "@assistant-ui/store";
 
-import { trueFoundryExtras } from "./truefoundryExtras.js";
+import {
+    EMPTY_DRAFT_EXTRAS,
+    trueFoundryExtras,
+    type TrueFoundryDraftRuntimeExtras,
+} from "./truefoundryExtras.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
@@ -78,8 +82,42 @@ export const useTrueFoundryResumeMcpAuth = () => {
     return () => trueFoundryExtras.get(aui).resumeMcpAuth();
 };
 
+/** Current sandboxId for this session, if a sandbox has been created. */
+export const useTrueFoundrySandboxId = (): string | undefined =>
+    trueFoundryExtras.use((e) => e.sandboxId, undefined);
+
+/** Returns a function to download a sandbox file by path from any render context. */
+export const useTrueFoundryDownloadSandboxFile = () => {
+    const aui = useAui();
+    return (path: string) => trueFoundryExtras.get(aui).downloadSandboxFile(path);
+};
+
 /** Returns a function to cancel the current run from any render context. */
 export const useTrueFoundryCancel = () => {
     const aui = useAui();
     return () => trueFoundryExtras.get(aui).cancel();
 };
+
+/** Returns a function to reset (re-submit) a user turn from any render context. */
+export const useTrueFoundryResetFromTurn = () => {
+    const aui = useAui();
+    return (turnId: string) => trueFoundryExtras.get(aui).resetFromTurn(turnId);
+};
+
+/** Current draft agent spec and sync state (draft mode only). */
+export const useTrueFoundryAgentSpec = () => {
+    const extras = trueFoundryExtras.use((e) => e.draft, null);
+
+    return useMemo(
+        () => ({ ...EMPTY_DRAFT_EXTRAS, ...extras }),
+        [extras],
+    );
+};
+
+/** Returns a draft spec updater from any render context. */
+export const useTrueFoundryUpdateAgentSpec = () => {
+    const aui = useAui();
+    return (update: Parameters<TrueFoundryDraftRuntimeExtras["updateAgentSpec"]>[0]) =>
+        trueFoundryExtras.get(aui).draft?.updateAgentSpec(update);
+};
+

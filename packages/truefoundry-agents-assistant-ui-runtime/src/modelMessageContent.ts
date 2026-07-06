@@ -1,6 +1,7 @@
 import type { ThreadAssistantMessagePart } from "@assistant-ui/core";
 import type { ModelMessageEvent } from "truefoundry-gateway-sdk/agents";
 import type { PendingResponseRef } from "./foldPeerThreads.js";
+import { extractImagePartsFromModelMessage } from "./modelMessageImageContent.js";
 
 export type AssistantContentPart = ThreadAssistantMessagePart;
 
@@ -126,6 +127,7 @@ export function buildAssistantContent(
     if (text) {
         parts.push({ type: "text", text });
     }
+    parts.push(...extractImagePartsFromModelMessage(message));
     for (const toolCall of message.toolCalls ?? []) {
         parts.push(toolCallToPart(toolCall, context));
     }

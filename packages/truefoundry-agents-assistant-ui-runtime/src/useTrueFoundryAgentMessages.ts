@@ -1,44 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generateId } from "@assistant-ui/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
     AgentSessionClient,
+    McpAuthRequiredEvent,
+    ToolApprovalRequiredEvent,
+    ToolResponseRequiredEvent,
     Turn,
     TurnInputItem,
     TurnStateDone,
 } from "truefoundry-gateway-sdk/agents";
+import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
+import { ROOT_THREAD_ID } from "./constants.js";
 import {
+    buildEditedUserMessageContent,
+    buildSnapshotBeforeTurnIndex,
     computeGroupRootBaseline,
+    extractTurnUserMessageContent,
     projectSessionMessages,
+    resolveGatewayBranchPreviousTurnId,
     rootModelMessageIdsSinceBaseline,
     userMessageContentToText,
     type UserMessageContent,
 } from "./convertTurnMessages.js";
-import { ROOT_THREAD_ID } from "./constants.js";
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
+import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     collectRequiredActionInputs,
     findPausedAssistantMessage,
     messageHasPendingRequiredActions,
     type RequiredActionInput,
 } from "./requiredActionInputs.js";
-import { getSession } from "./sessions.js";
-import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
-import type { RespondToToolApprovalOptions } from "./toolApproval.js";
-import {
-    applyUserToolResponsesToFold,
-    type RespondToToolResponseOptions,
-} from "./toolResponse.js";
+import { getSession, type GetSessionOptions } from "./sessions.js";
 import {
     createEmptySessionSnapshot,
     replaceSessionSnapshot,
     type SessionSnapshot,
     type SessionTurnRecord,
 } from "./sessionSnapshot.js";
+import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
+import {
+    TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY,
+    type RespondToToolApprovalOptions,
+} from "./toolApproval.js";
+import {
+    applyUserToolResponsesToFold,
+    TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY,
+    type RespondToToolResponseOptions,
+} from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
 export type UseTrueFoundryAgentMessagesOptions = {
@@ -50,19 +63,91 @@ export type UseTrueFoundryAgentMessagesOptions = {
         remoteId: string;
         externalId: string | undefined;
     }>;
+    /** Maps a thread `remoteId` to the gateway session id used for turns. */
+    resolveConversationSessionId?: (remoteId: string) => Promise<string>;
+    /** When set, turns bind to `/agents/sessions/{draftSessionId}/turns` after draft validation. */
+    draftGateway?: TrueFoundryGateway;
 };
 
 export type SendTurnOptions =
-    | { userMessage: UserMessageContent }
+    | { userMessage: UserMessageContent; previousTurnId?: string | null }
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
 
-function buildCompletedTurnState(completedAt: string): TurnStateDone {
+function buildCompletedTurnState(
+    completedAt: string,
+    requiredActions: TurnStateDone["requiredActions"] = [],
+): TurnStateDone {
     return {
         status: "done",
-        requiredActions: [],
+        requiredActions,
         completedAt,
     };
+}
+
+/**
+ * Reconstructs the pending required actions a paused in-flight update carried,
+ * so the pause survives `commitActiveStream`'s synthetic "done" state.
+ *
+ * `commitActiveStream` fabricates a `TurnStateDone` for the just-finished
+ * stream, and the projection derives an assistant message's `requires-action`
+ * status from `turn.state.requiredActions` (see `findApprovalRequiredInTurn` /
+ * `findResponseRequiredInTurn` / `findMcpAuthRequired`). If we returned an empty
+ * list here, the committed turn would look "complete", the projected message
+ * would lose its `requires-action` status, and `findPausedAssistantMessage`
+ * (used by `trySendCollectedRequiredActions`) would never see it — so answering
+ * a tool approval or an `ask_user_question` would never send the resume turn.
+ *
+ * The paused update already carries the pause state: `status` is
+ * `requires-action` and `metadata.custom` holds the pending thread id(s) (and,
+ * for MCP, the server list). Only the thread id is read downstream, so an empty
+ * `toolCalls` list is sufficient here — the resume inputs are collected from the
+ * message content, not from these reconstructed actions.
+ */
+export function requiredActionsFromActiveUpdate(
+    update: TurnStreamUpdate,
+): TurnStateDone["requiredActions"] {
+    const custom = update.metadata?.custom as TrueFoundryMessageCustomMetadata | undefined;
+    const requiredActions: TurnStateDone["requiredActions"] = [];
+    const createdAt = new Date().toISOString();
+
+    if (custom?.pendingMcpAuth === true && Array.isArray(custom.mcpServers)) {
+        const mcpAuthRequired: McpAuthRequiredEvent = {
+            type: "mcp.auth_required",
+            id: generateId(),
+            createdAt,
+            mcpServers: custom.mcpServers,
+        };
+        requiredActions.push(mcpAuthRequired);
+    }
+
+    if (update.status?.type === "requires-action") {
+        const approvalThreadId = custom?.[TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY];
+        if (typeof approvalThreadId === "string") {
+            const approvalRequired: ToolApprovalRequiredEvent = {
+                type: "tool.approval_required",
+                id: generateId(),
+                createdAt,
+                threadId: approvalThreadId,
+                toolCalls: [],
+            };
+            requiredActions.push(approvalRequired);
+        }
+
+        const responseThreadId = custom?.[TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY];
+        if (typeof responseThreadId === "string") {
+            const responseRequired: ToolResponseRequiredEvent = {
+                type: "tool.response_required",
+                id: generateId(),
+                createdAt,
+                threadId: responseThreadId,
+                toolCalls: [],
+            };
+            requiredActions.push(responseRequired);
+        }
+    }
+
+    return requiredActions;
 }
 
 function buildUserTurnInput(content: UserMessageContent): TurnInputItem {
@@ -88,7 +173,14 @@ function commitActiveStream(
         return snapshot;
     }
 
-    const completedState = buildCompletedTurnState(new Date().toISOString());
+    const activeSandboxId = (
+        active.update.metadata?.custom as { sandboxId?: string } | undefined
+    )?.sandboxId;
+
+    const completedState = buildCompletedTurnState(
+        new Date().toISOString(),
+        requiredActionsFromActiveUpdate(active.update),
+    );
     const baseline =
         snapshot.groupRootBaseline ?? computeGroupRootBaseline(snapshot.turns);
     const rootModelMessageIds = rootModelMessageIdsSinceBaseline(
@@ -108,6 +200,7 @@ function commitActiveStream(
                           ...(rootModelMessageIds != null
                               ? { rootModelMessageIds }
                               : {}),
+                          ...(activeSandboxId != null ? { sandboxId: activeSandboxId } : {}),
                       }
                     : turn,
             ),
@@ -131,6 +224,7 @@ function commitActiveStream(
             ? { userText: userMessageContentToText(snapshot.pendingUser.content) }
             : {}),
         ...(rootModelMessageIds != null ? { rootModelMessageIds } : {}),
+        ...(activeSandboxId != null ? { sandboxId: activeSandboxId } : {}),
     };
 
     return replaceSessionSnapshot(snapshot, {
@@ -140,13 +234,56 @@ function commitActiveStream(
     });
 }
 
+async function resolveActiveSessionId(
+    remoteId: string,
+    resolveConversationSessionId?: (remoteId: string) => Promise<string>,
+): Promise<string> {
+    if (resolveConversationSessionId != null) {
+        return resolveConversationSessionId(remoteId);
+    }
+    return remoteId;
+}
+
+function findTurnIndex(snapshot: SessionSnapshot, turnId: string): number {
+    const committedIndex = snapshot.turns.findIndex((turn) => turn.id === turnId);
+    if (committedIndex !== -1) {
+        return committedIndex;
+    }
+    if (snapshot.pendingUser?.turnId === turnId) {
+        return snapshot.turns.length;
+    }
+    throw new Error(`Turn ${turnId} not found in session snapshot`);
+}
+
+function resolveTurnInput(
+    snapshot: SessionSnapshot,
+    turnId: string,
+): TurnInputItem[] | undefined {
+    const turnRecord = snapshot.turns.find((turn) => turn.id === turnId);
+    if (turnRecord?.input != null) {
+        return turnRecord.input;
+    }
+    if (snapshot.pendingUser?.turnId === turnId) {
+        return [{ type: "user.message", content: snapshot.pendingUser.content }];
+    }
+    return undefined;
+}
+
 export function useTrueFoundryAgentMessages({
     client,
     sessionId,
     listEventsConcurrency,
     onError,
     initializeSession,
+    resolveConversationSessionId,
+    draftGateway,
 }: UseTrueFoundryAgentMessagesOptions) {
+    const sessionOptions = useMemo<GetSessionOptions | undefined>(
+        () =>
+            draftGateway != null ? { draftGateway } : undefined,
+        [draftGateway],
+    );
+
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -230,7 +367,7 @@ export function useTrueFoundryAgentMessages({
                         if (prev.activeStream == null) {
                             return prev;
                         }
-                        return replaceSessionSnapshot(prev, {
+                        const marked = replaceSessionSnapshot(prev, {
                             activeStream: {
                                 ...prev.activeStream,
                                 streamComplete: true,
@@ -240,6 +377,7 @@ export function useTrueFoundryAgentMessages({
                                 toolResponses: new Map(),
                             },
                         });
+                        return commitActiveStream(marked);
                     });
                 }
             })();
@@ -272,7 +410,16 @@ export function useTrueFoundryAgentMessages({
         setIsLoading(true);
 
         try {
-            const loadedSnapshot = await loadSessionSnapshot(client, sessionId, listEventsConcurrency);
+            const conversationSessionId = await resolveActiveSessionId(
+                sessionId,
+                resolveConversationSessionId,
+            );
+            const loadedSnapshot = await loadSessionSnapshot(
+                client,
+                conversationSessionId,
+                listEventsConcurrency,
+                sessionOptions,
+            );
             if (generation !== loadGenerationRef.current) {
                 return;
             }
@@ -306,7 +453,7 @@ export function useTrueFoundryAgentMessages({
                 setIsLoading(false);
             }
         }
-    }, [client, onError, runStream, sessionId]);
+    }, [client, listEventsConcurrency, onError, resolveConversationSessionId, runStream, sessionId, sessionOptions]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -324,7 +471,11 @@ export function useTrueFoundryAgentMessages({
                 lazilyCreatedSessionIdRef.current = remoteId;
             }
 
-            const session = await getSession(client, activeSessionId);
+            const conversationSessionId = await resolveActiveSessionId(
+                activeSessionId,
+                resolveConversationSessionId,
+            );
+            const session = await getSession(client, conversationSessionId, sessionOptions);
             const isContinuation =
                 "inputs" in options ||
                 ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
@@ -394,7 +545,12 @@ export function useTrueFoundryAgentMessages({
                     return streamTurnContent(
                         session,
                         snapshotRef.current.fold,
-                        { userMessage: options.userMessage },
+                        {
+                            userMessage: options.userMessage,
+                            ...(options.previousTurnId !== undefined
+                                ? { previousTurnId: options.previousTurnId }
+                                : {}),
+                        },
                         signal,
                         groupRootBaseline,
                     );
@@ -403,7 +559,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation,
             );
         },
-        [client, initializeSession, runStream, sessionId],
+        [client, initializeSession, resolveConversationSessionId, runStream, sessionId, sessionOptions],
     );
 
     const cancel = useCallback(async () => {
@@ -411,7 +567,11 @@ export function useTrueFoundryAgentMessages({
             abortControllerRef.current?.abort();
             return;
         }
-        const session = await getSession(client, sessionId);
+        const conversationSessionId = await resolveActiveSessionId(
+            sessionId,
+            resolveConversationSessionId,
+        );
+        const session = await getSession(client, conversationSessionId, sessionOptions);
         // Request cancellation but keep consuming the stream. After cancel(),
         // the backend gracefully closes the SSE stream: it emits a terminal
         // turn.done event and then ends the stream, which lets the active run
@@ -421,7 +581,7 @@ export function useTrueFoundryAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [client, sessionId]);
+    }, [client, resolveConversationSessionId, sessionId, sessionOptions]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -501,6 +661,82 @@ export function useTrueFoundryAgentMessages({
         );
     }, [runStream]);
 
+    const branchFromTurn = useCallback(
+        async (turnId: string, userMessage: UserMessageContent) => {
+            let activeSessionId = sessionId;
+            if (activeSessionId == null) {
+                throw new Error("Cannot branch from a turn without an active session.");
+            }
+
+            const committed = commitActiveStream(snapshotRef.current);
+            setSnapshot(committed);
+
+            const turnIndex = findTurnIndex(committed, turnId);
+
+            await cancel();
+
+            const conversationSessionId = await resolveActiveSessionId(
+                activeSessionId,
+                resolveConversationSessionId,
+            );
+            const session = await getSession(client, conversationSessionId, sessionOptions);
+            const previousTurnId = await resolveGatewayBranchPreviousTurnId(
+                session,
+                turnIndex,
+            );
+            const rewound = await buildSnapshotBeforeTurnIndex(
+                session,
+                turnIndex,
+                listEventsConcurrency,
+            );
+            createdAtByMessageIdRef.current = new Map();
+            setSnapshot(rewound);
+
+            await sendTurn({
+                userMessage,
+                previousTurnId,
+            });
+        },
+        [
+            cancel,
+            client,
+            listEventsConcurrency,
+            resolveConversationSessionId,
+            sendTurn,
+            sessionId,
+            sessionOptions,
+        ],
+    );
+
+    const resetFromTurn = useCallback(
+        async (turnId: string) => {
+            const committed = commitActiveStream(snapshotRef.current);
+            const originalInput = resolveTurnInput(committed, turnId);
+            if (originalInput == null) {
+                throw new Error(`Turn ${turnId} not found in session snapshot`);
+            }
+            const userMessage = extractTurnUserMessageContent(originalInput);
+            await branchFromTurn(turnId, userMessage);
+        },
+        [branchFromTurn],
+    );
+
+    const editFromTurn = useCallback(
+        async (turnId: string, editedText: string) => {
+            const committed = commitActiveStream(snapshotRef.current);
+            const originalInput = resolveTurnInput(committed, turnId);
+            if (originalInput == null) {
+                throw new Error(`Turn ${turnId} not found in session snapshot`);
+            }
+            const userMessage = buildEditedUserMessageContent(
+                editedText,
+                originalInput,
+            );
+            await branchFromTurn(turnId, userMessage);
+        },
+        [branchFromTurn],
+    );
+
     return {
         messages,
         isRunning,
@@ -511,7 +747,11 @@ export function useTrueFoundryAgentMessages({
         respondToToolApproval,
         respondToToolResponse,
         resumeRun,
+        branchFromTurn,
+        resetFromTurn,
+        editFromTurn,
     };
 }
 
-export { MCP_AUTH_RESUME_RUN_CUSTOM_KEY, findPausedAssistantMessage };
+export { findPausedAssistantMessage, MCP_AUTH_RESUME_RUN_CUSTOM_KEY };
+

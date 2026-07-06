@@ -2,11 +2,17 @@
   "name": "truefoundry-agents-assistant-ui-runtime-repo",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter truefoundry-agents-assistant-ui-runtime build",
+    "build": "pnpm --filter assistant-ui-vite^... build",
     "test": "pnpm --filter truefoundry-agents-assistant-ui-runtime test",
-    "typecheck": "pnpm --filter truefoundry-agents-assistant-ui-runtime typecheck",
-    "dev": "pnpm build && pnpm --filter assistant-ui-react dev",
-    "dev:ink": "pnpm build && pnpm --filter ink-cli dev"
+    "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
+    "dev": "pnpm build && pnpm --filter assistant-ui-vite dev",
+    "start": "pnpm install && pnpm build && pnpm --filter assistant-ui-vite dev"
   },
-  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.7",
+      "react-dom": "19.2.7"
+    }
+  }
 }

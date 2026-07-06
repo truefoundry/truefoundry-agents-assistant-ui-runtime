@@ -16,6 +16,11 @@ export type StreamTurnOptions = {
     userMessage?: UserMessageContent;
     resumeMcpAuth?: boolean;
     inputs?: RequiredActionInput[];
+    /**
+     * Branch anchor for `prepareTurn`. Omit for `"auto"`. Pass `null` for a fresh
+     * root turn (no `previousTurnId` field).
+     */
+    previousTurnId?: string | null;
 };
 
 function buildTurnInput(options: StreamTurnOptions): TurnInputItem[] {
@@ -47,9 +52,13 @@ export async function* streamTurnContent(
     abortSignal: AbortSignal,
     groupRootBaseline?: readonly string[],
 ): AsyncGenerator<TurnStreamUpdate> {
+    const previousTurnId =
+        options.previousTurnId === null
+            ? undefined
+            : (options.previousTurnId ?? "auto");
     const turn = session.prepareTurn({
         input: buildTurnInput(options),
-        previousTurnId: "auto",
+        ...(previousTurnId != null ? { previousTurnId } : {}),
     });
 
     const onAbort = bindAbort(session, abortSignal);

@@ -31,6 +31,10 @@ import {
 } from "./turnEventHelpers.js";
 import type { AssistantContentPart } from "./modelMessageContent.js";
 import {
+    extractImageUrlFromUserContentItem,
+    imageUrlToAttachment,
+} from "./modelMessageImageContent.js";
+import {
     type SessionSnapshot,
     type ProjectSessionMessagesOptions,
     type SessionTurnRecord,
@@ -290,6 +294,16 @@ export function buildUserMessageFromTurnInput(
                         `${turnId}-file-${attachments.length}`,
                     ),
                 );
+            } else {
+                const imageUrl = extractImageUrlFromUserContentItem(part);
+                if (imageUrl != null) {
+                    attachments.push(
+                        imageUrlToAttachment(
+                            imageUrl,
+                            `${turnId}-file-${attachments.length}`,
+                        ),
+                    );
+                }
             }
         }
     }
@@ -590,11 +604,13 @@ function projectHistoryTurns(
             content = applyApprovalDecisionsToContent(content, currentDecisions);
         }
 
-        const { status, custom } = resolveProjectedRequiredActionState(
+        const { status, custom: baseCustom } = resolveProjectedRequiredActionState(
             turnUpdate,
             content,
             record,
         );
+        const custom =
+            record.sandboxId != null ? { ...baseCustom, sandboxId: record.sandboxId } : baseCustom;
 
         if (record.userText) {
             messages.push(
@@ -683,6 +699,7 @@ export function projectSessionMessages(
             snapshot.activeStream;
         const resolvedUpdate =
             streamComplete === true ? projectActiveStreamUpdate(snapshot) : update;
+
         const last = messages.at(-1);
         const existingAssistant =
             isContinuation && last?.role === "assistant" ? last : undefined;
@@ -714,19 +731,11 @@ export function projectSessionMessages(
 
 const DEFAULT_LIST_EVENTS_CONCURRENCY = 5;
 
-export async function buildSnapshotFromSession(
-    session: AgentSession,
-    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
-): Promise<SessionSnapshot> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
-    }
-    turns.reverse();
-
-    const eventArrays = await fetchAllTurnEventsWithConcurrency(turns, concurrency);
-
-    const snapshot = createEmptySessionSnapshot();
+function ingestTurnsIntoSnapshot(
+    snapshot: SessionSnapshot,
+    turns: Turn[],
+    eventArrays: TurnEvent[][],
+): Turn | undefined {
     let runningTurn: Turn | undefined;
 
     for (let i = 0; i < turns.length; i++) {
@@ -742,9 +751,15 @@ export async function buildSnapshotFromSession(
             beforeCount,
         );
 
+        const sandboxEvent = (eventArrays[i] ?? []).find(
+            (event): event is Extract<TurnEvent, { type: "sandbox.created" }> =>
+                event.type === "sandbox.created",
+        );
+
         snapshot.turns.push({
             ...turnToSessionRecord(turn),
             rootModelMessageIds,
+            ...(sandboxEvent != null ? { sandboxId: sandboxEvent.sandboxId } : {}),
         });
 
         if (turn.state.status === "running") {
@@ -752,6 +767,24 @@ export async function buildSnapshotFromSession(
             break;
         }
     }
+
+    return runningTurn;
+}
+
+export async function buildSnapshotFromSession(
+    session: AgentSession,
+    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+): Promise<SessionSnapshot> {
+    const turns: Turn[] = [];
+    for await (const turn of await session.listTurns()) {
+        turns.push(turn);
+    }
+    turns.reverse();
+
+    const eventArrays = await fetchAllTurnEventsWithConcurrency(turns, concurrency);
+
+    const snapshot = createEmptySessionSnapshot();
+    const runningTurn = ingestTurnsIntoSnapshot(snapshot, turns, eventArrays);
 
     return replaceSessionSnapshot(snapshot, {
         ...(runningTurn != null
@@ -762,6 +795,74 @@ export async function buildSnapshotFromSession(
               }
             : {}),
     });
+}
+
+/** Rebuilds session state from turns strictly before `beforeTurnId` (excludes that turn). */
+export async function buildSnapshotBeforeTurn(
+    session: AgentSession,
+    beforeTurnId: string,
+    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+): Promise<SessionSnapshot> {
+    const turns: Turn[] = [];
+    for await (const turn of await session.listTurns()) {
+        turns.push(turn);
+    }
+    turns.reverse();
+
+    const beforeIndex = turns.findIndex((turn) => turn.id === beforeTurnId);
+    if (beforeIndex === -1) {
+        throw new Error(`Turn ${beforeTurnId} not found in session`);
+    }
+
+    return buildSnapshotBeforeTurnIndex(session, beforeIndex, concurrency, turns);
+}
+
+/** Rebuilds session state from the first `turnIndex` gateway turns (excludes that turn). */
+export async function buildSnapshotBeforeTurnIndex(
+    session: AgentSession,
+    turnIndex: number,
+    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+    orderedTurns?: Turn[],
+): Promise<SessionSnapshot> {
+    if (turnIndex <= 0) {
+        return createEmptySessionSnapshot();
+    }
+
+    const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
+    const turnsToInclude = turns.slice(0, turnIndex);
+    if (turnsToInclude.length === 0) {
+        return createEmptySessionSnapshot();
+    }
+
+    const eventArrays = await fetchAllTurnEventsWithConcurrency(
+        turnsToInclude,
+        concurrency,
+    );
+    const snapshot = createEmptySessionSnapshot();
+    ingestTurnsIntoSnapshot(snapshot, turnsToInclude, eventArrays);
+    return snapshot;
+}
+
+/** Gateway turn id to branch from when resubmitting at `turnIndex` (null for first turn). */
+export async function resolveGatewayBranchPreviousTurnId(
+    session: AgentSession,
+    turnIndex: number,
+    orderedTurns?: Turn[],
+): Promise<string | null> {
+    if (turnIndex <= 0) {
+        return null;
+    }
+    const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
+    return turns[turnIndex - 1]?.id ?? null;
+}
+
+async function listSessionTurnsOrdered(session: AgentSession): Promise<Turn[]> {
+    const turns: Turn[] = [];
+    for await (const turn of await session.listTurns()) {
+        turns.push(turn);
+    }
+    turns.reverse();
+    return turns;
 }
 
 export async function buildTurnAssistantContent(
@@ -907,6 +1008,76 @@ export function userMessageContentToText(content: UserMessageContent): string {
         .trim();
 }
 
+/** Strips the `-user` suffix from a projected user message id to recover the turn id. */
+export function parseTurnIdFromMessageId(messageId: string): string {
+    return messageId.replace(/-user$/, "");
+}
+
+/** Parent turn id for branching before `turnId`; `null` when editing the first turn. */
+export function resolveBranchPreviousTurnId(
+    turns: readonly SessionTurnRecord[],
+    turnId: string,
+): string | null {
+    const turnIndex = turns.findIndex((turn) => turn.id === turnId);
+    if (turnIndex <= 0) {
+        return null;
+    }
+    return turns[turnIndex - 1]!.id;
+}
+
+/** Extracts edited text from an assistant-ui append message (text parts only). */
+export function extractEditedText(message: AppendMessage): string {
+    return getTurnMessageContent(message);
+}
+
+/** Original gateway user-message content from a turn record (for reset). */
+export function extractTurnUserMessageContent(
+    input: TurnInputItem[] | undefined,
+): UserMessageContent {
+    for (const item of input ?? []) {
+        if (item.type === "user.message") {
+            return item.content;
+        }
+    }
+    return "";
+}
+
+/**
+ * Builds resubmit content for a text-only edit: replaces text with `editedText`
+ * while preserving original file parts from the turn record.
+ */
+export function buildEditedUserMessageContent(
+    editedText: string,
+    originalInput: TurnInputItem[] | undefined,
+): UserMessageContent {
+    const fileParts: FileContent[] = [];
+    for (const item of originalInput ?? []) {
+        if (item.type !== "user.message") {
+            continue;
+        }
+        const content = item.content;
+        if (typeof content === "string") {
+            continue;
+        }
+        for (const part of content) {
+            if (part.type === "file") {
+                fileParts.push(part);
+            }
+        }
+    }
+
+    if (fileParts.length === 0) {
+        return editedText;
+    }
+
+    const items: UserMessageContentItem[] = [];
+    if (editedText.trim().length > 0) {
+        items.push({ type: "text", text: editedText });
+    }
+    items.push(...fileParts);
+    return items;
+}
+
 function buildMcpAuthUpdate(
     pendingMcpAuth: McpAuthRequiredEvent,
     foldState: PeerThreadFoldState,
@@ -932,6 +1103,19 @@ export async function* streamTurnEvents(
     groupRootBaseline?: readonly string[],
 ): AsyncGenerator<TurnStreamUpdate> {
     let pendingMcpAuth: McpAuthRequiredEvent | undefined;
+    let sandboxId: string | undefined;
+    let sandboxIdYielded = false;
+
+    const withSandbox = (update: TurnStreamUpdate): TurnStreamUpdate => {
+        if (sandboxId == null) {
+            return update;
+        }
+        sandboxIdYielded = true;
+        return {
+            ...update,
+            metadata: { ...update.metadata, custom: { ...update.metadata?.custom, sandboxId } },
+        };
+    };
 
     const yieldContent = (): AssistantContentPart[] | undefined => {
         const ids =
@@ -945,6 +1129,11 @@ export async function* streamTurnEvents(
     for await (const data of stream) {
         const event = data.event;
 
+        if (event.type === "sandbox.created") {
+            sandboxId = event.sandboxId;
+            continue;
+        }
+
         if (event.type === "mcp.auth_required") {
             pendingMcpAuth = event;
             continue;
@@ -954,7 +1143,13 @@ export async function* streamTurnEvents(
             if (event.state.status === "error") {
                 throw new Error(event.state.message);
             }
-            continue;
+            // The turn is logically complete once `turn.done` is observed. The
+            // resumed-turn transport (`subscribeToTurn`) is a reconnectable live
+            // tail and is not guaranteed to close its SSE body right after this
+            // event, so we must stop consuming explicitly rather than waiting
+            // for the underlying stream to end — otherwise `isRunning` never
+            // clears and the composer's cancel/spinner button gets stuck.
+            break;
         }
 
         if (!ingestStreamEvent(foldState, event)) {
@@ -963,12 +1158,12 @@ export async function* streamTurnEvents(
 
         const content = yieldContent();
         if (content != null) {
-            yield { content };
+            yield withSandbox({ content });
         }
     }
 
     if (pendingMcpAuth != null) {
-        yield buildMcpAuthUpdate(pendingMcpAuth, foldState, groupRootBaseline);
+        yield withSandbox(buildMcpAuthUpdate(pendingMcpAuth, foldState, groupRootBaseline));
         return;
     }
 
@@ -996,12 +1191,21 @@ export async function* streamTurnEvents(
             groupRootBaseline != null
                 ? rootModelMessageIdsSinceBaseline(foldState, groupRootBaseline)
                 : foldState.threads.get(ROOT_THREAD_ID)?.modelMessageIds ?? [];
-        yield {
+        yield withSandbox({
             content: buildRootAssistantContentForIds(foldState, ids),
             status:
                 approvalThreadId != null ? toolApprovalStatus() : toolResponseStatus(),
             metadata: { custom },
-        };
+        });
+        return;
+    }
+
+    if (sandboxId != null && !sandboxIdYielded) {
+        const ids =
+            groupRootBaseline != null
+                ? rootModelMessageIdsSinceBaseline(foldState, groupRootBaseline)
+                : foldState.threads.get(ROOT_THREAD_ID)?.modelMessageIds ?? [];
+        yield withSandbox({ content: buildRootAssistantContentForIds(foldState, ids) });
     }
 }
 

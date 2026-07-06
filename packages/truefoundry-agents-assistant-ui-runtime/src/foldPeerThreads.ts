@@ -2,7 +2,6 @@ import type { MessageStatus, ThreadMessage } from "@assistant-ui/core";
 import type { ThreadCreatedEvent, ToolResponseRequiredEvent } from "truefoundry-gateway-sdk/agents";
 import {
     isEventDelta,
-    mergeEventDelta,
     type TurnEvent,
     type TurnStreamingEvent,
 } from "truefoundry-gateway-sdk/agents";
@@ -14,6 +13,7 @@ import {
     type AssistantContentPart,
     type SdkToolCall,
 } from "./modelMessageContent.js";
+import { mergeStreamEventDelta } from "./modelMessageImageContent.js";
 import { ROOT_THREAD_ID } from "./constants.js";
 import type { SubAgentMessageCustomMetadata } from "./messageCustomMetadata.js";
 import { toolApprovalMessageCustom, toolApprovalStatus } from "./toolApproval.js";
@@ -134,7 +134,7 @@ function ingestEventIntoBucket(
     if (isEventDelta(message)) {
         const base = bucket.events.get(message.id);
         if (base != null) {
-            mergeEventDelta(base, message);
+            mergeStreamEventDelta(base, message);
         }
         return;
     }
@@ -414,19 +414,33 @@ function buildThreadAssistantParts(
             : bucket.modelMessageIds;
 
     const parts: AssistantContentPart[] = [];
+    // A single tool call can appear in more than one `model.message` event (e.g.
+    // once in the paused turn and again in the resumed turn after a tool
+    // approval). assistant-ui keys tool parts by `toolCallId` within a message,
+    // so emitting the same id twice crashes the render. Collapse duplicates,
+    // letting the latest occurrence win while preserving the original position.
+    const toolCallIndexById = new Map<string, number>();
     for (const id of ids) {
         const event = bucket.events.get(id);
         if (event?.type !== "model.message") {
             continue;
         }
-        parts.push(
-            ...buildAssistantContent(event, {
-                toolResults: bucket.toolResults,
-                pendingApprovals: bucket.pendingApprovals,
-                approvalDecisions: bucket.approvalDecisions,
-                pendingResponses: bucket.pendingResponses,
-            }),
-        );
+        for (const part of buildAssistantContent(event, {
+            toolResults: bucket.toolResults,
+            pendingApprovals: bucket.pendingApprovals,
+            approvalDecisions: bucket.approvalDecisions,
+            pendingResponses: bucket.pendingResponses,
+        })) {
+            if (part.type === "tool-call") {
+                const existingIndex = toolCallIndexById.get(part.toolCallId);
+                if (existingIndex != null) {
+                    parts[existingIndex] = part;
+                    continue;
+                }
+                toolCallIndexById.set(part.toolCallId, parts.length);
+            }
+            parts.push(part);
+        }
     }
 
     return attachSubAgentMessages(state, threadId, parts);

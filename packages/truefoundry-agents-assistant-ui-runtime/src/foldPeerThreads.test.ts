@@ -30,6 +30,20 @@ function threadCreated(
 }
 
 describe("foldPeerThreads", () => {
+    it("ignores sandbox.created (no threadId, not foldable) without crashing", () => {
+        const state = new PeerThreadFoldState();
+        const sandboxEvent = {
+            type: "sandbox.created" as const,
+            id: "sandbox-evt",
+            createdAt,
+            sandboxId: "sbx-123",
+        } as unknown as TurnEvent;
+
+        expect(() => ingestTurnEvent(state, sandboxEvent)).not.toThrow();
+        expect(ingestStreamEvent(state, sandboxEvent)).toBe(false);
+        expect(buildRootAssistantContent(state)).toEqual([]);
+    });
+
     it("anchors root content on main without inference", () => {
         const state = new PeerThreadFoldState();
 

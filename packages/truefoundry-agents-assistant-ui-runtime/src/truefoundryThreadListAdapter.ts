@@ -32,7 +32,7 @@ export function createTrueFoundryThreadListAdapter(options: {
             };
         },
 
-        async initialize() {
+        async initialize(_threadId: string) {
             const session = await client.createSession({ agentName });
             return { remoteId: session.id, externalId: undefined };
         },
