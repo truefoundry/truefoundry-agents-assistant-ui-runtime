@@ -1,5 +1,5 @@
 # examples/ink-cli
-A terminal chat app that demonstrates [`truefoundry-agents-assistant-ui-runtime`](../../packages/truefoundry-agents-assistant-ui-runtime) wired to a live TrueFoundry Gateway agent, rendered with [Ink](https://github.com/vadimdemedes/ink) (`@assistant-ui/react-ink`).
+A terminal chat app that demonstrates [`@truefoundry/assistant-ui-runtime`](../../packages/truefoundry-agents-assistant-ui-runtime) wired to a live TrueFoundry Gateway agent, rendered with [Ink](https://github.com/vadimdemedes/ink) (`@assistant-ui/react-ink`).
 
 This shows that the same runtime works across frontends — swap the Ink primitives for React DOM or React Native and nothing in the runtime layer changes.
 
@@ -36,6 +36,7 @@ What this example wires (see [`src/app.tsx`](src/app.tsx), [`src/components/thre
 
 For the authoritative list of runtime-level gaps (shared across all frontends), see the package README's [Unsupported assistant-ui features](../../packages/truefoundry-agents-assistant-ui-runtime/README.md#unsupported-assistant-ui-features) table.
 
+
 ## Prerequisites
 - Node.js 20+
 - pnpm 10+
@@ -43,7 +44,7 @@ For the authoritative list of runtime-level gaps (shared across all frontends), 
 ## Running the example
 1. **Install dependencies** (this also builds the runtime package):
    ```bash
-   # from repo root: truefoundry-agents-assistant-ui-runtime/
+   # from repo root: truefoundry-agents-assistant-ui-runtime/ (monorepo root)
    pnpm install
    pnpm build
    ```

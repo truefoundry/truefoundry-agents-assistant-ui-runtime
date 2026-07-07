@@ -1,4 +1,4 @@
-# truefoundry-agents-assistant-ui-runtime
+# @truefoundry/assistant-ui-runtime
 
 TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/).
 
@@ -14,7 +14,7 @@ Connect assistant-ui components (`Thread`, `Composer`, tool UIs, `ThreadList`) t
 ## Installation
 
 ```bash
-npm install @assistant-ui/react truefoundry-agents-assistant-ui-runtime truefoundry-gateway-sdk@^0.1.0-rc.1
+npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk@^0.2.0
 ```
 
 ## Quickstart
@@ -40,7 +40,7 @@ For production, point `fetch` or `auth` at your own backend proxy so secrets nev
 "use client";
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 
 const AGENT_NAME = process.env.TFY_AGENT_NAME!;
@@ -111,7 +111,7 @@ Draft mode lists **draft sessions** (`agents.private.draftSessions.*`) in the th
 
 ```tsx
 import { TrueFoundryGateway } from "truefoundry-gateway-sdk";
-import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
 
 const client = new AgentSessionClient({ apiKey, baseUrl });
 const gateway = new TrueFoundryGateway({ apiKey, baseUrl });
@@ -134,7 +134,7 @@ const runtime = useTrueFoundryAgentRuntime({
 Read and update the active draft spec from UI:
 
 ```tsx
-import { useTrueFoundryAgentSpec } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryAgentSpec } from "@truefoundry/assistant-ui-runtime";
 
 function DraftModelPicker() {
   const { agentSpec, updateAgentSpec, isSpecSyncing } = useTrueFoundryAgentSpec();
@@ -157,7 +157,7 @@ function DraftModelPicker() {
 Pass optional assistant-ui adapters through `adapters`. Attachments are **opt-in**: wire the built-in adapter when you want composer file pick / previews and gateway forwarding on send.
 
 ```tsx
-import { trueFoundryAttachmentAdapter, useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
+import { trueFoundryAttachmentAdapter, useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
 
 const runtime = useTrueFoundryAgentRuntime({
   client,
@@ -215,7 +215,7 @@ Render nested threads with `MessagePartPrimitive.Messages` inside your tool fall
 ```tsx
 import { MessagePartPrimitive, MessagePrimitive } from "@assistant-ui/react";
 import { useAuiState } from "@assistant-ui/store";
-import type { TrueFoundryMessageCustomMetadata } from "truefoundry-agents-assistant-ui-runtime";
+import type { TrueFoundryMessageCustomMetadata } from "@truefoundry/assistant-ui-runtime";
 
 function NestedSubAgentAssistantMessage() {
   const custom = useAuiState(
@@ -288,7 +288,7 @@ import {
   useTrueFoundryApprovals,
   useTrueFoundryToolResponses,
   useTrueFoundryMcpAuth,
-} from "truefoundry-agents-assistant-ui-runtime";
+} from "@truefoundry/assistant-ui-runtime";
 
 function ApprovalBar() {
   const { pending, respond } = useTrueFoundryApprovals();
@@ -345,7 +345,7 @@ function McpAuthContinue() {
 ### Action hooks (any render context, including nested sub-agents)
 
 ```tsx
-import { useTrueFoundryRespondToToolApproval } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryRespondToToolApproval } from "@truefoundry/assistant-ui-runtime";
 
 function NestedToolApprovalButton({ approvalId }: { approvalId: string }) {
   const respond = useTrueFoundryRespondToToolApproval();
@@ -365,7 +365,7 @@ import {
   useTrueFoundryRespondToToolResponse,
   useTrueFoundryResumeMcpAuth,
   useTrueFoundryCancel,
-} from "truefoundry-agents-assistant-ui-runtime";
+} from "@truefoundry/assistant-ui-runtime";
 
 const respondToApproval = useTrueFoundryRespondToToolApproval();
 const respondToResponse = useTrueFoundryRespondToToolResponse();
@@ -404,7 +404,7 @@ Where:
 ### Low-level namespace
 
 ```tsx
-import { trueFoundryExtras, type TrueFoundryRuntimeExtras } from "truefoundry-agents-assistant-ui-runtime";
+import { trueFoundryExtras, type TrueFoundryRuntimeExtras } from "@truefoundry/assistant-ui-runtime";
 
 // Throws outside useTrueFoundryAgentRuntime:
 const extras = trueFoundryExtras.use();
@@ -444,7 +444,7 @@ Contrast with the [AI SDK resumable streams guide](https://www.assistant-ui.com/
 
 ## Public API
 
-Everything below is exported from the package root (`truefoundry-agents-assistant-ui-runtime`).
+Everything below is exported from the package root (`@truefoundry/assistant-ui-runtime`).
 
 | Export | Kind | Purpose |
 |--------|------|---------|
