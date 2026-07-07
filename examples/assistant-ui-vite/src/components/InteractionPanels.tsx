@@ -3,7 +3,7 @@ import {
   useTrueFoundryApprovals,
   useTrueFoundryToolResponses,
   type PendingToolResponse,
-} from "truefoundry-agents-assistant-ui-runtime";
+} from "@truefoundry/assistant-ui-runtime";
 
 function ToolApprovalPanel() {
   const { pending, respond } = useTrueFoundryApprovals();

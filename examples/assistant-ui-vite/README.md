@@ -1,6 +1,6 @@
 # assistant-ui-vite
 
-Standalone Vite + React example that consumes `@assistant-ui/react` and `truefoundry-agents-assistant-ui-runtime` to chat with a TrueFoundry named agent.
+Standalone Vite + React example that consumes `@assistant-ui/react` and `@truefoundry/assistant-ui-runtime` to chat with a TrueFoundry named agent.
 
 ## Features
 
@@ -16,7 +16,7 @@ Build the runtime package once from the repo root:
 
 ```bash
 pnpm install
-pnpm --filter truefoundry-agents-assistant-ui-runtime build
+pnpm --filter "@truefoundry/assistant-ui-runtime" build
 ```
 
 ## Run

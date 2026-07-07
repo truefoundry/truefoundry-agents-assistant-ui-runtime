@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import { AssistantRuntimeProvider, StatusBarPrimitive } from "@assistant-ui/react-ink";
 import { useAuiState } from "@assistant-ui/store";
 import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
-import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
 import { Thread } from "./components/thread.js";
 
 function requireEnv(key: string): string {

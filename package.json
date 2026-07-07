@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm --filter assistant-ui-vite^... build",
-    "test": "pnpm --filter truefoundry-agents-assistant-ui-runtime test",
+    "test": "pnpm --filter \"@truefoundry/assistant-ui-runtime\" test",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
     "dev": "pnpm build && pnpm --filter assistant-ui-vite dev",
     "start": "pnpm install && pnpm build && pnpm --filter assistant-ui-vite dev"

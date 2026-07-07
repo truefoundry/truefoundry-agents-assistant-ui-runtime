@@ -14,7 +14,7 @@ import {
     useTrueFoundryApprovals,
     useTrueFoundryMcpAuth,
     type PendingToolResponse,
-} from "truefoundry-agents-assistant-ui-runtime";
+} from "@truefoundry/assistant-ui-runtime";
 
 // ── Ask-user question prompt ─────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 {
-  "name": "truefoundry-agents-assistant-ui-runtime",
+  "name": "@truefoundry/assistant-ui-runtime",
   "version": "0.1.0-rc.1",
   "description": "TrueFoundry Gateway agent runtime adapter for assistant-ui",
   "license": "Apache-2.0",
@@ -17,10 +17,14 @@
     "llm",
     "chat"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
@@ -29,7 +33,8 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "sideEffects": false,
   "scripts": {
@@ -45,7 +50,7 @@
   "peerDependencies": {
     "@types/react": "*",
     "react": "^18 || ^19",
-    "truefoundry-gateway-sdk": "0.2.0"
+    "truefoundry-gateway-sdk": "^0.2.0"
   },
   "peerDependenciesMeta": {
     "@types/react": {

@@ -1,4 +1,4 @@
-# truefoundry-agents-assistant-ui-runtime
+# @truefoundry/assistant-ui-runtime
 
 TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/).
 
@@ -8,7 +8,7 @@ Connect `assistant-ui` chat components to TrueFoundry agent sessions via `useTru
 
 ```
 packages/
-  truefoundry-agents-assistant-ui-runtime/   # Published npm package
+  truefoundry-agents-assistant-ui-runtime/   # Published as @truefoundry/assistant-ui-runtime
 examples/
   assistant-ui-vite/                         # Vite + React demo app
 ```
@@ -41,13 +41,13 @@ Agent name   a saved agent name, e.g. my-agent
 ## Using the package in your own app
 
 ```bash
-npm install @assistant-ui/react truefoundry-agents-assistant-ui-runtime truefoundry-gateway-sdk
+npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk
 ```
 
 ```tsx
 import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
+import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
 
 const client = new AgentSessionClient({
   apiKey: process.env.TFY_API_KEY!,

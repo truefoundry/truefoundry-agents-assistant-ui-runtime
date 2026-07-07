@@ -3,7 +3,7 @@ import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   trueFoundryAttachmentAdapter,
   useTrueFoundryAgentRuntime,
-} from "truefoundry-agents-assistant-ui-runtime";
+} from "@truefoundry/assistant-ui-runtime";
 
 import { getAgentSessionClient } from "../lib/agentClient";
 import type { GatewayCredentials } from "../lib/credentials";

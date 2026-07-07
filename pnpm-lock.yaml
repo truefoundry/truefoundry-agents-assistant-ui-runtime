@@ -20,6 +20,9 @@ importers:
       '@assistant-ui/react-markdown':
         specifier: ^0.14.5
         version: 0.14.5(@assistant-ui/react@0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@truefoundry/assistant-ui-runtime':
+        specifier: workspace:*
+        version: link:../../packages/truefoundry-agents-assistant-ui-runtime
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -29,9 +32,6 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
-      truefoundry-agents-assistant-ui-runtime:
-        specifier: workspace:*
-        version: link:../../packages/truefoundry-agents-assistant-ui-runtime
       truefoundry-gateway-sdk:
         specifier: 0.2.0-rc.1
         version: 0.2.0-rc.1
@@ -69,15 +69,15 @@ importers:
       '@assistant-ui/store':
         specifier: ^0.2.19
         version: 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
+      '@truefoundry/assistant-ui-runtime':
+        specifier: workspace:*
+        version: link:../../packages/truefoundry-agents-assistant-ui-runtime
       ink:
         specifier: ^7.1.0
         version: 7.1.0(@types/react@19.2.17)(react@19.2.7)
       react:
         specifier: 19.2.7
         version: 19.2.7
-      truefoundry-agents-assistant-ui-runtime:
-        specifier: workspace:*
-        version: link:../../packages/truefoundry-agents-assistant-ui-runtime
       truefoundry-gateway-sdk:
         specifier: ^0.1.0
         version: 0.1.0
@@ -103,6 +103,9 @@ importers:
       '@assistant-ui/store':
         specifier: ^0.2.19
         version: 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
+      truefoundry-gateway-sdk:
+        specifier: ^0.2.0
+        version: 0.2.0
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.2
@@ -119,9 +122,6 @@ importers:
       react:
         specifier: 19.2.7
         version: 19.2.7
-      truefoundry-gateway-sdk:
-        specifier: 0.2.0-rc.1
-        version: 0.2.0-rc.1
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(tsx@4.23.0)(typescript@5.9.3)
@@ -3047,6 +3047,10 @@ packages:
 
   truefoundry-gateway-sdk@0.1.0:
     resolution: {integrity: sha512-DeOfcSX5fActQ8bkmOvp189MOihWgokPel2A4hzGnEylcqgj4fDa/Z0s87JwISX4Os8TT73tDNeCxJ2VM/KNww==}
+    engines: {node: '>=18.0.0'}
+
+  truefoundry-gateway-sdk@0.2.0:
+    resolution: {integrity: sha512-8FODM4buDPJ9cWRQ9DnfHIGeJP2DVqg/9NDvhTdx8Lu66JnPdH1m6AIB+2rlcSq0V6kfoJVtxHRl4DrsyDvbog==}
     engines: {node: '>=18.0.0'}
 
   truefoundry-gateway-sdk@0.2.0-rc.1:
@@ -6354,6 +6358,8 @@ snapshots:
   trough@2.2.0: {}
 
   truefoundry-gateway-sdk@0.1.0: {}
+
+  truefoundry-gateway-sdk@0.2.0: {}
 
   truefoundry-gateway-sdk@0.2.0-rc.1: {}
 
