@@ -14,7 +14,7 @@ Connect assistant-ui components (`Thread`, `Composer`, tool UIs, `ThreadList`) t
 ## Installation
 
 ```bash
-npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk@^0.2.0
+npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk
 ```
 
 ## Quickstart
@@ -34,22 +34,21 @@ const client = new AgentSessionClient({
 
 For production, point `fetch` or `auth` at your own backend proxy so secrets never reach the browser.
 
-### 2. Set up the client runtime
+### 2. Set up the runtime
+
+Works in any React app (Vite, Next.js, Remix, etc.).
 
 ```tsx
-"use client";
-
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
-import { Thread } from "@/components/assistant-ui/thread";
+import { Thread } from "./components/assistant-ui/thread";
 
-const AGENT_NAME = process.env.TFY_AGENT_NAME!;
 const client = new AgentSessionClient({ /* ... */ });
 
 export function MyAssistant() {
   const runtime = useTrueFoundryAgentRuntime({
     client,
-    agentName: AGENT_NAME,
+    agentName: "my-agent",
   });
 
   return (
@@ -60,12 +59,16 @@ export function MyAssistant() {
 }
 ```
 
-### 3. Use the component
+> **Next.js App Router:** add `"use client"` at the top of the file, since the runtime relies on React hooks and browser APIs.
+
+### 3. Mount the component
+
+Render `<MyAssistant />` wherever your framework mounts React:
 
 ```tsx
-import { MyAssistant } from "@/components/MyAssistant";
+import { MyAssistant } from "./MyAssistant";
 
-export default function Home() {
+export function App() {
   return (
     <main className="h-dvh">
       <MyAssistant />
@@ -85,9 +88,8 @@ See the assistant-ui [Thread UI guide](https://www.assistant-ui.com/docs/ui/thre
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `client` | `AgentSessionClient` | Yes | Pre-built gateway client. The runtime never reads credentials itself. |
-| `agent` | `{ mode: "named", agentName }` \| `{ mode: "draft", defaultAgentSpec }` | Yes* | Discriminated agent source. *Or legacy `agentName` for named mode. |
-| `agentName` | `string` | Named only | Legacy shorthand for `agent: { mode: "named", agentName }`. |
-| `gateway` | `TrueFoundryGateway` | Draft only | Low-level gateway client for `agents.private.draftSessions` CRUD. |
+| `agent` | `{ mode: "named", agentName }` | No | Discriminated agent source. Omit when using legacy `agentName`. |
+| `agentName` | `string` | Yes* | Agent to run. *Or `agent: { mode: "named", agentName }`. |
 | `initialSessionId` | `string` | No | Pin an existing session once on mount (uncontrolled). |
 | `threadId` | `string` | No | Controlled active session id; reactive and URL-syncable. |
 | `onThreadIdChange` | `(threadId: string \| undefined) => void` | No | Fires when the active session changes. |
@@ -389,8 +391,6 @@ void cancel();
 | `useTrueFoundryRespondToToolResponse()` | `(r: RespondToToolResponseOptions) => void` | Respond to an ask-user / `tool.response_required` prompt from any render context. |
 | `useTrueFoundryResumeMcpAuth()` | `() => Promise<void>` | Resume the paused turn after the user completes MCP OAuth in the browser. |
 | `useTrueFoundryCancel()` | `() => Promise<void>` | Cancel the active turn. Calls `session.cancel()` and drains the stream to its terminal `turn.done`. |
-| `useTrueFoundryAgentSpec()` | `{ agentSpec, draftSessionId, isSpecSyncing, specError, updateAgentSpec }` | Draft mode only — current inline spec and debounced sync state. |
-| `useTrueFoundryUpdateAgentSpec()` | `(update: AgentSpecUpdate) => void` | Draft mode only — update spec from any render context. |
 
 Where:
 
@@ -424,7 +424,6 @@ const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
 | `respondToToolResponse` | `(r: { toolCallId, content }) => void` | Stage answer; batch-send when complete |
 | `resumeMcpAuth` | `() => Promise<void>` | Resume after OAuth |
 | `cancel` | `() => Promise<void>` | Cancel the active turn: calls `session.cancel()` and lets the stream drain to its terminal `turn.done` (reconciles on next session load) |
-| `draft` | `TrueFoundryDraftRuntimeExtras \| null` | Draft mode only — inline `AgentSpec`, sync state, and `updateAgentSpec` |
 
 Per-part `respondToApproval` from assistant-ui still works for root-thread tool UIs; extras complements that for global chrome and nested renderers.
 
@@ -461,10 +460,6 @@ Everything below is exported from the package root (`@truefoundry/assistant-ui-r
 | `TrueFoundryRuntimeExtras` | type | Shape provided into the runtime extras slot. |
 | `PendingApproval`, `PendingToolResponse` | types | Derived pending items for UI rendering. |
 | `createTrueFoundryThreadListAdapter` | fn | Builds the cursor-paginated `RemoteThreadListAdapter` powering `<ThreadList>` (`list({ after })` → `nextCursor`). Used internally; exported for custom wiring. |
-| `createTrueFoundryDraftThreadListAdapter` | fn | Draft-session variant of the thread-list adapter (`agents.private.draftSessions.list/create/get`). |
-| `createDraftSessionBridge` | fn | Reads and syncs a draft session's `AgentSpec` (`agents.private.draftSessions.get/update`). |
-| `mergeAgentSpec` | fn | Immutable merge helper for partial `AgentSpec` updates. |
-| `AgentSpec`, `AgentSpecUpdate`, `DraftSession` | types | Gateway inline agent definition types (re-exported). |
 | `getSession` | fn | `(client, sessionId) => Promise<AgentSession>` convenience wrapper. |
 | `convertTurnsToThreadMessages` | fn | Loads a session's turns and folds them into assistant-ui `ThreadMessage[]` (`ConvertTurnsResult`). |
 | `buildTurnAssistantContent` | fn | Folds a single turn's events into assistant content parts. |
@@ -497,11 +492,6 @@ For contributors and agents working inside this package. Source lives in `src/`;
 | `collectPending.ts` | Derives `pendingApprovals`, `pendingToolResponses`, `pendingMcpAuth` from messages. |
 | `requiredActionInputs.ts` | Combined gate + `collectRequiredActionInputs` for batched resume. |
 | `truefoundryThreadListAdapter.ts` | `RemoteThreadListAdapter` — cursor-paginated session list (`list({ after })` → `nextCursor`), create/fetch sessions. |
-| `truefoundryDraftThreadListAdapter.ts` | Draft-session `RemoteThreadListAdapter` backed by `agents.private.draftSessions.*`. |
-| `draftSessionBridge.ts` | Reads and syncs a draft session's `AgentSpec` via `agents.private.draftSessions.get/update`. |
-| `bindDraftAgentSession.ts` | Validates a draft session via `agents.private.draftSessions.get`, then binds turns to it at `/agents/sessions/{draftSessionId}/turns`. |
-| `useDraftAgentSpec.ts` | Debounced draft spec state + `agents.private.draftSessions.update` wiring. |
-| `agentSpec.ts` | `AgentSpec` helpers and `mergeAgentSpec`. |
 | `convertTurnMessages.ts` | `projectSessionMessages` pure projector; `buildSnapshotFromSession` history ingest; `convertTurnsToThreadMessages` wrapper; stream-event aggregation. |
 | `foldPeerThreads.ts` | `PeerThreadFoldState` — folds peer/sub-agent threads under their spawning tool call. |
 | `messageCustomMetadata.ts` | `TrueFoundryMessageCustomMetadata` — typed `metadata.custom` keys for this adapter. |
@@ -538,7 +528,7 @@ pnpm test       # vitest run
 pnpm typecheck  # tsc --noEmit
 ```
 
-`dist/` is generated output and is gitignored. From the repo root, `pnpm build` builds this package before the Next.js app.
+`dist/` is generated output and is gitignored. From the repo root, `pnpm build` builds this package before the example app.
 
 ## Unsupported assistant-ui features
 

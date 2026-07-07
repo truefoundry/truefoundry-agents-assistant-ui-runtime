@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeAgentSpec } from "./agentSpec.js";
+import { mergeAgentSpec } from "./private/agentSpec.js";
 import { resolveTrueFoundryAgentConfig } from "./types.js";
 
 describe("resolveTrueFoundryAgentConfig", () => {
