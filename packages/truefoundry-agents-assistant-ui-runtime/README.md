@@ -19,67 +19,14 @@ npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-ga
 
 ## Quickstart
 
-### 1. Create an `AgentSessionClient`
+See **[QuickStart.md](./QuickStart.md)** for the full step-by-step guide: install, create an `AgentSessionClient`, wire up `useTrueFoundryAgentRuntime`, mount the component, and set up UI.
 
-Construct the client in your app (server module, proxy route, or demo). The runtime only accepts a pre-built client — it does **not** read API keys or gateway URLs itself.
+## Keeping secrets server-side
 
-```tsx
-import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+The runtime never reads credentials itself — it only accepts a pre-built `AgentSessionClient`. How you supply that client's API key depends on the environment:
 
-const client = new AgentSessionClient({
-  apiKey: process.env.TFY_API_KEY!,
-  environment: process.env.TFY_GATEWAY_URL!, // https://gateway.truefoundry.ai/<tenant>
-});
-```
-
-For production, point `fetch` or `auth` at your own backend proxy so secrets never reach the browser.
-
-### 2. Set up the runtime
-
-Works in any React app (Vite, Next.js, Remix, etc.).
-
-```tsx
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
-import { Thread } from "./components/assistant-ui/thread";
-
-const client = new AgentSessionClient({ /* ... */ });
-
-export function MyAssistant() {
-  const runtime = useTrueFoundryAgentRuntime({
-    client,
-    agentName: "my-agent",
-  });
-
-  return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <Thread />
-    </AssistantRuntimeProvider>
-  );
-}
-```
-
-> **Next.js App Router:** add `"use client"` at the top of the file, since the runtime relies on React hooks and browser APIs.
-
-### 3. Mount the component
-
-Render `<MyAssistant />` wherever your framework mounts React:
-
-```tsx
-import { MyAssistant } from "./MyAssistant";
-
-export function App() {
-  return (
-    <main className="h-dvh">
-      <MyAssistant />
-    </main>
-  );
-}
-```
-
-### 4. Set up UI components
-
-See the assistant-ui [Thread UI guide](https://www.assistant-ui.com/docs/ui/thread) for wiring Thread, composer, and primitives.
+- **Local / development** — keep the API key in a local env file (e.g. `.env.local`, gitignored) and read it via your framework's env mechanism (`import.meta.env.VITE_TFY_API_KEY`, `process.env.*`, etc.). The client talks to the gateway directly with a browser-visible key, which is fine for local development.
+- **Production** — never ship the API key to the browser. Proxy requests through your own backend so the key never reaches the client: pass a custom `fetch` (or `auth`) to `AgentSessionClient` that points at your proxy route, and hold the real key server-side.
 
 ## `useTrueFoundryAgentRuntime` options
 
