@@ -463,14 +463,17 @@ export function useTrueFoundryAgentMessages({
                 const turn = loadedSnapshot.runningTurn;
                 const isContinuation = !extractTurnUserText(turn.input);
                 // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
+                // Use loadedSnapshot directly — snapshotRef.current still points at
+                // the empty snapshot cleared above until the setSnapshot(loadedSnapshot)
+                // call re-renders.
                 await runStream(
                     (signal) =>
                         resumeTurnStream(
                             turn,
-                            snapshotRef.current.fold,
+                            loadedSnapshot.fold,
                             signal,
                             undefined,
-                            snapshotRef.current.groupRootBaseline,
+                            loadedSnapshot.groupRootBaseline,
                         ),
                     turn.id,
                     isContinuation,
