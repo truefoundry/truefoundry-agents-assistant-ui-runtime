@@ -820,7 +820,12 @@ function ingestSessionEventsIntoSnapshot(
                 ),
             );
 
-            onTurnComplete?.(snapshot);
+            // Pass a new object reference so React's Object.is check in
+            // useState sees a changed value and schedules a re-render.
+            // The snapshot is mutated in place throughout this loop, so
+            // passing `snapshot` directly would make every tick look identical
+            // to React after the first setSnapshot call.
+            onTurnComplete?.(replaceSessionSnapshot(snapshot, {}));
 
             currentTurnId = null;
             currentCreatedEvent = null;
