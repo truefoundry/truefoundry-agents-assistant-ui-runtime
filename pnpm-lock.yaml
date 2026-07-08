@@ -33,8 +33,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       truefoundry-gateway-sdk:
-        specifier: 0.2.0-rc.1
-        version: 0.2.0-rc.1
+        specifier: ^0.3.1
+        version: 0.3.1
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4
@@ -104,8 +104,8 @@ importers:
         specifier: ^0.2.19
         version: 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       truefoundry-gateway-sdk:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.1
+        version: 0.3.1
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.2
@@ -3049,12 +3049,8 @@ packages:
     resolution: {integrity: sha512-DeOfcSX5fActQ8bkmOvp189MOihWgokPel2A4hzGnEylcqgj4fDa/Z0s87JwISX4Os8TT73tDNeCxJ2VM/KNww==}
     engines: {node: '>=18.0.0'}
 
-  truefoundry-gateway-sdk@0.2.0:
-    resolution: {integrity: sha512-8FODM4buDPJ9cWRQ9DnfHIGeJP2DVqg/9NDvhTdx8Lu66JnPdH1m6AIB+2rlcSq0V6kfoJVtxHRl4DrsyDvbog==}
-    engines: {node: '>=18.0.0'}
-
-  truefoundry-gateway-sdk@0.2.0-rc.1:
-    resolution: {integrity: sha512-MLweGhyy0J6jBpUNpa7IKYymmM575DSHDAfHTIJEin3DLOamjSj1pR+xJSzyzvSMW9JmKvRotp/xd23RC2lTWQ==}
+  truefoundry-gateway-sdk@0.3.1:
+    resolution: {integrity: sha512-2wrk64RPvPifr7aleMtC8mGRApc8iHo4VU/bGT8V/1d5TWZQjZDIVbn8uhArE3HLFnGoZHxH32IZDfeuhIgOFA==}
     engines: {node: '>=18.0.0'}
 
   ts-interface-checker@0.1.13:
@@ -6359,9 +6355,7 @@ snapshots:
 
   truefoundry-gateway-sdk@0.1.0: {}
 
-  truefoundry-gateway-sdk@0.2.0: {}
-
-  truefoundry-gateway-sdk@0.2.0-rc.1: {}
+  truefoundry-gateway-sdk@0.3.1: {}
 
   ts-interface-checker@0.1.13: {}
 

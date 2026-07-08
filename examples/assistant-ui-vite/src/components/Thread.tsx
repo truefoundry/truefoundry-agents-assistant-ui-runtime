@@ -94,7 +94,31 @@ function Composer() {
 export function Thread() {
   return (
     <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-      <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <ThreadPrimitive.Viewport className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <AuiIf condition={(state) => state.thread.isLoading}>
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-50/80 dark:bg-slate-950/80">
+            <svg
+              className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+          </div>
+        </AuiIf>
+
         <AuiIf condition={(state) => state.thread.isEmpty}>
           <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
             <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">

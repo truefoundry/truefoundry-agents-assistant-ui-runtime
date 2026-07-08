@@ -1989,3 +1989,196 @@ describe("convertTurnMessages", () => {
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// buildSnapshotFromSessionEvents
+// ---------------------------------------------------------------------------
+
+import type { TurnCreatedEvent, TurnDoneEvent } from "truefoundry-gateway-sdk/agents";
+import { buildSnapshotFromSessionEvents } from "./convertTurnMessages.js";
+
+type SessionEventItem = { turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent };
+
+/** Simulates session.listEvents — returns items in desc order (newest first). */
+function sessionEventsPage(items: SessionEventItem[]) {
+    return async () => ({
+        async *[Symbol.asyncIterator]() {
+            for (const item of [...items].reverse()) {
+                yield item;
+            }
+        },
+    });
+}
+
+/** Builds a mock AgentSession with listTurns and listEvents. */
+function mockSessionWithEvents(
+    turns: Turn[],
+    eventItems: SessionEventItem[],
+): AgentSession {
+    return {
+        listTurns: turnsPage(turns),
+        listEvents: sessionEventsPage(eventItems),
+    } as unknown as AgentSession;
+}
+
+describe("buildSnapshotFromSessionEvents", () => {
+    it("builds a snapshot from a single complete turn", async () => {
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c1",
+                    turnId: "t1",
+                    input: [{ type: "user.message", content: "hello" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t1",
+                event: modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "hi there" }),
+            },
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d1",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+
+        const snapshot = await buildSnapshotFromSessionEvents(mockSessionWithEvents([], items));
+
+        expect(snapshot.turns).toHaveLength(1);
+        expect(snapshot.turns[0]?.id).toBe("t1");
+        expect(snapshot.turns[0]?.userText).toBe("hello");
+        expect(snapshot.turns[0]?.state).toEqual({
+            status: "done",
+            requiredActions: [],
+            completedAt: createdAt,
+        });
+        expect(snapshot.turns[0]?.rootModelMessageIds).toEqual(["m1"]);
+        expect(snapshot.runningTurn).toBeUndefined();
+
+        const messages = projectSessionMessages(snapshot);
+        expect(messages).toHaveLength(2);
+        expect(messages[0]?.role).toBe("user");
+        expect(messages[1]?.role).toBe("assistant");
+    });
+
+    it("detects and attaches the running turn without events", async () => {
+        const runningTurn = {
+            id: "t2",
+            state: { status: "running" },
+            input: [{ type: "user.message", content: "in progress" }],
+            createdAt,
+        } as unknown as Turn;
+
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c1",
+                    turnId: "t1",
+                    input: [{ type: "user.message", content: "first" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t1",
+                event: modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
+            },
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d1",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+            // t2 (running) has no events — it is excluded from session-level listEvents
+        ];
+
+        const snapshot = await buildSnapshotFromSessionEvents(
+            mockSessionWithEvents([runningTurn], items),
+        );
+
+        expect(snapshot.turns).toHaveLength(1);
+        expect(snapshot.turns[0]?.id).toBe("t1");
+        expect(snapshot.runningTurn).toBe(runningTurn);
+        expect(snapshot.unstable_resume).toBe(true);
+        expect(snapshot.groupRootBaseline).toBeDefined();
+    });
+
+    it("calls onProgress after each completed turn", async () => {
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c1",
+                    turnId: "t1",
+                    input: [{ type: "user.message", content: "first" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t1",
+                event: modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
+            },
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d1",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+            {
+                turnId: "t2",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c2",
+                    turnId: "t2",
+                    input: [{ type: "user.message", content: "second" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t2",
+                event: modelMessage({ id: "m2", threadId: ROOT_THREAD_ID, content: "reply 2" }),
+            },
+            {
+                turnId: "t2",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d2",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+
+        const progressSnapshots: number[] = [];
+        await buildSnapshotFromSessionEvents(
+            mockSessionWithEvents([], items),
+            (snap) => progressSnapshots.push(snap.turns.length),
+        );
+
+        expect(progressSnapshots).toEqual([1, 2]);
+    });
+});
+

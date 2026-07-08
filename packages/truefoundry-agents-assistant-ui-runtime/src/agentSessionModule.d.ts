@@ -19,6 +19,9 @@ declare module "truefoundry-gateway-sdk/dist/esm/agents/AgentSession.mjs" {
         listTurns(
             opts?: TrueFoundryGatewayApi.agents.SessionsListTurnsRequest,
         ): Promise<core.Page<unknown, TrueFoundryGatewayApi.ListTurnsResponse>>;
+        listEvents(
+            opts?: TrueFoundryGatewayApi.agents.SessionsListEventsRequest,
+        ): Promise<core.Page<TrueFoundryGatewayApi.SessionEventItem, TrueFoundryGatewayApi.ListSessionEventsResponse>>;
         getTurn(opts: { turnId: string }): Promise<unknown>;
         cancel(): Promise<void>;
     }

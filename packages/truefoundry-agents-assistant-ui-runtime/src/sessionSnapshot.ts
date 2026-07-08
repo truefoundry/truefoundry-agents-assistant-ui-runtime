@@ -1,4 +1,10 @@
-import type { McpAuthRequiredEvent, Turn, TurnInputItem } from "truefoundry-gateway-sdk/agents";
+import type {
+    McpAuthRequiredEvent,
+    Turn,
+    TurnCreatedEvent,
+    TurnDoneEvent,
+    TurnInputItem,
+} from "truefoundry-gateway-sdk/agents";
 
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import { PeerThreadFoldState } from "./foldPeerThreads.js";
@@ -78,6 +84,26 @@ export function turnToSessionRecord(turn: Turn): SessionTurnRecord {
         createdAt: turn.createdAt,
         state: turn.state,
         input: turn.input,
+    };
+}
+
+/** Builds a SessionTurnRecord from session-level TurnCreatedEvent + TurnDoneEvent data. */
+export function sessionEventsToSessionRecord(
+    turnId: string,
+    createdEvent: TurnCreatedEvent,
+    doneEvent: TurnDoneEvent,
+    rootModelMessageIds: readonly string[],
+    sandboxId?: string,
+): SessionTurnRecord {
+    const userText = extractTurnUserText(createdEvent.input);
+    return {
+        id: turnId,
+        ...(userText ? { userText } : {}),
+        createdAt: createdEvent.createdAt,
+        state: doneEvent.state,
+        input: createdEvent.input,
+        rootModelMessageIds,
+        ...(sandboxId != null ? { sandboxId } : {}),
     };
 }
 

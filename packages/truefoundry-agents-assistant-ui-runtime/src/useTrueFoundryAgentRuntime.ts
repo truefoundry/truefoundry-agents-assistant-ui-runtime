@@ -63,6 +63,7 @@ function useTrueFoundryAgentRuntimeImpl(
                 : undefined,
     );
     const sessionId = useAuiState((state) => state.threadListItem.remoteId ?? undefined);
+    const isMain = useAuiState((state) => state.threadListItem.isMain);
 
     const draftSpec = useDraftAgentSpec({
         draftSessionId,
@@ -94,9 +95,11 @@ function useTrueFoundryAgentRuntimeImpl(
         resumeRun,
         editFromTurn,
         resetFromTurn,
+        retryLoad,
     } = useTrueFoundryAgentMessages({
         client,
         sessionId,
+        isMain,
         listEventsConcurrency,
         onError,
         initializeSession,
@@ -175,6 +178,7 @@ function useTrueFoundryAgentRuntimeImpl(
                 resetFromTurn(turnId).catch((error) => {
                     onError?.(error);
                 }),
+            reload: retryLoad,
             draft: draftExtras,
         }),
         unstable_enableToolInvocations: true,
@@ -228,34 +232,42 @@ function useTrueFoundryAgentRuntimeImpl(
 }
 
 export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOptions) {
-    const resolved = useMemo(
-        () => resolveTrueFoundryAgentRuntimeOptions(options),
-        [options],
-    );
+    // resolveTrueFoundryAgentRuntimeOptions is a cheap pure function; memoizing on the
+    // whole `options` object (which callers typically pass as an inline literal) means
+    // `resolved` — and everything derived from it — would be recreated on every render,
+    // causing `threadListAdapter` to be a new object each render.  We compute `resolved`
+    // unconditionally and stabilize individual downstream values with primitives/refs.
+    const resolved = resolveTrueFoundryAgentRuntimeOptions(options);
     const { client, agent, gateway } = resolved;
 
     const pendingAgentSpecRef = useRef<AgentSpec | undefined>(
         agent.mode === "draft" ? agent.defaultAgentSpec : undefined,
     );
 
+    // Use stable primitive deps so that threadListAdapter is not recreated every render
+    // when options is an inline object literal (new reference on every parent render).
+    const agentMode = agent.mode;
+    const namedAgentName = agent.mode === "named" ? agent.agentName : undefined;
     const threadListAdapter = useMemo(() => {
-        if (agent.mode === "draft") {
+        if (agentMode === "draft") {
             if (gateway == null) {
                 throw new Error(
                     "Draft agent mode requires a `gateway` TrueFoundryGateway client.",
                 );
             }
+            const draftAgent = agent as Extract<typeof agent, { mode: "draft" }>;
             return createTrueFoundryDraftThreadListAdapter({
                 gateway,
-                defaultAgentSpec: agent.defaultAgentSpec,
-                getAgentSpec: () => pendingAgentSpecRef.current ?? agent.defaultAgentSpec,
+                defaultAgentSpec: draftAgent.defaultAgentSpec,
+                getAgentSpec: () => pendingAgentSpecRef.current ?? draftAgent.defaultAgentSpec,
             });
         }
         return createTrueFoundryThreadListAdapter({
             client,
-            agentName: agent.agentName,
+            agentName: namedAgentName!,
         });
-    }, [agent, client, gateway]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [agentMode, namedAgentName, client, gateway]);
 
     return useRemoteThreadListRuntime({
         allowNesting: true,

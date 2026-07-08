@@ -10,6 +10,8 @@ import type {
     AgentSession,
     McpAuthRequiredEvent,
     Turn,
+    TurnCreatedEvent,
+    TurnDoneEvent,
     TurnEvent,
     TurnInputItem,
     TurnStreamData,
@@ -42,6 +44,7 @@ import {
     createEmptySessionSnapshot,
     emptyRequiredActionsOverlay,
     replaceSessionSnapshot,
+    sessionEventsToSessionRecord,
     turnToSessionRecord,
 } from "./sessionSnapshot.js";
 import {
@@ -186,12 +189,22 @@ import {
  *   `user.message`.
  * - Tool-call identity is stable via `toolCallId` across events, fold state, and
  *   assistant-ui parts.
- * - Reload (`buildSnapshotFromSession`) and live paths must produce the same
+ * - Reload (`buildSnapshotFromSessionEvents`) and live paths must produce the same
  *   per-group scoping; history uses cumulative `groupRootIds` per turn index,
  *   live uses `groupRootBaseline`.
  */
 
 const TURN_EVENTS_PAGE_SIZE = 25;
+const SESSION_EVENTS_PAGE_SIZE = 100;
+
+/**
+ * Session-level event item — structurally equivalent to
+ * `TrueFoundryGateway.SessionEventItem` (not re-exported from agents subpath).
+ */
+type GatewaySessionEventItem = {
+    turnId: string;
+    event: TurnCreatedEvent | TurnDoneEvent | TurnEvent;
+};
 
 export type ConvertTurnsResult = {
     messages: ThreadMessage[];
@@ -730,6 +743,135 @@ export function projectSessionMessages(
 }
 
 const DEFAULT_LIST_EVENTS_CONCURRENCY = 5;
+
+/**
+ * Fetches all session-level events via `session.listEvents()`. The API returns
+ * pages in desc order (newest first); the collected array is reversed before
+ * returning so callers receive events in chronological (asc) order.
+ */
+async function fetchAllSessionEvents(
+    session: AgentSession,
+): Promise<GatewaySessionEventItem[]> {
+    const items: GatewaySessionEventItem[] = [];
+    for await (const item of await session.listEvents({
+        limit: SESSION_EVENTS_PAGE_SIZE,
+    })) {
+        items.push(item as GatewaySessionEventItem);
+    }
+    items.reverse();
+    return items;
+}
+
+/**
+ * Ingests a chronologically ordered list of session-level event items into the
+ * snapshot. `turn.created` marks the start of a turn (provides user input),
+ * content events are folded as usual, and `turn.done` finalises the turn record
+ * and pushes it to `snapshot.turns`.
+ *
+ * `onTurnComplete` is called after each `turn.done` with the partially-built
+ * snapshot so callers can update UI progressively. The fold state is correct at
+ * that point for every turn up to and including the just-completed one.
+ */
+function ingestSessionEventsIntoSnapshot(
+    snapshot: SessionSnapshot,
+    items: GatewaySessionEventItem[],
+    onTurnComplete?: (snap: SessionSnapshot) => void,
+): void {
+    let currentTurnId: string | null = null;
+    let currentCreatedEvent: TurnCreatedEvent | null = null;
+    let currentContentEvents: TurnEvent[] = [];
+    let beforeCount = 0;
+
+    for (const item of items) {
+        const { turnId, event } = item;
+
+        if (event.type === "turn.created") {
+            currentTurnId = turnId;
+            currentCreatedEvent = event;
+            currentContentEvents = [];
+            beforeCount =
+                snapshot.fold.threads.get(ROOT_THREAD_ID)?.modelMessageIds.length ?? 0;
+        } else if (event.type === "turn.done") {
+            if (currentTurnId == null || currentCreatedEvent == null) {
+                continue;
+            }
+
+            const afterBucket = snapshot.fold.threads.get(ROOT_THREAD_ID);
+            const rootModelMessageIds = (afterBucket?.modelMessageIds ?? []).slice(
+                beforeCount,
+            );
+
+            const sandboxEvent = currentContentEvents.find(
+                (ev): ev is Extract<TurnEvent, { type: "sandbox.created" }> =>
+                    ev.type === "sandbox.created",
+            );
+
+            applyUserToolResponsesToFold(
+                snapshot.fold,
+                currentCreatedEvent.input ?? [],
+            );
+            snapshot.turns.push(
+                sessionEventsToSessionRecord(
+                    currentTurnId,
+                    currentCreatedEvent,
+                    event,
+                    rootModelMessageIds,
+                    sandboxEvent?.sandboxId,
+                ),
+            );
+
+            onTurnComplete?.(snapshot);
+
+            currentTurnId = null;
+            currentCreatedEvent = null;
+            currentContentEvents = [];
+        } else {
+            if (currentTurnId != null) {
+                ingestTurnEvent(snapshot.fold, event as TurnEvent);
+                currentContentEvents.push(event as TurnEvent);
+            }
+        }
+    }
+}
+
+/**
+ * Builds a session snapshot using the session-level `listEvents` API.
+ *
+ * Compared to `buildSnapshotFromSession`, this makes a single paginated request
+ * for all history events instead of one per turn. Only `listTurns({ limit: 1 })`
+ * is called first to detect a currently-running turn (the session-level API does
+ * not return events for the running turn).
+ *
+ * `onProgress` is called after each complete turn is ingested so callers can
+ * update the UI progressively while the processing loop runs.
+ */
+export async function buildSnapshotFromSessionEvents(
+    session: AgentSession,
+    onProgress?: (snap: SessionSnapshot) => void,
+): Promise<SessionSnapshot> {
+    // Detect a running turn with a single minimal listTurns call.
+    let runningTurn: Turn | undefined;
+    for await (const turn of await session.listTurns({ limit: 1 })) {
+        if ((turn as Turn).state?.status === "running") {
+            runningTurn = turn as Turn;
+        }
+    }
+
+    const items = await fetchAllSessionEvents(session);
+
+    const snapshot = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(snapshot, items, onProgress);
+
+    return replaceSessionSnapshot(snapshot, {
+        ...(runningTurn != null
+            ? {
+                  runningTurn,
+                  unstable_resume: true as const,
+                  groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
+              }
+            : {}),
+    });
+}
 
 function ingestTurnsIntoSnapshot(
     snapshot: SessionSnapshot,
