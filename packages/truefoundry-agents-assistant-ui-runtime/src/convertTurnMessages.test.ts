@@ -1113,6 +1113,44 @@ describe("convertTurnMessages", () => {
             expect(updates).toEqual([{ content: [{ type: "text", text: "streaming" }] }]);
         });
 
+        it("yields folded content after each ingested stream event", async () => {
+            const foldState = new PeerThreadFoldState();
+            const updates = await collectStream(
+                streamTurnEvents(
+                    streamFrom([
+                        modelMessage({
+                            id: "m1",
+                            threadId: ROOT_THREAD_ID,
+                            content: "first",
+                        }),
+                        modelMessage({
+                            id: "m2",
+                            threadId: ROOT_THREAD_ID,
+                            content: "second",
+                        }),
+                        modelMessage({
+                            id: "m3",
+                            threadId: ROOT_THREAD_ID,
+                            content: "third",
+                        }),
+                    ]),
+                    foldState,
+                ),
+            );
+
+            expect(updates).toHaveLength(3);
+            expect(updates[0]?.content).toEqual([{ type: "text", text: "first" }]);
+            expect(updates[1]?.content).toEqual([
+                { type: "text", text: "first" },
+                { type: "text", text: "second" },
+            ]);
+            expect(updates[2]?.content).toEqual([
+                { type: "text", text: "first" },
+                { type: "text", text: "second" },
+                { type: "text", text: "third" },
+            ]);
+        });
+
         it("scopes streamed content to ids after the group baseline", async () => {
             const foldState = new PeerThreadFoldState();
             foldState.getOrCreateBucket(ROOT_THREAD_ID);

@@ -318,19 +318,42 @@ export function useTrueFoundryAgentMessages({
         [snapshot, projectOptions],
     );
 
+    // Sub-agent turns can emit 100+ stream events per frame. Coalesce to one setSnapshot
+    // per animation frame so assistant-ui does not remount the whole message tree (UI hang).
+    const pendingStreamUpdateRef = useRef<{
+        update: TurnStreamUpdate;
+        turnId: string;
+        isContinuation: boolean;
+    } | null>(null);
+    const streamUpdateRafRef = useRef<number | null>(null);
+
+    const flushPendingStreamUpdate = useCallback(() => {
+        streamUpdateRafRef.current = null;
+        const pending = pendingStreamUpdateRef.current;
+        if (pending == null) {
+            return;
+        }
+        pendingStreamUpdateRef.current = null;
+        const { update, turnId, isContinuation } = pending;
+        setSnapshot((prev) =>
+            replaceSessionSnapshot(prev, {
+                activeStream: {
+                    turnId,
+                    update,
+                    isContinuation,
+                },
+            }),
+        );
+    }, []);
+
     const applyStreamUpdate = useCallback(
         (update: TurnStreamUpdate, turnId: string, isContinuation: boolean) => {
-            setSnapshot((prev) =>
-                replaceSessionSnapshot(prev, {
-                    activeStream: {
-                        turnId,
-                        update,
-                        isContinuation,
-                    },
-                }),
-            );
+            pendingStreamUpdateRef.current = { update, turnId, isContinuation };
+            if (streamUpdateRafRef.current == null) {
+                streamUpdateRafRef.current = requestAnimationFrame(flushPendingStreamUpdate);
+            }
         },
-        [],
+        [flushPendingStreamUpdate],
     );
 
     const runStream = useCallback(
@@ -359,6 +382,11 @@ export function useTrueFoundryAgentMessages({
                     onError?.(error);
                     throw error;
                 } finally {
+                    if (streamUpdateRafRef.current != null) {
+                        cancelAnimationFrame(streamUpdateRafRef.current);
+                        streamUpdateRafRef.current = null;
+                    }
+                    flushPendingStreamUpdate();
                     if (abortControllerRef.current === abortController) {
                         abortControllerRef.current = null;
                     }
@@ -392,7 +420,7 @@ export function useTrueFoundryAgentMessages({
                 });
             return run;
         },
-        [applyStreamUpdate, onError],
+        [applyStreamUpdate, flushPendingStreamUpdate, onError],
     );
 
     const load = useCallback(async () => {

@@ -1,8 +1,16 @@
 import type { ToolCall } from "truefoundry-gateway-sdk/agents";
 
-export function isCreateSubAgentToolCall(toolCall: Pick<ToolCall, "toolInfo">): boolean {
-    return (
-        toolCall.toolInfo.type === "truefoundry-system" &&
-        toolCall.toolInfo.name === "create_sub_agent"
-    );
+export function isCreateSubAgentToolCall(
+    toolCall: Pick<ToolCall, "toolInfo" | "function">,
+): boolean {
+    // Gateway may attach truefoundry-system toolInfo on persisted turns, but streamed
+    // model.message tool calls often only carry function.name. Without the fallback,
+    // foldPeerThreads never nests child threads under the spawning tool call.
+    if (
+        toolCall.toolInfo?.type === "truefoundry-system" &&
+        toolCall.toolInfo?.name === "create_sub_agent"
+    ) {
+        return true;
+    }
+    return toolCall.function?.name === "create_sub_agent";
 }
