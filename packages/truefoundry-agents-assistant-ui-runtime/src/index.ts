@@ -13,11 +13,11 @@ export {
 export type { ConvertTurnsResult, UserMessageContent } from "./convertTurnMessages.js";
 export { ROOT_THREAD_ID } from "./constants.js";
 export type { UseTrueFoundryAgentRuntimeOptions, NamedAgentConfig, DraftAgentConfig, TrueFoundryAgentConfig } from "./types.js";
-export type { AgentSpec, AgentSpecUpdate, DraftSession } from "./agentSpec.js";
-export { mergeAgentSpec, draftSessionTitle } from "./agentSpec.js";
-export { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
-export { createDraftSessionBridge } from "./draftSessionBridge.js";
-export type { DraftSessionBridge } from "./draftSessionBridge.js";
+export type { AgentSpec, AgentSpecUpdate, DraftSession } from "./private/agentSpec.js";
+export { mergeAgentSpec, draftSessionTitle } from "./private/agentSpec.js";
+export { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
+export { createDraftSessionBridge } from "./private/draftSessionBridge.js";
+export type { DraftSessionBridge } from "./private/draftSessionBridge.js";
 export {
     useTrueFoundryAgentSpec,
     useTrueFoundryUpdateAgentSpec,
