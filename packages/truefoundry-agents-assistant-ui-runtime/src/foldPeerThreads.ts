@@ -389,11 +389,17 @@ function attachSubAgentMessages(
                 });
             }
         }
-        if (messages.length === 0) {
+        if (messages.length === 0 && subAgents.length === 0) {
             return part;
         }
 
         const artifact: SubAgentArtifact = { subAgents };
+        // thread.created (title, agentInfo) arrives before the child's first model.message.
+        // Attach artifact-only so UI can render the sub-agent header immediately; see README
+        // SubAgentArtifact / MessagePartPrimitive.Messages in agent-ui ToolCallContainer.
+        if (messages.length === 0) {
+            return { ...part, artifact };
+        }
         return { ...part, messages, artifact };
     });
 }
