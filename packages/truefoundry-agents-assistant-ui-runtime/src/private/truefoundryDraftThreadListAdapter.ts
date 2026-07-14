@@ -2,7 +2,7 @@ import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import { draftSessionTitle, type AgentSpec } from "./agentSpec.js";
-import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
+import { sessionListStartTimestamp } from "../sessionListStartTimestamp.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 

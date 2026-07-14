@@ -1,14 +1,15 @@
 # assistant-ui-vite
 
-Standalone Vite + React example that consumes `@assistant-ui/react` and `@truefoundry/assistant-ui-runtime` to chat with a TrueFoundry named agent.
+Standalone Vite + React example that wires `@truefoundry/assistant-ui-runtime` to
+[`@truefoundry/agent-ui-sdk`](https://www.npmjs.com/package/@truefoundry/agent-ui-sdk)
+for the chat UI.
 
 ## Features
 
-- Credentials form (stored in `localStorage`)
-- Thread list sidebar with new chat and load-more
-- Streaming chat via `AssistantRuntimeProvider` + `useTrueFoundryAgentRuntime`
-- Tool approval panel (`useTrueFoundryApprovals`)
-- Ask-user response panel (`useTrueFoundryToolResponses`)
+- Gateway credentials from `.env` (Vite `import.meta.env`)
+- Session sidebar via `ThreadListContainer`
+- Full thread UI via `Thread` (composer, streaming, tool calls, approvals, ask-user, MCP auth)
+- Attachments enabled through `trueFoundryAttachmentAdapter`
 
 ## Prerequisites
 
@@ -19,6 +20,18 @@ pnpm install
 pnpm --filter "@truefoundry/assistant-ui-runtime" build
 ```
 
+## Configuration
+
+Copy `.env.example` to `.env` in this directory and fill in your values:
+
+| Variable | Example |
+|----------|---------|
+| `VITE_TFY_API_KEY` | Your TrueFoundry API key |
+| `VITE_TFY_GATEWAY_URL` | `https://gateway.truefoundry.ai/<tenant>` |
+| `VITE_TFY_AGENT_NAME` | A saved agent name, e.g. `my-agent` |
+
+`.env` is gitignored. Restart the dev server after changing env values.
+
 ## Run
 
 From the repo root:
@@ -27,13 +40,7 @@ From the repo root:
 pnpm --filter assistant-ui-vite dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and enter:
-
-| Field | Example |
-|-------|---------|
-| API key | Your TrueFoundry API key |
-| Gateway URL | `https://gateway.truefoundry.ai/<tenant>` |
-| Agent name | A saved agent name, e.g. `my-agent` |
+Open [http://localhost:5173](http://localhost:5173).
 
 ## Build
 
@@ -45,10 +52,13 @@ pnpm --filter assistant-ui-vite preview
 ## Architecture
 
 ```
-CredentialsForm → localStorage → AgentSessionClient
-  → useTrueFoundryAgentRuntime (named mode)
+.env → import.meta.env → AgentSessionClient
+  → useTrueFoundryAgentRuntime({ agentName })
   → AssistantRuntimeProvider
-  → ThreadList + Thread + InteractionPanels
+  → ErrorToasterProvider / TooltipProvider
+  → ThreadListContainer + Thread (@truefoundry/agent-ui-sdk)
 ```
 
-Named-agent mode only. Draft agents, MCP auth, and attachments UI are not included in this example.
+Design tokens live in `src/index.css` as CSS variables; the SDK stylesheet is
+imported with `@import "@truefoundry/agent-ui-sdk/openui.css"` so Tailwind scans
+the SDK components.

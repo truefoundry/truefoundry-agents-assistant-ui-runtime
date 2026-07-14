@@ -4,7 +4,7 @@ import type {
 } from "truefoundry-gateway-sdk/agents";
 import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
-import { bindDraftAgentSession } from "./bindDraftAgentSession.js";
+import { bindDraftAgentSession } from "./private/bindDraftAgentSession.js";
 
 const inflightBySessionId = new Map<string, Promise<AgentSession>>();
 

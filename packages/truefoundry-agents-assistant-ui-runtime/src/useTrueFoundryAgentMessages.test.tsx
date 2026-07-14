@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ThreadMessage } from "@assistant-ui/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionClient, Turn } from "truefoundry-gateway-sdk/agents";
 import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
@@ -288,6 +288,10 @@ describe("useTrueFoundryAgentMessages", () => {
         vi.mocked(resumeTurnStream).mockReturnValue(singleUpdateStream());
     });
 
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
     it("clears messages when sessionId is undefined", async () => {
         const { result } = renderHook(() =>
             useTrueFoundryAgentMessages({ client: mockClient, sessionId: undefined }),
@@ -392,6 +396,76 @@ describe("useTrueFoundryAgentMessages", () => {
             role: "assistant",
             content: [{ type: "text", text: "streamed reply" }],
             status: { type: "complete", reason: "stop" },
+        });
+    });
+
+    it("does not let a superseded stream complete the current stream", async () => {
+        let releaseFirstStream: (() => void) | undefined;
+        let releaseSecondStream: (() => void) | undefined;
+        let nextAnimationFrame = 1;
+        const animationFrames = new Map<number, FrameRequestCallback>();
+        vi.stubGlobal(
+            "requestAnimationFrame",
+            vi.fn((callback: FrameRequestCallback) => {
+                const frame = nextAnimationFrame++;
+                animationFrames.set(frame, callback);
+                return frame;
+            }),
+        );
+        vi.stubGlobal(
+            "cancelAnimationFrame",
+            vi.fn((frame: number) => animationFrames.delete(frame)),
+        );
+        vi.mocked(streamTurnContent)
+            .mockReturnValueOnce(
+                (async function* () {
+                    yield { content: [{ type: "text" as const, text: "first reply" }] };
+                    await new Promise<void>((resolve) => {
+                        releaseFirstStream = resolve;
+                    });
+                })(),
+            )
+            .mockReturnValueOnce(
+                (async function* () {
+                    yield { content: [{ type: "text" as const, text: "second reply" }] };
+                    await new Promise<void>((resolve) => {
+                        releaseSecondStream = resolve;
+                    });
+                })(),
+            );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        const firstSend = result.current.sendTurn({ userMessage: "first" });
+        await waitFor(() => expect(streamTurnContent).toHaveBeenCalledTimes(1));
+
+        const secondSend = result.current.sendTurn({ userMessage: "second" });
+        await waitFor(() => expect(streamTurnContent).toHaveBeenCalledTimes(2));
+
+        await act(async () => {
+            releaseFirstStream?.();
+            await firstSend;
+        });
+
+        expect(result.current.isRunning).toBe(true);
+
+        await act(async () => {
+            animationFrames.get(2)?.(performance.now());
+        });
+        expect(result.current.messages.at(-1)).toMatchObject({
+            role: "assistant",
+            content: [{ type: "text", text: "second reply" }],
+        });
+        expect(result.current.messages.at(-1)?.status).not.toMatchObject({
+            type: "complete",
+        });
+
+        await act(async () => {
+            releaseSecondStream?.();
+            await secondSend;
         });
     });
 

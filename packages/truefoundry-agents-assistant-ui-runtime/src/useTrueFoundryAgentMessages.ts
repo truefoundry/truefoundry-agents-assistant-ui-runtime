@@ -307,6 +307,7 @@ export function useTrueFoundryAgentMessages({
     const activeRunRef = useRef<Promise<void> | null>(null);
     const runningTurnRef = useRef<Turn | undefined>(undefined);
     const loadGenerationRef = useRef(0);
+    const streamGenerationRef = useRef(0);
     const lazilyCreatedSessionIdRef = useRef<string | undefined>(undefined);
 
     const projectOptions = useMemo(
@@ -329,39 +330,65 @@ export function useTrueFoundryAgentMessages({
         [snapshot, projectOptions],
     );
 
-    const applyStreamUpdate = useCallback(
-        (update: TurnStreamUpdate, turnId: string, isContinuation: boolean) => {
-            setSnapshot((prev) =>
-                replaceSessionSnapshot(prev, {
-                    activeStream: {
-                        turnId,
-                        update,
-                        isContinuation,
-                    },
-                }),
-            );
-        },
-        [],
-    );
-
     const runStream = useCallback(
         (
             createStream: (signal: AbortSignal) => AsyncGenerator<TurnStreamUpdate>,
             turnId: string,
             isContinuation: boolean,
         ): Promise<void> => {
+            const streamGeneration = ++streamGenerationRef.current;
             abortControllerRef.current?.abort();
             const abortController = new AbortController();
             abortControllerRef.current = abortController;
             setIsRunning(true);
 
             const run = (async () => {
+                // Sub-agent turns can emit 100+ stream events per frame. Coalesce to one
+                // setSnapshot per animation frame so assistant-ui does not remount the whole
+                // message tree (UI hang). The buffer belongs to this stream only.
+                let pendingStreamUpdate: {
+                    update: TurnStreamUpdate;
+                    turnId: string;
+                    isContinuation: boolean;
+                } | null = null;
+                let streamUpdateRaf: number | null = null;
+
+                const flushPendingStreamUpdate = () => {
+                    streamUpdateRaf = null;
+                    const pending = pendingStreamUpdate;
+                    pendingStreamUpdate = null;
+                    if (
+                        pending == null ||
+                        streamGeneration !== streamGenerationRef.current
+                    ) {
+                        return;
+                    }
+                    const { update, turnId: pendingTurnId, isContinuation: pendingIsContinuation } =
+                        pending;
+                    setSnapshot((prev) =>
+                        replaceSessionSnapshot(prev, {
+                            activeStream: {
+                                turnId: pendingTurnId,
+                                update,
+                                isContinuation: pendingIsContinuation,
+                            },
+                        }),
+                    );
+                };
+
+                const applyStreamUpdate = (update: TurnStreamUpdate) => {
+                    pendingStreamUpdate = { update, turnId, isContinuation };
+                    if (streamUpdateRaf == null) {
+                        streamUpdateRaf = requestAnimationFrame(flushPendingStreamUpdate);
+                    }
+                };
+
                 try {
                     for await (const update of createStream(abortController.signal)) {
                         if (abortController.signal.aborted) {
                             return;
                         }
-                        applyStreamUpdate(update, turnId, isContinuation);
+                        applyStreamUpdate(update);
                     }
                 } catch (error) {
                     if (error instanceof Error && error.name === "AbortError") {
@@ -370,6 +397,14 @@ export function useTrueFoundryAgentMessages({
                     onErrorRef.current?.(error);
                     throw error;
                 } finally {
+                    if (streamUpdateRaf != null) {
+                        cancelAnimationFrame(streamUpdateRaf);
+                        streamUpdateRaf = null;
+                    }
+                    if (streamGeneration !== streamGenerationRef.current) {
+                        return;
+                    }
+                    flushPendingStreamUpdate();
                     if (abortControllerRef.current === abortController) {
                         abortControllerRef.current = null;
                     }
@@ -431,6 +466,7 @@ export function useTrueFoundryAgentMessages({
         }
 
         const generation = ++loadGenerationRef.current;
+        ++streamGenerationRef.current;
         abortControllerRef.current?.abort();
         createdAtByMessageIdRef.current = new Map();
         setSnapshot(createEmptySessionSnapshot());

@@ -129,6 +129,62 @@ describe("foldPeerThreads", () => {
         });
     });
 
+    it("attaches sub-agent artifact from thread.created before child model messages arrive", () => {
+        const state = new PeerThreadFoldState();
+
+        ingestTurnEvent(
+            state,
+            modelMessage({
+                id: "root-msg",
+                threadId: ROOT_THREAD_ID,
+                toolCalls: [
+                    {
+                        id: "spawn-1",
+                        type: "function",
+                        function: { name: "create_sub_agent", arguments: "{}" },
+                    },
+                ],
+            }),
+        );
+
+        ingestTurnEvent(
+            state,
+            threadCreated({
+                id: "t-created",
+                threadId: "child-1",
+                title: "gateway-usage-7d",
+                agentInfo: {
+                    type: "dynamic",
+                    name: "gateway-usage-7d",
+                    input: "run queries",
+                },
+                parent: { threadId: ROOT_THREAD_ID, toolCallId: "spawn-1" },
+            }),
+        );
+
+        const parts = buildRootAssistantContent(state);
+        const spawn = parts.find((part) => part.type === "tool-call");
+        expect(spawn?.type).toBe("tool-call");
+        if (spawn?.type !== "tool-call") {
+            return;
+        }
+
+        expect(spawn.messages).toBeUndefined();
+        expect(spawn.artifact).toEqual({
+            subAgents: [
+                {
+                    threadId: "child-1",
+                    title: "gateway-usage-7d",
+                    agentInfo: {
+                        type: "dynamic",
+                        name: "gateway-usage-7d",
+                        input: "run queries",
+                    },
+                },
+            ],
+        });
+    });
+
     it("classifies stream events by thread id", () => {
         const state = new PeerThreadFoldState();
         expect(

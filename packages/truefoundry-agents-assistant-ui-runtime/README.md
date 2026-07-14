@@ -1,4 +1,4 @@
-# @truefoundry/assistant-ui-runtime
+# truefoundry-agents-assistant-ui-runtime
 
 TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/).
 
@@ -14,7 +14,7 @@ Connect assistant-ui components (`Thread`, `Composer`, tool UIs, `ThreadList`) t
 ## Installation
 
 ```bash
-npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk@^0.2.0
+npm install @assistant-ui/react truefoundry-agents-assistant-ui-runtime truefoundry-gateway-sdk@^0.1.0-rc.1
 ```
 
 ## Quickstart
@@ -40,7 +40,7 @@ For production, point `fetch` or `auth` at your own backend proxy so secrets nev
 "use client";
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
+import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 
 const AGENT_NAME = process.env.TFY_AGENT_NAME!;
@@ -85,79 +85,30 @@ See the assistant-ui [Thread UI guide](https://www.assistant-ui.com/docs/ui/thre
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `client` | `AgentSessionClient` | Yes | Pre-built gateway client. The runtime never reads credentials itself. |
-| `agent` | `{ mode: "named", agentName }` \| `{ mode: "draft", defaultAgentSpec }` | Yes* | Discriminated agent source. *Or legacy `agentName` for named mode. |
-| `agentName` | `string` | Named only | Legacy shorthand for `agent: { mode: "named", agentName }`. |
-| `gateway` | `TrueFoundryGateway` | Draft only | Low-level gateway client for `agents.private.draftSessions` CRUD. |
+| `agentName` | `string` | Yes | Saved agent to run (gateway agent name). |
 | `initialSessionId` | `string` | No | Pin an existing session once on mount (uncontrolled). |
 | `threadId` | `string` | No | Controlled active session id; reactive and URL-syncable. |
 | `onThreadIdChange` | `(threadId: string \| undefined) => void` | No | Fires when the active session changes. |
 | `onError` | `(error: unknown) => void` | No | Invoked on stream/load/turn errors. |
 | `adapters` | `{ attachments?, speech?, dictation?, voice?, feedback? }` | No | Optional assistant-ui adapters forwarded to the runtime. See [Unsupported assistant-ui features](#unsupported-assistant-ui-features). |
 
-### Named agent mode (saved agent)
+### Specifying the agent
+
+Pass the saved agent name as `agentName`:
 
 ```tsx
 const runtime = useTrueFoundryAgentRuntime({
   client,
-  agent: { mode: "named", agentName: "support-bot" },
+  agentName: "support-bot",
 });
 ```
-
-Legacy `agentName` shorthand is still supported.
-
-### Draft agent mode (inline `AgentSpec`)
-
-Draft mode lists **draft sessions** (`agents.private.draftSessions.*`) in the thread list. Each thread's `remoteId` is a `DraftSession.id`. The runtime syncs `AgentSpec` edits via `agents.private.draftSessions.update`. Turns and history use `/agents/sessions/{draftSessionId}/turns` after validating the draft via `agents.private.draftSessions.get` — no separate conversation session is created.
-
-```tsx
-import { TrueFoundryGateway } from "truefoundry-gateway-sdk";
-import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
-
-const client = new AgentSessionClient({ apiKey, baseUrl });
-const gateway = new TrueFoundryGateway({ apiKey, baseUrl });
-
-const runtime = useTrueFoundryAgentRuntime({
-  client,
-  gateway,
-  agent: {
-    mode: "draft",
-    defaultAgentSpec: {
-      model: { name: "anthropic/claude-sonnet-4-6" },
-      instructions: "You are a helpful assistant.",
-      mcpServers: [],
-      skills: [],
-    },
-  },
-});
-```
-
-Read and update the active draft spec from UI:
-
-```tsx
-import { useTrueFoundryAgentSpec } from "@truefoundry/assistant-ui-runtime";
-
-function DraftModelPicker() {
-  const { agentSpec, updateAgentSpec, isSpecSyncing } = useTrueFoundryAgentSpec();
-  if (agentSpec == null) return null;
-
-  return (
-    <select
-      value={agentSpec.model.name}
-      disabled={isSpecSyncing}
-      onChange={(e) => updateAgentSpec({ model: { name: e.target.value } })}
-    />
-  );
-}
-```
-
-`AgentSpec` maps the runtime fields from the [Agent manifest reference](https://www.truefoundry.com/docs/agent-platform/agent-harness/sdk/agent-manifest-reference) (`model`, `instructions`, `mcpServers`, `skills`, `config`, etc.). Registry metadata (`name`, `description`, `collaborators`) is not part of `AgentSpec`.
 
 ### Adding adapters
 
 Pass optional assistant-ui adapters through `adapters`. Attachments are **opt-in**: wire the built-in adapter when you want composer file pick / previews and gateway forwarding on send.
 
 ```tsx
-import { trueFoundryAttachmentAdapter, useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
+import { trueFoundryAttachmentAdapter, useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
 
 const runtime = useTrueFoundryAgentRuntime({
   client,
@@ -215,7 +166,7 @@ Render nested threads with `MessagePartPrimitive.Messages` inside your tool fall
 ```tsx
 import { MessagePartPrimitive, MessagePrimitive } from "@assistant-ui/react";
 import { useAuiState } from "@assistant-ui/store";
-import type { TrueFoundryMessageCustomMetadata } from "@truefoundry/assistant-ui-runtime";
+import type { TrueFoundryMessageCustomMetadata } from "truefoundry-agents-assistant-ui-runtime";
 
 function NestedSubAgentAssistantMessage() {
   const custom = useAuiState(
@@ -275,8 +226,6 @@ Do not send partial resumes; the backend rejects incomplete input sets.
 
 When MCP OAuth is required, the paused assistant message has `metadata.custom.pendingMcpAuth === true` and structured `metadata.custom.mcpServers` (`{ id, name, authUrl }[]`) — both fields are on `TrueFoundryMessageCustomMetadata`. After the user completes OAuth in the browser, call `resumeMcpAuth()` from extras (or `startRun` with `runConfig.custom.resumeMcpAuth: true`).
 
-This package only exposes the raw pending state and a resume action — the per-server authorize links and the "Continue" button live in `packages/agent-ui-sdk`'s `McpAuthContainer`/`McpAuthPrompt` (see that package's README). Resuming is always a manual user action; there is no background polling or auto-resume.
-
 ## Runtime extras
 
 Typed escape hatch for adapter-specific state and actions — same pattern as `@assistant-ui/react-google-adk`. Read pending state with selector hooks; call actions via `trueFoundryExtras.get(aui)` when rendering inside nested sub-agent threads (readonly context).
@@ -288,7 +237,7 @@ import {
   useTrueFoundryApprovals,
   useTrueFoundryToolResponses,
   useTrueFoundryMcpAuth,
-} from "@truefoundry/assistant-ui-runtime";
+} from "truefoundry-agents-assistant-ui-runtime";
 
 function ApprovalBar() {
   const { pending, respond } = useTrueFoundryApprovals();
@@ -345,7 +294,7 @@ function McpAuthContinue() {
 ### Action hooks (any render context, including nested sub-agents)
 
 ```tsx
-import { useTrueFoundryRespondToToolApproval } from "@truefoundry/assistant-ui-runtime";
+import { useTrueFoundryRespondToToolApproval } from "truefoundry-agents-assistant-ui-runtime";
 
 function NestedToolApprovalButton({ approvalId }: { approvalId: string }) {
   const respond = useTrueFoundryRespondToToolApproval();
@@ -365,7 +314,7 @@ import {
   useTrueFoundryRespondToToolResponse,
   useTrueFoundryResumeMcpAuth,
   useTrueFoundryCancel,
-} from "@truefoundry/assistant-ui-runtime";
+} from "truefoundry-agents-assistant-ui-runtime";
 
 const respondToApproval = useTrueFoundryRespondToToolApproval();
 const respondToResponse = useTrueFoundryRespondToToolResponse();
@@ -389,8 +338,6 @@ void cancel();
 | `useTrueFoundryRespondToToolResponse()` | `(r: RespondToToolResponseOptions) => void` | Respond to an ask-user / `tool.response_required` prompt from any render context. |
 | `useTrueFoundryResumeMcpAuth()` | `() => Promise<void>` | Resume the paused turn after the user completes MCP OAuth in the browser. |
 | `useTrueFoundryCancel()` | `() => Promise<void>` | Cancel the active turn. Calls `session.cancel()` and drains the stream to its terminal `turn.done`. |
-| `useTrueFoundryAgentSpec()` | `{ agentSpec, draftSessionId, isSpecSyncing, specError, updateAgentSpec }` | Draft mode only — current inline spec and debounced sync state. |
-| `useTrueFoundryUpdateAgentSpec()` | `(update: AgentSpecUpdate) => void` | Draft mode only — update spec from any render context. |
 
 Where:
 
@@ -404,7 +351,7 @@ Where:
 ### Low-level namespace
 
 ```tsx
-import { trueFoundryExtras, type TrueFoundryRuntimeExtras } from "@truefoundry/assistant-ui-runtime";
+import { trueFoundryExtras, type TrueFoundryRuntimeExtras } from "truefoundry-agents-assistant-ui-runtime";
 
 // Throws outside useTrueFoundryAgentRuntime:
 const extras = trueFoundryExtras.use();
@@ -424,7 +371,6 @@ const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
 | `respondToToolResponse` | `(r: { toolCallId, content }) => void` | Stage answer; batch-send when complete |
 | `resumeMcpAuth` | `() => Promise<void>` | Resume after OAuth |
 | `cancel` | `() => Promise<void>` | Cancel the active turn: calls `session.cancel()` and lets the stream drain to its terminal `turn.done` (reconciles on next session load) |
-| `draft` | `TrueFoundryDraftRuntimeExtras \| null` | Draft mode only — inline `AgentSpec`, sync state, and `updateAgentSpec` |
 
 Per-part `respondToApproval` from assistant-ui still works for root-thread tool UIs; extras complements that for global chrome and nested renderers.
 
@@ -444,7 +390,7 @@ Contrast with the [AI SDK resumable streams guide](https://www.assistant-ui.com/
 
 ## Public API
 
-Everything below is exported from the package root (`@truefoundry/assistant-ui-runtime`).
+Everything below is exported from the package root (`truefoundry-agents-assistant-ui-runtime`).
 
 | Export | Kind | Purpose |
 |--------|------|---------|
@@ -461,10 +407,6 @@ Everything below is exported from the package root (`@truefoundry/assistant-ui-r
 | `TrueFoundryRuntimeExtras` | type | Shape provided into the runtime extras slot. |
 | `PendingApproval`, `PendingToolResponse` | types | Derived pending items for UI rendering. |
 | `createTrueFoundryThreadListAdapter` | fn | Builds the cursor-paginated `RemoteThreadListAdapter` powering `<ThreadList>` (`list({ after })` → `nextCursor`). Used internally; exported for custom wiring. |
-| `createTrueFoundryDraftThreadListAdapter` | fn | Draft-session variant of the thread-list adapter (`agents.private.draftSessions.list/create/get`). |
-| `createDraftSessionBridge` | fn | Reads and syncs a draft session's `AgentSpec` (`agents.private.draftSessions.get/update`). |
-| `mergeAgentSpec` | fn | Immutable merge helper for partial `AgentSpec` updates. |
-| `AgentSpec`, `AgentSpecUpdate`, `DraftSession` | types | Gateway inline agent definition types (re-exported). |
 | `getSession` | fn | `(client, sessionId) => Promise<AgentSession>` convenience wrapper. |
 | `convertTurnsToThreadMessages` | fn | Loads a session's turns and folds them into assistant-ui `ThreadMessage[]` (`ConvertTurnsResult`). |
 | `buildTurnAssistantContent` | fn | Folds a single turn's events into assistant content parts. |
@@ -497,11 +439,6 @@ For contributors and agents working inside this package. Source lives in `src/`;
 | `collectPending.ts` | Derives `pendingApprovals`, `pendingToolResponses`, `pendingMcpAuth` from messages. |
 | `requiredActionInputs.ts` | Combined gate + `collectRequiredActionInputs` for batched resume. |
 | `truefoundryThreadListAdapter.ts` | `RemoteThreadListAdapter` — cursor-paginated session list (`list({ after })` → `nextCursor`), create/fetch sessions. |
-| `truefoundryDraftThreadListAdapter.ts` | Draft-session `RemoteThreadListAdapter` backed by `agents.private.draftSessions.*`. |
-| `draftSessionBridge.ts` | Reads and syncs a draft session's `AgentSpec` via `agents.private.draftSessions.get/update`. |
-| `bindDraftAgentSession.ts` | Validates a draft session via `agents.private.draftSessions.get`, then binds turns to it at `/agents/sessions/{draftSessionId}/turns`. |
-| `useDraftAgentSpec.ts` | Debounced draft spec state + `agents.private.draftSessions.update` wiring. |
-| `agentSpec.ts` | `AgentSpec` helpers and `mergeAgentSpec`. |
 | `convertTurnMessages.ts` | `projectSessionMessages` pure projector; `buildSnapshotFromSession` history ingest; `convertTurnsToThreadMessages` wrapper; stream-event aggregation. |
 | `foldPeerThreads.ts` | `PeerThreadFoldState` — folds peer/sub-agent threads under their spawning tool call. |
 | `messageCustomMetadata.ts` | `TrueFoundryMessageCustomMetadata` — typed `metadata.custom` keys for this adapter. |

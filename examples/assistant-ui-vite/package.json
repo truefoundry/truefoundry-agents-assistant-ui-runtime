@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@assistant-ui/core": "^0.2.20",
     "@assistant-ui/react": "^0.14.24",
-    "@assistant-ui/react-markdown": "^0.14.5",
+    "@truefoundry/agent-ui-sdk": "0.0.1",
+    "@truefoundry/assistant-ui-runtime": "workspace:*",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "remark-gfm": "^4.0.1",

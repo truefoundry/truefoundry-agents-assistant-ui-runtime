@@ -9,7 +9,7 @@ import type {
 import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
-import type { AgentSpec } from "./agentSpec.js";
+import type { AgentSpec } from "./private/agentSpec.js";
 
 export type NamedAgentConfig = {
     mode: "named";
