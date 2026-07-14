@@ -50,7 +50,7 @@
   "peerDependencies": {
     "@types/react": "*",
     "react": "^18 || ^19",
-    "truefoundry-gateway-sdk": "^0.2.0"
+    "truefoundry-gateway-sdk": "^0.3.1"
   },
   "peerDependenciesMeta": {
     "@types/react": {

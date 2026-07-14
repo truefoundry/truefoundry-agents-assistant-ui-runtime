@@ -9,3 +9,6 @@ dist/
 
 # CodeGraph (local index, daemon, cache — per-machine)
 .codegraph/
+
+# npm lock file (this repo uses pnpm)
+package-lock.json

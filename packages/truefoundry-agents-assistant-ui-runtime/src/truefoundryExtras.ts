@@ -27,6 +27,7 @@ export type TrueFoundryRuntimeExtras = {
     downloadSandboxFile: (path: string) => Promise<Blob>;
     cancel: () => Promise<void>;
     resetFromTurn: (turnId: string) => Promise<void>;
+    reload: () => void;
     draft: TrueFoundryDraftRuntimeExtras | null;
 };
 

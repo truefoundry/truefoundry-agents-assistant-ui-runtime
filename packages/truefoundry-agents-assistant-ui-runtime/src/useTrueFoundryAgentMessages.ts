@@ -57,6 +57,8 @@ import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 export type UseTrueFoundryAgentMessagesOptions = {
     client: AgentSessionClient;
     sessionId: string | undefined;
+    /** When true the thread is the currently selected (main) thread. */
+    isMain?: boolean | undefined;
     listEventsConcurrency?: number | undefined;
     onError?: ((error: unknown) => void) | undefined;
     initializeSession?: () => Promise<{
@@ -70,7 +72,16 @@ export type UseTrueFoundryAgentMessagesOptions = {
 };
 
 export type SendTurnOptions =
-    | { userMessage: UserMessageContent; previousTurnId?: string | null }
+    | {
+          userMessage: UserMessageContent;
+          previousTurnId?: string | null;
+          /**
+           * When branching (edit/reset), the already-rewound history to send from.
+           * Applied atomically with `pendingUser` so a stale React snapshot cannot
+           * keep pre-branch turns while the new user message is appended.
+           */
+          branchFromSnapshot?: SessionSnapshot;
+      }
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
 
@@ -272,6 +283,7 @@ function resolveTurnInput(
 export function useTrueFoundryAgentMessages({
     client,
     sessionId,
+    isMain,
     listEventsConcurrency,
     onError,
     initializeSession,
@@ -287,9 +299,17 @@ export function useTrueFoundryAgentMessages({
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
+
+    const onErrorRef = useRef(onError);
+    onErrorRef.current = onError;
+    const resolveConversationSessionIdRef = useRef(resolveConversationSessionId);
+    resolveConversationSessionIdRef.current = resolveConversationSessionId;
+    const initializeSessionRef = useRef(initializeSession);
+    initializeSessionRef.current = initializeSession;
 
     const createdAtByMessageIdRef = useRef(new Map<string, Date>());
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -383,7 +403,7 @@ export function useTrueFoundryAgentMessages({
                     if (error instanceof Error && error.name === "AbortError") {
                         return;
                     }
-                    onError?.(error);
+                    onErrorRef.current?.(error);
                     throw error;
                 } finally {
                     if (streamUpdateRaf != null) {
@@ -436,6 +456,20 @@ export function useTrueFoundryAgentMessages({
             setSnapshot(createEmptySessionSnapshot());
             return;
         }
+
+        // Thread components are never unmounted on navigation — isMain going
+        // false→true is the only reliable signal that the user has clicked on
+        // this thread.  Skip the load when this thread is not the active one
+        // so that isMain being a dep triggers a fresh load on every selection.
+        if (isMain === false) return;
+
+        // When we are loading a *different* session the user has navigated away
+        // from the lazily-created one — clear the guard so navigating back to it
+        // later triggers a proper reload instead of silently skipping.
+        if (lazilyCreatedSessionIdRef.current != null && sessionId !== lazilyCreatedSessionIdRef.current) {
+            lazilyCreatedSessionIdRef.current = undefined;
+        }
+
         if (sessionId === lazilyCreatedSessionIdRef.current) {
             return;
         }
@@ -443,18 +477,24 @@ export function useTrueFoundryAgentMessages({
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
         abortControllerRef.current?.abort();
+        createdAtByMessageIdRef.current = new Map();
+        setSnapshot(createEmptySessionSnapshot());
         setIsLoading(true);
 
         try {
             const conversationSessionId = await resolveActiveSessionId(
                 sessionId,
-                resolveConversationSessionId,
+                resolveConversationSessionIdRef.current,
             );
             const loadedSnapshot = await loadSessionSnapshot(
                 client,
                 conversationSessionId,
-                listEventsConcurrency,
                 sessionOptions,
+                (snap) => {
+                    if (generation === loadGenerationRef.current) {
+                        setSnapshot(snap);
+                    }
+                },
             );
             if (generation !== loadGenerationRef.current) {
                 return;
@@ -464,32 +504,44 @@ export function useTrueFoundryAgentMessages({
             setSnapshot(loadedSnapshot);
             runningTurnRef.current = loadedSnapshot.runningTurn;
 
+            // History (and any seeded pendingUser for the in-flight turn) is
+            // ready — clear loading before resuming. Awaiting the subscribe
+            // stream here previously kept isLoading true for the entire
+            // backend run, so reconnect UIs stayed on shimmers even though
+            // subscribe was already live.
+            setIsLoading(false);
+
             if (loadedSnapshot.runningTurn != null) {
                 const turn = loadedSnapshot.runningTurn;
                 const isContinuation = !extractTurnUserText(turn.input);
                 // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
-                await runStream(
+                // Use loadedSnapshot directly — snapshotRef.current still points at
+                // the empty snapshot cleared above until the setSnapshot(loadedSnapshot)
+                // call re-renders.
+                void runStream(
                     (signal) =>
                         resumeTurnStream(
                             turn,
-                            snapshotRef.current.fold,
+                            loadedSnapshot.fold,
                             signal,
                             undefined,
-                            snapshotRef.current.groupRootBaseline,
+                            loadedSnapshot.groupRootBaseline,
                         ),
                     turn.id,
                     isContinuation,
-                );
+                ).catch(() => undefined);
             }
         } catch (error) {
-            onError?.(error);
+            if (generation === loadGenerationRef.current) {
+                onErrorRef.current?.(error);
+            }
             throw error;
         } finally {
             if (generation === loadGenerationRef.current) {
                 setIsLoading(false);
             }
         }
-    }, [client, listEventsConcurrency, onError, resolveConversationSessionId, runStream, sessionId, sessionOptions]);
+    }, [client, runStream, sessionId, sessionOptions, loadRetryTrigger, isMain]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -499,17 +551,17 @@ export function useTrueFoundryAgentMessages({
         async (options: SendTurnOptions) => {
             let activeSessionId = sessionId;
             if (activeSessionId == null) {
-                if (initializeSession == null) {
+                if (initializeSessionRef.current == null) {
                     throw new Error("Cannot send a turn without an active session.");
                 }
-                const { remoteId } = await initializeSession();
+                const { remoteId } = await initializeSessionRef.current();
                 activeSessionId = remoteId;
                 lazilyCreatedSessionIdRef.current = remoteId;
             }
 
             const conversationSessionId = await resolveActiveSessionId(
                 activeSessionId,
-                resolveConversationSessionId,
+                resolveConversationSessionIdRef.current,
             );
             const session = await getSession(client, conversationSessionId, sessionOptions);
             const isContinuation =
@@ -528,34 +580,57 @@ export function useTrueFoundryAgentMessages({
                 );
             }
 
-            setSnapshot((prev) =>
-                commitActiveStream(
-                    prev,
-                    "inputs" in options ? options.inputs : undefined,
-                ),
-            );
+            const branchBase =
+                "userMessage" in options ? options.branchFromSnapshot : undefined;
 
             let groupRootBaseline: readonly string[] | undefined;
 
-            if ("userMessage" in options) {
-                const rootBucket =
-                    snapshotRef.current.fold.threads.get(ROOT_THREAD_ID);
+            if (branchBase != null && "userMessage" in options) {
+                // Atomic apply: never merge pendingUser onto a stale React `prev`
+                // that still holds pre-branch turns (edit would show old + new).
+                const rootBucket = branchBase.fold.threads.get(ROOT_THREAD_ID);
                 groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
-                setSnapshot((prev) =>
-                    replaceSessionSnapshot(prev, {
-                        pendingUser: {
-                            turnId,
-                            content: options.userMessage,
-                            createdAt: new Date(),
-                        },
-                        activeStream: undefined,
-                        groupRootBaseline,
-                    }),
-                );
+                const nextSnapshot = replaceSessionSnapshot(branchBase, {
+                    pendingUser: {
+                        turnId,
+                        content: options.userMessage,
+                        createdAt: new Date(),
+                    },
+                    activeStream: undefined,
+                    groupRootBaseline,
+                });
+                snapshotRef.current = nextSnapshot;
+                setSnapshot(nextSnapshot);
             } else {
-                groupRootBaseline =
-                    snapshotRef.current.groupRootBaseline ??
-                    computeGroupRootBaseline(snapshotRef.current.turns);
+                setSnapshot((prev) =>
+                    commitActiveStream(
+                        prev,
+                        "inputs" in options ? options.inputs : undefined,
+                    ),
+                );
+
+                if ("userMessage" in options) {
+                    const rootBucket =
+                        snapshotRef.current.fold.threads.get(ROOT_THREAD_ID);
+                    groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
+                    setSnapshot((prev) => {
+                        const next = replaceSessionSnapshot(prev, {
+                            pendingUser: {
+                                turnId,
+                                content: options.userMessage,
+                                createdAt: new Date(),
+                            },
+                            activeStream: undefined,
+                            groupRootBaseline,
+                        });
+                        snapshotRef.current = next;
+                        return next;
+                    });
+                } else {
+                    groupRootBaseline =
+                        snapshotRef.current.groupRootBaseline ??
+                        computeGroupRootBaseline(snapshotRef.current.turns);
+                }
             }
 
             await runStream(
@@ -595,7 +670,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation,
             );
         },
-        [client, initializeSession, resolveConversationSessionId, runStream, sessionId, sessionOptions],
+        [client, runStream, sessionId, sessionOptions],
     );
 
     const cancel = useCallback(async () => {
@@ -605,7 +680,7 @@ export function useTrueFoundryAgentMessages({
         }
         const conversationSessionId = await resolveActiveSessionId(
             sessionId,
-            resolveConversationSessionId,
+            resolveConversationSessionIdRef.current,
         );
         const session = await getSession(client, conversationSessionId, sessionOptions);
         // Request cancellation but keep consuming the stream. After cancel(),
@@ -617,7 +692,7 @@ export function useTrueFoundryAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [client, resolveConversationSessionId, sessionId, sessionOptions]);
+    }, [client, sessionId, sessionOptions]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -634,10 +709,10 @@ export function useTrueFoundryAgentMessages({
             }
             const inputs = collectRequiredActionInputs(paused);
             if (inputs.length > 0) {
-                void sendTurn({ inputs }).catch((error) => onError?.(error));
+                void sendTurn({ inputs }).catch((error) => onErrorRef.current?.(error));
             }
         },
-        [onError, projectOptions, sendTurn],
+        [projectOptions, sendTurn],
     );
 
     const respondToToolApproval = useCallback(
@@ -713,7 +788,7 @@ export function useTrueFoundryAgentMessages({
 
             const conversationSessionId = await resolveActiveSessionId(
                 activeSessionId,
-                resolveConversationSessionId,
+                resolveConversationSessionIdRef.current,
             );
             const session = await getSession(client, conversationSessionId, sessionOptions);
             const previousTurnId = await resolveGatewayBranchPreviousTurnId(
@@ -726,18 +801,21 @@ export function useTrueFoundryAgentMessages({
                 listEventsConcurrency,
             );
             createdAtByMessageIdRef.current = new Map();
+            // Keep the ref aligned before awaiting sendTurn so any intermediate
+            // reads (and the atomic pendingUser apply) see the rewound history.
+            snapshotRef.current = rewound;
             setSnapshot(rewound);
 
             await sendTurn({
                 userMessage,
                 previousTurnId,
+                branchFromSnapshot: rewound,
             });
         },
         [
             cancel,
             client,
             listEventsConcurrency,
-            resolveConversationSessionId,
             sendTurn,
             sessionId,
             sessionOptions,
@@ -773,11 +851,15 @@ export function useTrueFoundryAgentMessages({
         [branchFromTurn],
     );
 
+    const retryLoad = useCallback(() => {
+        setLoadRetryTrigger((n) => n + 1);
+    }, []);
+
     return {
         messages,
         isRunning,
         isLoading,
-        load,
+        retryLoad,
         sendTurn,
         cancel,
         respondToToolApproval,

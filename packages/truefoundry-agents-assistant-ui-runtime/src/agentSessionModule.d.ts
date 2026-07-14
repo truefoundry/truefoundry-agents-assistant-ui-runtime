@@ -18,8 +18,20 @@ declare module "truefoundry-gateway-sdk/dist/esm/agents/AgentSession.mjs" {
         }): PreparedTurn;
         listTurns(
             opts?: TrueFoundryGatewayApi.agents.SessionsListTurnsRequest,
+            requestOptions?: unknown,
         ): Promise<core.Page<unknown, TrueFoundryGatewayApi.ListTurnsResponse>>;
-        getTurn(opts: { turnId: string }): Promise<unknown>;
-        cancel(): Promise<void>;
+        /**
+         * Paginated session events across turns (newest first); subscribe to a
+         * running turn for live events.
+         *
+         * @param opts.lastTurnId - Newest turn in the listing window (initial load only).
+         *   Omit to use the session last turn. Running-turn events are excluded.
+         */
+        listEvents(
+            opts?: TrueFoundryGatewayApi.agents.SessionsListEventsRequest,
+            requestOptions?: unknown,
+        ): Promise<core.Page<TrueFoundryGatewayApi.SessionEventItem, TrueFoundryGatewayApi.ListSessionEventsResponse>>;
+        getTurn(opts: { turnId: string }, requestOptions?: unknown): Promise<unknown>;
+        cancel(requestOptions?: unknown): Promise<void>;
     }
 }

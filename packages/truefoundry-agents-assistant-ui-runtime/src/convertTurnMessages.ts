@@ -10,12 +10,15 @@ import type {
     AgentSession,
     McpAuthRequiredEvent,
     Turn,
+    TurnCreatedEvent,
+    TurnDoneEvent,
     TurnEvent,
     TurnInputItem,
     TurnStreamData,
 } from "truefoundry-gateway-sdk/agents";
 
 import { ROOT_THREAD_ID } from "./constants.js";
+import { extractTurnUserText } from "./extractTurnUserText.js";
 import {
     buildRootAssistantContent,
     buildRootAssistantContentForIds,
@@ -42,6 +45,7 @@ import {
     createEmptySessionSnapshot,
     emptyRequiredActionsOverlay,
     replaceSessionSnapshot,
+    sessionEventsToSessionRecord,
     turnToSessionRecord,
 } from "./sessionSnapshot.js";
 import {
@@ -186,12 +190,23 @@ import {
  *   `user.message`.
  * - Tool-call identity is stable via `toolCallId` across events, fold state, and
  *   assistant-ui parts.
- * - Reload (`buildSnapshotFromSession`) and live paths must produce the same
+ * - Reload (`buildSnapshotFromSessionEvents`) and live paths must produce the same
  *   per-group scoping; history uses cumulative `groupRootIds` per turn index,
  *   live uses `groupRootBaseline`.
  */
 
 const TURN_EVENTS_PAGE_SIZE = 25;
+const SESSION_EVENTS_PAGE_SIZE = 100;
+
+/**
+ * Session-level event item — structurally equivalent to
+ * `TrueFoundryGateway.SessionEventItem` from
+ * `AgentSession.listEvents` (not re-exported from agents subpath).
+ */
+type GatewaySessionEventItem = {
+    turnId: string;
+    event: TurnCreatedEvent | TurnDoneEvent | TurnEvent;
+};
 
 export type ConvertTurnsResult = {
     messages: ThreadMessage[];
@@ -731,6 +746,163 @@ export function projectSessionMessages(
 
 const DEFAULT_LIST_EVENTS_CONCURRENCY = 5;
 
+type FetchSessionEventsOptions = {
+    /**
+     * Newest turn in the listing window (initial load only). Lists that turn and
+     * its ancestors. Omit to use the session last turn. Running-turn events are
+     * excluded by the API — subscribe to that turn for live events.
+     */
+    lastTurnId?: string;
+};
+
+/**
+ * Fetches session-level events via `session.listEvents()`. The API returns pages
+ * in desc order (newest first); the collected array is reversed before returning
+ * so callers receive events in chronological (asc) order.
+ */
+async function fetchAllSessionEvents(
+    session: AgentSession,
+    options?: FetchSessionEventsOptions,
+): Promise<GatewaySessionEventItem[]> {
+    const items: GatewaySessionEventItem[] = [];
+    for await (const item of await session.listEvents({
+        limit: SESSION_EVENTS_PAGE_SIZE,
+        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
+    })) {
+        items.push(item as GatewaySessionEventItem);
+    }
+    items.reverse();
+    return items;
+}
+
+/**
+ * Ingests a chronologically ordered list of session-level event items into the
+ * snapshot. `turn.created` marks the start of a turn (provides user input),
+ * content events are folded as usual, and `turn.done` finalises the turn record
+ * and pushes it to `snapshot.turns`.
+ *
+ * `onTurnComplete` is called after each `turn.done` with the partially-built
+ * snapshot so callers can update UI progressively. The fold state is correct at
+ * that point for every turn up to and including the just-completed one.
+ */
+function ingestSessionEventsIntoSnapshot(
+    snapshot: SessionSnapshot,
+    items: GatewaySessionEventItem[],
+    onTurnComplete?: (snap: SessionSnapshot) => void,
+): void {
+    let currentTurnId: string | null = null;
+    let currentCreatedEvent: TurnCreatedEvent | null = null;
+    let currentContentEvents: TurnEvent[] = [];
+    let beforeCount = 0;
+
+    for (const item of items) {
+        const { turnId, event } = item;
+
+        if (event.type === "turn.created") {
+            currentTurnId = turnId;
+            currentCreatedEvent = event;
+            currentContentEvents = [];
+            beforeCount =
+                snapshot.fold.threads.get(ROOT_THREAD_ID)?.modelMessageIds.length ?? 0;
+        } else if (event.type === "turn.done") {
+            if (currentTurnId == null || currentCreatedEvent == null) {
+                continue;
+            }
+
+            const afterBucket = snapshot.fold.threads.get(ROOT_THREAD_ID);
+            const rootModelMessageIds = (afterBucket?.modelMessageIds ?? []).slice(
+                beforeCount,
+            );
+
+            const sandboxEvent = currentContentEvents.find(
+                (ev): ev is Extract<TurnEvent, { type: "sandbox.created" }> =>
+                    ev.type === "sandbox.created",
+            );
+
+            applyUserToolResponsesToFold(
+                snapshot.fold,
+                currentCreatedEvent.input ?? [],
+            );
+            snapshot.turns.push(
+                sessionEventsToSessionRecord(
+                    currentTurnId,
+                    currentCreatedEvent,
+                    event,
+                    rootModelMessageIds,
+                    sandboxEvent?.sandboxId,
+                ),
+            );
+
+            // Pass a new object reference so React's Object.is check in
+            // useState sees a changed value and schedules a re-render.
+            // The snapshot is mutated in place throughout this loop, so
+            // passing `snapshot` directly would make every tick look identical
+            // to React after the first setSnapshot call.
+            onTurnComplete?.(replaceSessionSnapshot(snapshot, {}));
+
+            currentTurnId = null;
+            currentCreatedEvent = null;
+            currentContentEvents = [];
+        } else {
+            if (currentTurnId != null) {
+                ingestTurnEvent(snapshot.fold, event as TurnEvent);
+                currentContentEvents.push(event as TurnEvent);
+            }
+        }
+    }
+}
+
+/**
+ * Builds a session snapshot using the session-level `listEvents` API.
+ *
+ * Compared to `buildSnapshotFromSession`, this makes a single paginated request
+ * for all history events instead of one per turn. Only `listTurns({ limit: 1 })`
+ * is called first to detect a currently-running turn (the session-level API does
+ * not return events for the running turn).
+ *
+ * `onProgress` is called after each complete turn is ingested so callers can
+ * update the UI progressively while the processing loop runs.
+ */
+export async function buildSnapshotFromSessionEvents(
+    session: AgentSession,
+    onProgress?: (snap: SessionSnapshot) => void,
+): Promise<SessionSnapshot> {
+    // Detect a running turn with a single minimal listTurns call.
+    let runningTurn: Turn | undefined;
+    for await (const turn of await session.listTurns({ limit: 1 })) {
+        if ((turn as Turn).state?.status === "running") {
+            runningTurn = turn as Turn;
+        }
+    }
+
+    const items = await fetchAllSessionEvents(session);
+
+    const snapshot = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(snapshot, items, onProgress);
+
+    if (runningTurn == null) {
+        return snapshot;
+    }
+
+    // Session listEvents excludes the running turn. Seed its user message so
+    // reconnect UI can show the in-flight bubble before subscribe yields.
+    const pendingUserText = extractTurnUserText(runningTurn.input);
+    return replaceSessionSnapshot(snapshot, {
+        runningTurn,
+        unstable_resume: true as const,
+        groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
+        ...(pendingUserText
+            ? {
+                  pendingUser: {
+                      turnId: runningTurn.id,
+                      content: extractTurnUserMessageContent(runningTurn.input),
+                      createdAt: new Date(runningTurn.createdAt),
+                  },
+              }
+            : {}),
+    });
+}
+
 function ingestTurnsIntoSnapshot(
     snapshot: SessionSnapshot,
     turns: Turn[],
@@ -775,25 +947,22 @@ export async function buildSnapshotFromSession(
     session: AgentSession,
     concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
 ): Promise<SessionSnapshot> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
+    // Completed history comes from session-level listEvents. The session API
+    // excludes the running turn — hydrate that turn via turn.listEvents so
+    // convertTurnsToThreadMessages still surfaces in-flight content.
+    const snapshot = await buildSnapshotFromSessionEvents(session);
+    if (snapshot.runningTurn == null) {
+        return snapshot;
     }
-    turns.reverse();
 
-    const eventArrays = await fetchAllTurnEventsWithConcurrency(turns, concurrency);
-
-    const snapshot = createEmptySessionSnapshot();
-    const runningTurn = ingestTurnsIntoSnapshot(snapshot, turns, eventArrays);
+    const turn = snapshot.runningTurn;
+    const eventArrays = await fetchAllTurnEventsWithConcurrency([turn], concurrency);
+    ingestTurnsIntoSnapshot(snapshot, [turn], eventArrays);
 
     return replaceSessionSnapshot(snapshot, {
-        ...(runningTurn != null
-            ? {
-                  runningTurn,
-                  unstable_resume: true as const,
-                  groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
-              }
-            : {}),
+        runningTurn: turn,
+        unstable_resume: true as const,
+        groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
     });
 }
 
@@ -803,11 +972,7 @@ export async function buildSnapshotBeforeTurn(
     beforeTurnId: string,
     concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
 ): Promise<SessionSnapshot> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
-    }
-    turns.reverse();
+    const turns = await listSessionTurnsOrdered(session);
 
     const beforeIndex = turns.findIndex((turn) => turn.id === beforeTurnId);
     if (beforeIndex === -1) {
@@ -821,7 +986,7 @@ export async function buildSnapshotBeforeTurn(
 export async function buildSnapshotBeforeTurnIndex(
     session: AgentSession,
     turnIndex: number,
-    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+    _concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
     orderedTurns?: Turn[],
 ): Promise<SessionSnapshot> {
     if (turnIndex <= 0) {
@@ -830,16 +995,16 @@ export async function buildSnapshotBeforeTurnIndex(
 
     const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
     const turnsToInclude = turns.slice(0, turnIndex);
-    if (turnsToInclude.length === 0) {
+    const lastTurnId = turnsToInclude.at(-1)?.id;
+    if (lastTurnId == null) {
         return createEmptySessionSnapshot();
     }
 
-    const eventArrays = await fetchAllTurnEventsWithConcurrency(
-        turnsToInclude,
-        concurrency,
-    );
+    // Anchor the session events window at the newest included turn so the
+    // ancestor chain matches `[turns[0], …, turns[turnIndex - 1]]`.
+    const items = await fetchAllSessionEvents(session, { lastTurnId });
     const snapshot = createEmptySessionSnapshot();
-    ingestTurnsIntoSnapshot(snapshot, turnsToInclude, eventArrays);
+    ingestSessionEventsIntoSnapshot(snapshot, items);
     return snapshot;
 }
 

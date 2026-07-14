@@ -11,11 +11,11 @@ vi.mock("./convertTurnMessages.js", async (importOriginal) => {
     const actual = await importOriginal<typeof import("./convertTurnMessages.js")>();
     return {
         ...actual,
-        buildSnapshotFromSession: vi.fn(),
+        buildSnapshotFromSessionEvents: vi.fn(),
     };
 });
 
-import { buildSnapshotFromSession } from "./convertTurnMessages.js";
+import { buildSnapshotFromSessionEvents } from "./convertTurnMessages.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import { getSession } from "./sessions.js";
 
@@ -28,7 +28,7 @@ describe("loadSessionSnapshot", () => {
 
     it("deduplicates concurrent loads for the same session", async () => {
         vi.mocked(getSession).mockResolvedValue({} as never);
-        vi.mocked(buildSnapshotFromSession).mockResolvedValue(
+        vi.mocked(buildSnapshotFromSessionEvents).mockResolvedValue(
             createEmptySessionSnapshot(),
         );
 
@@ -39,12 +39,12 @@ describe("loadSessionSnapshot", () => {
 
         expect(first).toBe(second);
         expect(getSession).toHaveBeenCalledTimes(1);
-        expect(buildSnapshotFromSession).toHaveBeenCalledTimes(1);
+        expect(buildSnapshotFromSessionEvents).toHaveBeenCalledTimes(1);
     });
 
     it("allows a new load after the previous one settles", async () => {
         vi.mocked(getSession).mockResolvedValue({} as never);
-        vi.mocked(buildSnapshotFromSession).mockResolvedValue(
+        vi.mocked(buildSnapshotFromSessionEvents).mockResolvedValue(
             createEmptySessionSnapshot(),
         );
 
@@ -52,6 +52,21 @@ describe("loadSessionSnapshot", () => {
         await loadSessionSnapshot(mockClient, "session-1");
 
         expect(getSession).toHaveBeenCalledTimes(2);
-        expect(buildSnapshotFromSession).toHaveBeenCalledTimes(2);
+        expect(buildSnapshotFromSessionEvents).toHaveBeenCalledTimes(2);
+    });
+
+    it("forwards onProgress to buildSnapshotFromSessionEvents", async () => {
+        vi.mocked(getSession).mockResolvedValue({} as never);
+        vi.mocked(buildSnapshotFromSessionEvents).mockResolvedValue(
+            createEmptySessionSnapshot(),
+        );
+
+        const onProgress = vi.fn();
+        await loadSessionSnapshot(mockClient, "session-1", undefined, onProgress);
+
+        expect(buildSnapshotFromSessionEvents).toHaveBeenCalledWith(
+            {},
+            onProgress,
+        );
     });
 });

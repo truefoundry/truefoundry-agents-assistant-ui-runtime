@@ -98,6 +98,12 @@ export const useTrueFoundryCancel = () => {
     return () => trueFoundryExtras.get(aui).cancel();
 };
 
+/** Returns a function to reload (retry) the current session from any render context. */
+export const useTrueFoundryReload = () => {
+    const aui = useAui();
+    return () => trueFoundryExtras.get(aui).reload();
+};
+
 /** Returns a function to reset (re-submit) a user turn from any render context. */
 export const useTrueFoundryResetFromTurn = () => {
     const aui = useAui();

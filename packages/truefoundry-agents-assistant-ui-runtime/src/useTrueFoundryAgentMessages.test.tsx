@@ -376,6 +376,52 @@ describe("useTrueFoundryAgentMessages", () => {
         );
     });
 
+    it("clears isLoading while a resumed turn is still streaming", async () => {
+        let releaseStream: (() => void) | undefined;
+        vi.mocked(resumeTurnStream).mockReturnValue(
+            (async function* () {
+                await new Promise<void>((resolve) => {
+                    releaseStream = resolve;
+                });
+                yield { content: [{ type: "text" as const, text: "streamed reply" }] };
+            })(),
+        );
+
+        const runningTurn = {
+            id: "turn-running",
+            input: [{ type: "user.message", content: "keep going" }],
+            createdAt: new Date().toISOString(),
+        } as Turn;
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                runningTurn,
+                unstable_resume: true,
+                pendingUser: {
+                    turnId: runningTurn.id,
+                    content: "keep going",
+                    createdAt: new Date(runningTurn.createdAt),
+                },
+            }),
+        );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+        );
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        expect(resumeTurnStream).toHaveBeenCalled();
+        await waitFor(() => expect(result.current.isRunning).toBe(true));
+        expect(result.current.messages[0]).toMatchObject({
+            role: "user",
+            content: [{ type: "text", text: "keep going" }],
+        });
+
+        await act(async () => {
+            releaseStream?.();
+        });
+        await waitFor(() => expect(result.current.isRunning).toBe(false));
+    });
+
     it("sendTurn appends a user message and streams the assistant reply", async () => {
         const { result } = renderHook(() =>
             useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
@@ -396,6 +442,110 @@ describe("useTrueFoundryAgentMessages", () => {
             role: "assistant",
             content: [{ type: "text", text: "streamed reply" }],
             status: { type: "complete", reason: "stop" },
+        });
+    });
+
+    it("editFromTurn drops prior turns before showing the edited user message", async () => {
+        const createdAt = new Date().toISOString();
+        const fold = new PeerThreadFoldState();
+        ingestTurnEvent(fold, {
+            type: "model.message",
+            id: "model-1",
+            createdAt,
+            threadId: ROOT_THREAD_ID,
+            role: "assistant",
+            content: "How are you",
+        } as never);
+
+        vi.mocked(loadSessionSnapshot).mockResolvedValue({
+            ...replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                turns: [
+                    {
+                        id: "turn-1",
+                        userText: "Hello",
+                        createdAt,
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "Hello" }],
+                        rootModelMessageIds: ["model-1"],
+                    },
+                ],
+            }),
+            fold,
+        });
+        vi.mocked(getSession).mockResolvedValue({
+            cancel: vi.fn().mockResolvedValue(undefined),
+            listTurns: vi.fn(async function* () {}),
+            listEvents: vi.fn(async function* () {}),
+        } as never);
+
+        let releaseStream: (() => void) | undefined;
+        vi.mocked(streamTurnContent).mockReturnValue(
+            (async function* () {
+                yield {
+                    content: [{ type: "text" as const, text: "sunny" }],
+                };
+                await new Promise<void>((resolve) => {
+                    releaseStream = resolve;
+                });
+            })(),
+        );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        expect(result.current.messages.map((m) => m.role)).toEqual([
+            "user",
+            "assistant",
+        ]);
+        expect(result.current.messages[0]).toMatchObject({
+            content: [{ type: "text", text: "Hello" }],
+        });
+
+        let editPromise: Promise<void>;
+        await act(async () => {
+            editPromise = result.current.editFromTurn(
+                "turn-1",
+                "what is the weather like?",
+            );
+            await Promise.resolve();
+        });
+
+        await waitFor(() => {
+            const texts = result.current.messages
+                .filter((m) => m.role === "user")
+                .map((m) =>
+                    m.content
+                        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+                        .map((p) => p.text)
+                        .join(""),
+                );
+            expect(texts).toEqual(["what is the weather like?"]);
+        });
+        expect(
+            result.current.messages.some(
+                (m) =>
+                    m.role === "user" &&
+                    m.content.some((p) => p.type === "text" && p.text === "Hello"),
+            ),
+        ).toBe(false);
+        expect(
+            result.current.messages.some(
+                (m) =>
+                    m.role === "assistant" &&
+                    m.content.some(
+                        (p) => p.type === "text" && p.text.includes("How are you"),
+                    ),
+            ),
+        ).toBe(false);
+
+        await act(async () => {
+            releaseStream?.();
+            await editPromise!;
         });
     });
 
