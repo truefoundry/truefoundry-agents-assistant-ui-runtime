@@ -72,7 +72,16 @@ export type UseTrueFoundryAgentMessagesOptions = {
 };
 
 export type SendTurnOptions =
-    | { userMessage: UserMessageContent; previousTurnId?: string | null }
+    | {
+          userMessage: UserMessageContent;
+          previousTurnId?: string | null;
+          /**
+           * When branching (edit/reset), the already-rewound history to send from.
+           * Applied atomically with `pendingUser` so a stale React snapshot cannot
+           * keep pre-branch turns while the new user message is appended.
+           */
+          branchFromSnapshot?: SessionSnapshot;
+      }
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
 
@@ -495,6 +504,13 @@ export function useTrueFoundryAgentMessages({
             setSnapshot(loadedSnapshot);
             runningTurnRef.current = loadedSnapshot.runningTurn;
 
+            // History (and any seeded pendingUser for the in-flight turn) is
+            // ready — clear loading before resuming. Awaiting the subscribe
+            // stream here previously kept isLoading true for the entire
+            // backend run, so reconnect UIs stayed on shimmers even though
+            // subscribe was already live.
+            setIsLoading(false);
+
             if (loadedSnapshot.runningTurn != null) {
                 const turn = loadedSnapshot.runningTurn;
                 const isContinuation = !extractTurnUserText(turn.input);
@@ -502,7 +518,7 @@ export function useTrueFoundryAgentMessages({
                 // Use loadedSnapshot directly — snapshotRef.current still points at
                 // the empty snapshot cleared above until the setSnapshot(loadedSnapshot)
                 // call re-renders.
-                await runStream(
+                void runStream(
                     (signal) =>
                         resumeTurnStream(
                             turn,
@@ -513,7 +529,7 @@ export function useTrueFoundryAgentMessages({
                         ),
                     turn.id,
                     isContinuation,
-                );
+                ).catch(() => undefined);
             }
         } catch (error) {
             if (generation === loadGenerationRef.current) {
@@ -564,34 +580,57 @@ export function useTrueFoundryAgentMessages({
                 );
             }
 
-            setSnapshot((prev) =>
-                commitActiveStream(
-                    prev,
-                    "inputs" in options ? options.inputs : undefined,
-                ),
-            );
+            const branchBase =
+                "userMessage" in options ? options.branchFromSnapshot : undefined;
 
             let groupRootBaseline: readonly string[] | undefined;
 
-            if ("userMessage" in options) {
-                const rootBucket =
-                    snapshotRef.current.fold.threads.get(ROOT_THREAD_ID);
+            if (branchBase != null && "userMessage" in options) {
+                // Atomic apply: never merge pendingUser onto a stale React `prev`
+                // that still holds pre-branch turns (edit would show old + new).
+                const rootBucket = branchBase.fold.threads.get(ROOT_THREAD_ID);
                 groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
-                setSnapshot((prev) =>
-                    replaceSessionSnapshot(prev, {
-                        pendingUser: {
-                            turnId,
-                            content: options.userMessage,
-                            createdAt: new Date(),
-                        },
-                        activeStream: undefined,
-                        groupRootBaseline,
-                    }),
-                );
+                const nextSnapshot = replaceSessionSnapshot(branchBase, {
+                    pendingUser: {
+                        turnId,
+                        content: options.userMessage,
+                        createdAt: new Date(),
+                    },
+                    activeStream: undefined,
+                    groupRootBaseline,
+                });
+                snapshotRef.current = nextSnapshot;
+                setSnapshot(nextSnapshot);
             } else {
-                groupRootBaseline =
-                    snapshotRef.current.groupRootBaseline ??
-                    computeGroupRootBaseline(snapshotRef.current.turns);
+                setSnapshot((prev) =>
+                    commitActiveStream(
+                        prev,
+                        "inputs" in options ? options.inputs : undefined,
+                    ),
+                );
+
+                if ("userMessage" in options) {
+                    const rootBucket =
+                        snapshotRef.current.fold.threads.get(ROOT_THREAD_ID);
+                    groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
+                    setSnapshot((prev) => {
+                        const next = replaceSessionSnapshot(prev, {
+                            pendingUser: {
+                                turnId,
+                                content: options.userMessage,
+                                createdAt: new Date(),
+                            },
+                            activeStream: undefined,
+                            groupRootBaseline,
+                        });
+                        snapshotRef.current = next;
+                        return next;
+                    });
+                } else {
+                    groupRootBaseline =
+                        snapshotRef.current.groupRootBaseline ??
+                        computeGroupRootBaseline(snapshotRef.current.turns);
+                }
             }
 
             await runStream(
@@ -762,11 +801,15 @@ export function useTrueFoundryAgentMessages({
                 listEventsConcurrency,
             );
             createdAtByMessageIdRef.current = new Map();
+            // Keep the ref aligned before awaiting sendTurn so any intermediate
+            // reads (and the atomic pendingUser apply) see the rewound history.
+            snapshotRef.current = rewound;
             setSnapshot(rewound);
 
             await sendTurn({
                 userMessage,
                 previousTurnId,
+                branchFromSnapshot: rewound,
             });
         },
         [

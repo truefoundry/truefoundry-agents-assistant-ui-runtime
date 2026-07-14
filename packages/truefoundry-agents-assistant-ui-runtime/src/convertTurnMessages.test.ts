@@ -8,6 +8,8 @@ import type {
     ToolApprovalRequiredEvent,
     ToolResponseRequiredEvent,
     Turn,
+    TurnCreatedEvent,
+    TurnDoneEvent,
     TurnEvent,
     TurnStreamData,
 } from "truefoundry-gateway-sdk/agents";
@@ -15,6 +17,8 @@ import type {
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
 import {
+    buildSnapshotBeforeTurnIndex,
+    buildSnapshotFromSessionEvents,
     buildTurnAssistantContent,
     buildUserMessageContent,
     buildUserMessageFromTurnInput,
@@ -132,9 +136,75 @@ function mockTurn(
     };
 }
 
+async function collectTurnListEvents(
+    turn: Pick<Turn, "listEvents">,
+): Promise<TurnEvent[]> {
+    const events: TurnEvent[] = [];
+    for await (const event of await turn.listEvents()) {
+        events.push(event as TurnEvent);
+    }
+    return events;
+}
+
+/**
+ * Builds session-level event items from per-turn mocks — newest-first turns,
+ * running turns excluded (matches session.listEvents API contract).
+ */
+async function sessionEventItemsFromTurns(
+    turnsNewestFirst: ReturnType<typeof mockTurn>[],
+    lastTurnId?: string,
+): Promise<{ turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent }[]> {
+    let chain = turnsNewestFirst.filter((turn) => turn.state.status !== "running");
+    if (lastTurnId != null) {
+        const anchorIndex = chain.findIndex((turn) => turn.id === lastTurnId);
+        chain = anchorIndex === -1 ? [] : chain.slice(anchorIndex);
+    }
+
+    const items: { turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent }[] =
+        [];
+    for (const turn of [...chain].reverse()) {
+        items.push({
+            turnId: turn.id,
+            event: {
+                type: "turn.created",
+                id: `created-${turn.id}`,
+                turnId: turn.id,
+                input: turn.input,
+                state: { status: "running" },
+                createdBy: { subjectId: "u1", subjectType: "user" },
+                createdAt: turn.createdAt,
+            },
+        });
+        for (const event of await collectTurnListEvents(turn as Turn)) {
+            items.push({ turnId: turn.id, event });
+        }
+        items.push({
+            turnId: turn.id,
+            event: {
+                type: "turn.done",
+                id: `done-${turn.id}`,
+                state: turn.state as TurnDoneEvent["state"],
+                createdAt: turn.createdAt,
+            },
+        });
+    }
+    return items;
+}
+
 function mockSession(turns: ReturnType<typeof mockTurn>[]): AgentSession {
     return {
         listTurns: turnsPage(turns as Turn[]) as unknown as AgentSession["listTurns"],
+        listEvents: async (opts?: { lastTurnId?: string }) => {
+            const items = await sessionEventItemsFromTurns(turns, opts?.lastTurnId);
+            return {
+                async *[Symbol.asyncIterator]() {
+                    // session.listEvents yields newest-first.
+                    for (const item of [...items].reverse()) {
+                        yield item;
+                    }
+                },
+            };
+        },
     } as unknown as AgentSession;
 }
 
@@ -2032,20 +2102,27 @@ describe("convertTurnMessages", () => {
 // buildSnapshotFromSessionEvents
 // ---------------------------------------------------------------------------
 
-import type { TurnCreatedEvent, TurnDoneEvent } from "truefoundry-gateway-sdk/agents";
-import { buildSnapshotFromSessionEvents } from "./convertTurnMessages.js";
-
 type SessionEventItem = { turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent };
 
 /** Simulates session.listEvents — returns items in desc order (newest first). */
 function sessionEventsPage(items: SessionEventItem[]) {
-    return async () => ({
-        async *[Symbol.asyncIterator]() {
-            for (const item of [...items].reverse()) {
-                yield item;
-            }
-        },
-    });
+    return async (opts?: { lastTurnId?: string }) => {
+        let filtered = items;
+        if (opts?.lastTurnId != null) {
+            // Chronological items: keep through lastTurnId, drop later turns.
+            const lastIndex = filtered.findLastIndex(
+                (item) => item.turnId === opts.lastTurnId,
+            );
+            filtered = lastIndex === -1 ? [] : filtered.slice(0, lastIndex + 1);
+        }
+        return {
+            async *[Symbol.asyncIterator]() {
+                for (const item of [...filtered].reverse()) {
+                    yield item;
+                }
+            },
+        };
+    };
 }
 
 /** Builds a mock AgentSession with listTurns and listEvents. */
@@ -2154,6 +2231,10 @@ describe("buildSnapshotFromSessionEvents", () => {
         expect(snapshot.runningTurn).toBe(runningTurn);
         expect(snapshot.unstable_resume).toBe(true);
         expect(snapshot.groupRootBaseline).toBeDefined();
+        expect(snapshot.pendingUser).toMatchObject({
+            turnId: "t2",
+            content: "in progress",
+        });
     });
 
     it("calls onProgress after each completed turn", async () => {
@@ -2217,6 +2298,56 @@ describe("buildSnapshotFromSessionEvents", () => {
         );
 
         expect(progressSnapshots).toEqual([1, 2]);
+    });
+});
+
+describe("buildSnapshotBeforeTurnIndex", () => {
+    it("rewinds via session.listEvents({ lastTurnId }) excluding the branch turn", async () => {
+        const t1 = mockTurn({
+            id: "t1",
+            createdAt,
+            input: [{ type: "user.message", content: "first" }],
+            listEvents: eventsPage([
+                modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
+            ]) as unknown as Turn["listEvents"],
+        });
+        const t2 = mockTurn({
+            id: "t2",
+            createdAt,
+            input: [{ type: "user.message", content: "second" }],
+            listEvents: eventsPage([
+                modelMessage({ id: "m2", threadId: ROOT_THREAD_ID, content: "reply 2" }),
+            ]) as unknown as Turn["listEvents"],
+        });
+        const t3 = mockTurn({
+            id: "t3",
+            createdAt,
+            input: [{ type: "user.message", content: "third" }],
+            listEvents: eventsPage([
+                modelMessage({ id: "m3", threadId: ROOT_THREAD_ID, content: "reply 3" }),
+            ]) as unknown as Turn["listEvents"],
+        });
+
+        // listTurns is newest-first.
+        const session = mockSession([t3, t2, t1]);
+        const snapshot = await buildSnapshotBeforeTurnIndex(session, 2);
+
+        expect(snapshot.turns.map((turn) => turn.id)).toEqual(["t1", "t2"]);
+        const messages = projectSessionMessages(snapshot);
+        expect(messages.map((message) => message.id)).toEqual([
+            "t1-user",
+            "t1-assistant",
+            "t2-user",
+            "t2-assistant",
+        ]);
+    });
+
+    it("returns an empty snapshot when branching from the first turn", async () => {
+        const session = mockSession([
+            mockTurn({ id: "t1", createdAt }),
+        ]);
+        const snapshot = await buildSnapshotBeforeTurnIndex(session, 0);
+        expect(snapshot.turns).toHaveLength(0);
     });
 });
 

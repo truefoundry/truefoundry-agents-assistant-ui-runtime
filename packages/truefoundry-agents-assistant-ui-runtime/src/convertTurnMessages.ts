@@ -18,6 +18,7 @@ import type {
 } from "truefoundry-gateway-sdk/agents";
 
 import { ROOT_THREAD_ID } from "./constants.js";
+import { extractTurnUserText } from "./extractTurnUserText.js";
 import {
     buildRootAssistantContent,
     buildRootAssistantContentForIds,
@@ -199,7 +200,8 @@ const SESSION_EVENTS_PAGE_SIZE = 100;
 
 /**
  * Session-level event item — structurally equivalent to
- * `TrueFoundryGateway.SessionEventItem` (not re-exported from agents subpath).
+ * `TrueFoundryGateway.SessionEventItem` from
+ * `AgentSession.listEvents` (not re-exported from agents subpath).
  */
 type GatewaySessionEventItem = {
     turnId: string;
@@ -744,17 +746,28 @@ export function projectSessionMessages(
 
 const DEFAULT_LIST_EVENTS_CONCURRENCY = 5;
 
+type FetchSessionEventsOptions = {
+    /**
+     * Newest turn in the listing window (initial load only). Lists that turn and
+     * its ancestors. Omit to use the session last turn. Running-turn events are
+     * excluded by the API — subscribe to that turn for live events.
+     */
+    lastTurnId?: string;
+};
+
 /**
- * Fetches all session-level events via `session.listEvents()`. The API returns
- * pages in desc order (newest first); the collected array is reversed before
- * returning so callers receive events in chronological (asc) order.
+ * Fetches session-level events via `session.listEvents()`. The API returns pages
+ * in desc order (newest first); the collected array is reversed before returning
+ * so callers receive events in chronological (asc) order.
  */
 async function fetchAllSessionEvents(
     session: AgentSession,
+    options?: FetchSessionEventsOptions,
 ): Promise<GatewaySessionEventItem[]> {
     const items: GatewaySessionEventItem[] = [];
     for await (const item of await session.listEvents({
         limit: SESSION_EVENTS_PAGE_SIZE,
+        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
     })) {
         items.push(item as GatewaySessionEventItem);
     }
@@ -867,12 +880,24 @@ export async function buildSnapshotFromSessionEvents(
     const snapshot = createEmptySessionSnapshot();
     ingestSessionEventsIntoSnapshot(snapshot, items, onProgress);
 
+    if (runningTurn == null) {
+        return snapshot;
+    }
+
+    // Session listEvents excludes the running turn. Seed its user message so
+    // reconnect UI can show the in-flight bubble before subscribe yields.
+    const pendingUserText = extractTurnUserText(runningTurn.input);
     return replaceSessionSnapshot(snapshot, {
-        ...(runningTurn != null
+        runningTurn,
+        unstable_resume: true as const,
+        groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
+        ...(pendingUserText
             ? {
-                  runningTurn,
-                  unstable_resume: true as const,
-                  groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
+                  pendingUser: {
+                      turnId: runningTurn.id,
+                      content: extractTurnUserMessageContent(runningTurn.input),
+                      createdAt: new Date(runningTurn.createdAt),
+                  },
               }
             : {}),
     });
@@ -922,25 +947,22 @@ export async function buildSnapshotFromSession(
     session: AgentSession,
     concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
 ): Promise<SessionSnapshot> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
+    // Completed history comes from session-level listEvents. The session API
+    // excludes the running turn — hydrate that turn via turn.listEvents so
+    // convertTurnsToThreadMessages still surfaces in-flight content.
+    const snapshot = await buildSnapshotFromSessionEvents(session);
+    if (snapshot.runningTurn == null) {
+        return snapshot;
     }
-    turns.reverse();
 
-    const eventArrays = await fetchAllTurnEventsWithConcurrency(turns, concurrency);
-
-    const snapshot = createEmptySessionSnapshot();
-    const runningTurn = ingestTurnsIntoSnapshot(snapshot, turns, eventArrays);
+    const turn = snapshot.runningTurn;
+    const eventArrays = await fetchAllTurnEventsWithConcurrency([turn], concurrency);
+    ingestTurnsIntoSnapshot(snapshot, [turn], eventArrays);
 
     return replaceSessionSnapshot(snapshot, {
-        ...(runningTurn != null
-            ? {
-                  runningTurn,
-                  unstable_resume: true as const,
-                  groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
-              }
-            : {}),
+        runningTurn: turn,
+        unstable_resume: true as const,
+        groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
     });
 }
 
@@ -950,11 +972,7 @@ export async function buildSnapshotBeforeTurn(
     beforeTurnId: string,
     concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
 ): Promise<SessionSnapshot> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
-    }
-    turns.reverse();
+    const turns = await listSessionTurnsOrdered(session);
 
     const beforeIndex = turns.findIndex((turn) => turn.id === beforeTurnId);
     if (beforeIndex === -1) {
@@ -968,7 +986,7 @@ export async function buildSnapshotBeforeTurn(
 export async function buildSnapshotBeforeTurnIndex(
     session: AgentSession,
     turnIndex: number,
-    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+    _concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
     orderedTurns?: Turn[],
 ): Promise<SessionSnapshot> {
     if (turnIndex <= 0) {
@@ -977,16 +995,16 @@ export async function buildSnapshotBeforeTurnIndex(
 
     const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
     const turnsToInclude = turns.slice(0, turnIndex);
-    if (turnsToInclude.length === 0) {
+    const lastTurnId = turnsToInclude.at(-1)?.id;
+    if (lastTurnId == null) {
         return createEmptySessionSnapshot();
     }
 
-    const eventArrays = await fetchAllTurnEventsWithConcurrency(
-        turnsToInclude,
-        concurrency,
-    );
+    // Anchor the session events window at the newest included turn so the
+    // ancestor chain matches `[turns[0], …, turns[turnIndex - 1]]`.
+    const items = await fetchAllSessionEvents(session, { lastTurnId });
     const snapshot = createEmptySessionSnapshot();
-    ingestTurnsIntoSnapshot(snapshot, turnsToInclude, eventArrays);
+    ingestSessionEventsIntoSnapshot(snapshot, items);
     return snapshot;
 }
 
