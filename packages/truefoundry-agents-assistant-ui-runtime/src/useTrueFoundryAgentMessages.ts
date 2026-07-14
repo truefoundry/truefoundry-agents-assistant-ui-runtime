@@ -438,7 +438,7 @@ export function useTrueFoundryAgentMessages({
                 });
             return run;
         },
-        [applyStreamUpdate],
+        [onError],
     );
 
     const load = useCallback(async () => {

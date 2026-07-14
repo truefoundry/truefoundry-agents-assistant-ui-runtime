@@ -63,7 +63,9 @@ function useTrueFoundryAgentRuntimeImpl(
                 : undefined,
     );
     const sessionId = useAuiState((state) => state.threadListItem.remoteId ?? undefined);
-    const isMain = useAuiState((state) => state.threadListItem.isMain);
+    const isMain = useAuiState(
+        (state) => state.threads.mainThreadId === state.threadListItem.id,
+    );
 
     const draftSpec = useDraftAgentSpec({
         draftSessionId,
