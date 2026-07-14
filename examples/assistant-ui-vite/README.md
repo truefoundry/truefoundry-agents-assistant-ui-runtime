@@ -1,14 +1,15 @@
 # assistant-ui-vite
 
-Standalone Vite + React example that consumes `@assistant-ui/react` and `@truefoundry/assistant-ui-runtime` to chat with a TrueFoundry named agent.
+Standalone Vite + React example that wires `@truefoundry/assistant-ui-runtime` to
+[`@truefoundry/agent-ui-sdk`](https://www.npmjs.com/package/@truefoundry/agent-ui-sdk)
+for the chat UI.
 
 ## Features
 
 - Gateway credentials from `.env` (Vite `import.meta.env`)
-- Thread list sidebar with new chat and load-more
-- Streaming chat via `AssistantRuntimeProvider` + `useTrueFoundryAgentRuntime`
-- Tool approval panel (`useTrueFoundryApprovals`)
-- Ask-user response panel (`useTrueFoundryToolResponses`)
+- Session sidebar via `ThreadListContainer`
+- Full thread UI via `Thread` (composer, streaming, tool calls, approvals, ask-user, MCP auth)
+- Attachments enabled through `trueFoundryAttachmentAdapter`
 
 ## Prerequisites
 
@@ -54,7 +55,10 @@ pnpm --filter assistant-ui-vite preview
 .env → import.meta.env → AgentSessionClient
   → useTrueFoundryAgentRuntime({ agentName })
   → AssistantRuntimeProvider
-  → Chat (thread list + thread + interaction panels)
+  → ErrorToasterProvider / TooltipProvider
+  → ThreadListContainer + Thread (@truefoundry/agent-ui-sdk)
 ```
 
-Uses a saved agent via `agentName`. MCP auth and attachments UI are not included in this example.
+Design tokens live in `src/index.css` as CSS variables; the SDK stylesheet is
+imported with `@import "@truefoundry/agent-ui-sdk/openui.css"` so Tailwind scans
+the SDK components.
