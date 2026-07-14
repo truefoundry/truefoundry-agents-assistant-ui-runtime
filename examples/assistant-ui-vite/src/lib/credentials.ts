@@ -4,39 +4,14 @@ export type GatewayCredentials = {
   agentName: string;
 };
 
-const STORAGE_KEY = "tfy-agent-credentials";
-
 export function loadCredentials(): GatewayCredentials | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw == null) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as Partial<GatewayCredentials>;
-    if (
-      typeof parsed.apiKey !== "string" ||
-      parsed.apiKey.trim() === "" ||
-      typeof parsed.gatewayUrl !== "string" ||
-      parsed.gatewayUrl.trim() === "" ||
-      typeof parsed.agentName !== "string" ||
-      parsed.agentName.trim() === ""
-    ) {
-      return null;
-    }
-    return {
-      apiKey: parsed.apiKey.trim(),
-      gatewayUrl: parsed.gatewayUrl.trim(),
-      agentName: parsed.agentName.trim(),
-    };
-  } catch {
+  const apiKey = import.meta.env.VITE_TFY_API_KEY?.trim();
+  const gatewayUrl = import.meta.env.VITE_TFY_GATEWAY_URL?.trim();
+  const agentName = import.meta.env.VITE_TFY_AGENT_NAME?.trim();
+
+  if (!apiKey || !gatewayUrl || !agentName) {
     return null;
   }
-}
 
-export function saveCredentials(credentials: GatewayCredentials): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(credentials));
-}
-
-export function clearCredentials(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  return { apiKey, gatewayUrl, agentName };
 }

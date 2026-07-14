@@ -1,4 +1,4 @@
-# @truefoundry/assistant-ui-runtime
+# truefoundry-agents-assistant-ui-runtime
 
 TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/).
 
@@ -14,19 +14,69 @@ Connect assistant-ui components (`Thread`, `Composer`, tool UIs, `ThreadList`) t
 ## Installation
 
 ```bash
-npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk
+npm install @assistant-ui/react truefoundry-agents-assistant-ui-runtime truefoundry-gateway-sdk@^0.1.0-rc.1
 ```
 
 ## Quickstart
 
-See **[QuickStart.md](./QuickStart.md)** for the full step-by-step guide: install, create an `AgentSessionClient`, wire up `useTrueFoundryAgentRuntime`, mount the component, and set up UI.
+### 1. Create an `AgentSessionClient`
 
-## Keeping secrets server-side
+Construct the client in your app (server module, proxy route, or demo). The runtime only accepts a pre-built client — it does **not** read API keys or gateway URLs itself.
 
-The runtime never reads credentials itself — it only accepts a pre-built `AgentSessionClient`. How you supply that client's API key depends on the environment:
+```tsx
+import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 
-- **Local / development** — keep the API key in a local env file (e.g. `.env.local`, gitignored) and read it via your framework's env mechanism (`import.meta.env.VITE_TFY_API_KEY`, `process.env.*`, etc.). The client talks to the gateway directly with a browser-visible key, which is fine for local development.
-- **Production** — never ship the API key to the browser. Proxy requests through your own backend so the key never reaches the client: pass a custom `fetch` (or `auth`) to `AgentSessionClient` that points at your proxy route, and hold the real key server-side.
+const client = new AgentSessionClient({
+  apiKey: process.env.TFY_API_KEY!,
+  environment: process.env.TFY_GATEWAY_URL!, // https://gateway.truefoundry.ai/<tenant>
+});
+```
+
+For production, point `fetch` or `auth` at your own backend proxy so secrets never reach the browser.
+
+### 2. Set up the client runtime
+
+```tsx
+"use client";
+
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import { useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
+import { Thread } from "@/components/assistant-ui/thread";
+
+const AGENT_NAME = process.env.TFY_AGENT_NAME!;
+const client = new AgentSessionClient({ /* ... */ });
+
+export function MyAssistant() {
+  const runtime = useTrueFoundryAgentRuntime({
+    client,
+    agentName: AGENT_NAME,
+  });
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <Thread />
+    </AssistantRuntimeProvider>
+  );
+}
+```
+
+### 3. Use the component
+
+```tsx
+import { MyAssistant } from "@/components/MyAssistant";
+
+export default function Home() {
+  return (
+    <main className="h-dvh">
+      <MyAssistant />
+    </main>
+  );
+}
+```
+
+### 4. Set up UI components
+
+See the assistant-ui [Thread UI guide](https://www.assistant-ui.com/docs/ui/thread) for wiring Thread, composer, and primitives.
 
 ## `useTrueFoundryAgentRuntime` options
 
@@ -35,78 +85,30 @@ The runtime never reads credentials itself — it only accepts a pre-built `Agen
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `client` | `AgentSessionClient` | Yes | Pre-built gateway client. The runtime never reads credentials itself. |
-| `agent` | `{ mode: "named", agentName }` | No | Discriminated agent source. Omit when using legacy `agentName`. |
-| `agentName` | `string` | Yes* | Agent to run. *Or `agent: { mode: "named", agentName }`. |
+| `agentName` | `string` | Yes | Saved agent to run (gateway agent name). |
 | `initialSessionId` | `string` | No | Pin an existing session once on mount (uncontrolled). |
 | `threadId` | `string` | No | Controlled active session id; reactive and URL-syncable. |
 | `onThreadIdChange` | `(threadId: string \| undefined) => void` | No | Fires when the active session changes. |
 | `onError` | `(error: unknown) => void` | No | Invoked on stream/load/turn errors. |
 | `adapters` | `{ attachments?, speech?, dictation?, voice?, feedback? }` | No | Optional assistant-ui adapters forwarded to the runtime. See [Unsupported assistant-ui features](#unsupported-assistant-ui-features). |
 
-### Named agent mode (saved agent)
+### Specifying the agent
+
+Pass the saved agent name as `agentName`:
 
 ```tsx
 const runtime = useTrueFoundryAgentRuntime({
   client,
-  agent: { mode: "named", agentName: "support-bot" },
+  agentName: "support-bot",
 });
 ```
-
-Legacy `agentName` shorthand is still supported.
-
-### Draft agent mode (inline `AgentSpec`)
-
-Draft mode lists **draft sessions** (`agents.private.draftSessions.*`) in the thread list. Each thread's `remoteId` is a `DraftSession.id`. The runtime syncs `AgentSpec` edits via `agents.private.draftSessions.update`. Turns and history use `/agents/sessions/{draftSessionId}/turns` after validating the draft via `agents.private.draftSessions.get` — no separate conversation session is created.
-
-```tsx
-import { TrueFoundryGateway } from "truefoundry-gateway-sdk";
-import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
-
-const client = new AgentSessionClient({ apiKey, baseUrl });
-const gateway = new TrueFoundryGateway({ apiKey, baseUrl });
-
-const runtime = useTrueFoundryAgentRuntime({
-  client,
-  gateway,
-  agent: {
-    mode: "draft",
-    defaultAgentSpec: {
-      model: { name: "anthropic/claude-sonnet-4-6" },
-      instructions: "You are a helpful assistant.",
-      mcpServers: [],
-      skills: [],
-    },
-  },
-});
-```
-
-Read and update the active draft spec from UI:
-
-```tsx
-import { useTrueFoundryAgentSpec } from "@truefoundry/assistant-ui-runtime";
-
-function DraftModelPicker() {
-  const { agentSpec, updateAgentSpec, isSpecSyncing } = useTrueFoundryAgentSpec();
-  if (agentSpec == null) return null;
-
-  return (
-    <select
-      value={agentSpec.model.name}
-      disabled={isSpecSyncing}
-      onChange={(e) => updateAgentSpec({ model: { name: e.target.value } })}
-    />
-  );
-}
-```
-
-`AgentSpec` maps the runtime fields from the [Agent manifest reference](https://www.truefoundry.com/docs/agent-platform/agent-harness/sdk/agent-manifest-reference) (`model`, `instructions`, `mcpServers`, `skills`, `config`, etc.). Registry metadata (`name`, `description`, `collaborators`) is not part of `AgentSpec`.
 
 ### Adding adapters
 
 Pass optional assistant-ui adapters through `adapters`. Attachments are **opt-in**: wire the built-in adapter when you want composer file pick / previews and gateway forwarding on send.
 
 ```tsx
-import { trueFoundryAttachmentAdapter, useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
+import { trueFoundryAttachmentAdapter, useTrueFoundryAgentRuntime } from "truefoundry-agents-assistant-ui-runtime";
 
 const runtime = useTrueFoundryAgentRuntime({
   client,
@@ -164,7 +166,7 @@ Render nested threads with `MessagePartPrimitive.Messages` inside your tool fall
 ```tsx
 import { MessagePartPrimitive, MessagePrimitive } from "@assistant-ui/react";
 import { useAuiState } from "@assistant-ui/store";
-import type { TrueFoundryMessageCustomMetadata } from "@truefoundry/assistant-ui-runtime";
+import type { TrueFoundryMessageCustomMetadata } from "truefoundry-agents-assistant-ui-runtime";
 
 function NestedSubAgentAssistantMessage() {
   const custom = useAuiState(
@@ -224,8 +226,6 @@ Do not send partial resumes; the backend rejects incomplete input sets.
 
 When MCP OAuth is required, the paused assistant message has `metadata.custom.pendingMcpAuth === true` and structured `metadata.custom.mcpServers` (`{ id, name, authUrl }[]`) — both fields are on `TrueFoundryMessageCustomMetadata`. After the user completes OAuth in the browser, call `resumeMcpAuth()` from extras (or `startRun` with `runConfig.custom.resumeMcpAuth: true`).
 
-This package only exposes the raw pending state and a resume action — the per-server authorize links and the "Continue" button live in `packages/agent-ui-sdk`'s `McpAuthContainer`/`McpAuthPrompt` (see that package's README). Resuming is always a manual user action; there is no background polling or auto-resume.
-
 ## Runtime extras
 
 Typed escape hatch for adapter-specific state and actions — same pattern as `@assistant-ui/react-google-adk`. Read pending state with selector hooks; call actions via `trueFoundryExtras.get(aui)` when rendering inside nested sub-agent threads (readonly context).
@@ -237,7 +237,7 @@ import {
   useTrueFoundryApprovals,
   useTrueFoundryToolResponses,
   useTrueFoundryMcpAuth,
-} from "@truefoundry/assistant-ui-runtime";
+} from "truefoundry-agents-assistant-ui-runtime";
 
 function ApprovalBar() {
   const { pending, respond } = useTrueFoundryApprovals();
@@ -294,7 +294,7 @@ function McpAuthContinue() {
 ### Action hooks (any render context, including nested sub-agents)
 
 ```tsx
-import { useTrueFoundryRespondToToolApproval } from "@truefoundry/assistant-ui-runtime";
+import { useTrueFoundryRespondToToolApproval } from "truefoundry-agents-assistant-ui-runtime";
 
 function NestedToolApprovalButton({ approvalId }: { approvalId: string }) {
   const respond = useTrueFoundryRespondToToolApproval();
@@ -314,7 +314,7 @@ import {
   useTrueFoundryRespondToToolResponse,
   useTrueFoundryResumeMcpAuth,
   useTrueFoundryCancel,
-} from "@truefoundry/assistant-ui-runtime";
+} from "truefoundry-agents-assistant-ui-runtime";
 
 const respondToApproval = useTrueFoundryRespondToToolApproval();
 const respondToResponse = useTrueFoundryRespondToToolResponse();
@@ -351,7 +351,7 @@ Where:
 ### Low-level namespace
 
 ```tsx
-import { trueFoundryExtras, type TrueFoundryRuntimeExtras } from "@truefoundry/assistant-ui-runtime";
+import { trueFoundryExtras, type TrueFoundryRuntimeExtras } from "truefoundry-agents-assistant-ui-runtime";
 
 // Throws outside useTrueFoundryAgentRuntime:
 const extras = trueFoundryExtras.use();
@@ -390,7 +390,7 @@ Contrast with the [AI SDK resumable streams guide](https://www.assistant-ui.com/
 
 ## Public API
 
-Everything below is exported from the package root (`@truefoundry/assistant-ui-runtime`).
+Everything below is exported from the package root (`truefoundry-agents-assistant-ui-runtime`).
 
 | Export | Kind | Purpose |
 |--------|------|---------|
@@ -475,7 +475,7 @@ pnpm test       # vitest run
 pnpm typecheck  # tsc --noEmit
 ```
 
-`dist/` is generated output and is gitignored. From the repo root, `pnpm build` builds this package before the example app.
+`dist/` is generated output and is gitignored. From the repo root, `pnpm build` builds this package before the Next.js app.
 
 ## Unsupported assistant-ui features
 
