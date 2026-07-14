@@ -4,7 +4,7 @@ Standalone Vite + React example that consumes `@assistant-ui/react` and `@truefo
 
 ## Features
 
-- Credentials form (stored in `localStorage`)
+- Gateway credentials from `.env` (Vite `import.meta.env`)
 - Thread list sidebar with new chat and load-more
 - Streaming chat via `AssistantRuntimeProvider` + `useTrueFoundryAgentRuntime`
 - Tool approval panel (`useTrueFoundryApprovals`)
@@ -19,6 +19,18 @@ pnpm install
 pnpm --filter "@truefoundry/assistant-ui-runtime" build
 ```
 
+## Configuration
+
+Copy `.env.example` to `.env` in this directory and fill in your values:
+
+| Variable | Example |
+|----------|---------|
+| `VITE_TFY_API_KEY` | Your TrueFoundry API key |
+| `VITE_TFY_GATEWAY_URL` | `https://gateway.truefoundry.ai/<tenant>` |
+| `VITE_TFY_AGENT_NAME` | A saved agent name, e.g. `my-agent` |
+
+`.env` is gitignored. Restart the dev server after changing env values.
+
 ## Run
 
 From the repo root:
@@ -27,13 +39,7 @@ From the repo root:
 pnpm --filter assistant-ui-vite dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and enter:
-
-| Field | Example |
-|-------|---------|
-| API key | Your TrueFoundry API key |
-| Gateway URL | `https://gateway.truefoundry.ai/<tenant>` |
-| Agent name | A saved agent name, e.g. `my-agent` |
+Open [http://localhost:5173](http://localhost:5173).
 
 ## Build
 
@@ -45,10 +51,10 @@ pnpm --filter assistant-ui-vite preview
 ## Architecture
 
 ```
-CredentialsForm → localStorage → AgentSessionClient
+.env → import.meta.env → AgentSessionClient
   → useTrueFoundryAgentRuntime (named mode)
   → AssistantRuntimeProvider
-  → ThreadList + Thread + InteractionPanels
+  → Chat (thread list + thread + interaction panels)
 ```
 
 Named-agent mode only. Draft agents, MCP auth, and attachments UI are not included in this example.

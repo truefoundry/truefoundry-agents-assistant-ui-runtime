@@ -24,8 +24,3 @@ export function getAgentSessionClient(
   clientCredentialsKey = key;
   return client;
 }
-
-export function resetAgentSessionClient(): void {
-  client = undefined;
-  clientCredentialsKey = undefined;
-}
