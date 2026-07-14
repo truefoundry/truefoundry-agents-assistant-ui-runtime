@@ -52,9 +52,9 @@ pnpm --filter assistant-ui-vite preview
 
 ```
 .env → import.meta.env → AgentSessionClient
-  → useTrueFoundryAgentRuntime (named mode)
+  → useTrueFoundryAgentRuntime({ agentName })
   → AssistantRuntimeProvider
   → Chat (thread list + thread + interaction panels)
 ```
 
-Named-agent mode only. Draft agents, MCP auth, and attachments UI are not included in this example.
+Uses a saved agent via `agentName`. MCP auth and attachments UI are not included in this example.

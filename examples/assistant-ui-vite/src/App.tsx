@@ -42,14 +42,9 @@ function AppContent({ credentials }: { credentials: GatewayCredentials }) {
     [credentials],
   );
 
-  const agent = useMemo(
-    () => ({ mode: "named" as const, agentName: credentials.agentName }),
-    [credentials.agentName],
-  );
-
   const runtime = useTrueFoundryAgentRuntime({
     client,
-    agent,
+    agentName: credentials.agentName,
     onError: console.error,
   });
 

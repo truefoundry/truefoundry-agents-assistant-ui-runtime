@@ -85,7 +85,7 @@ Works in any React app (Vite, Next.js, Remix, etc.).
      const client = useMemo(() => createClient(), []);
      const runtime = useTrueFoundryAgentRuntime({
        client,
-       agent: { mode: "named", agentName: "my-agent" },
+       agentName: "my-agent",
      });
 
      return (
@@ -192,4 +192,3 @@ With this route in place, drop `VITE_TFY_API_KEY` and `VITE_TFY_GATEWAY_URL` fro
 - **Thread list** — render `<ThreadList>` from `@assistant-ui/react` alongside `<Thread>`; the runtime supplies a cursor-paginated thread-list adapter automatically (one gateway session ⇄ one thread).
 - **Tool approvals & ask-user responses** — `useTrueFoundryApprovals` / `useTrueFoundryToolResponses` for gating tool calls and answering prompts.
 - **Attachments** — opt in by wiring `trueFoundryAttachmentAdapter` through the `adapters` option.
-- **Draft agents** — define an inline `AgentSpec` with `agent: { mode: "draft", defaultAgentSpec }` instead of a saved agent name.
