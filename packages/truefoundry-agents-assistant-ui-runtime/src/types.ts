@@ -31,6 +31,7 @@ type TrueFoundryAgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
     onThreadIdChange?: ((threadId: string | undefined) => void) | undefined;
     onError?: ((error: unknown) => void) | undefined;
     listEventsConcurrency?: number | undefined;
+    historyPageSize?: number | undefined;
     adapters?:
         | {
               attachments?: AttachmentAdapter | undefined;

@@ -19,10 +19,14 @@ import {
     buildSnapshotBeforeTurnIndex,
     computeGroupRootBaseline,
     extractTurnUserMessageContent,
+    fetchSessionEventsPage,
+    prependOlderEventsToSnapshot,
     projectSessionMessages,
+    repositoryItemsFromMessages,
     resolveGatewayBranchPreviousTurnId,
     rootModelMessageIdsSinceBaseline,
     userMessageContentToText,
+    type GatewaySessionEventItem,
     type UserMessageContent,
 } from "./convertTurnMessages.js";
 import { extractTurnUserText } from "./extractTurnUserText.js";
@@ -53,6 +57,7 @@ import {
     type RespondToToolResponseOptions,
 } from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
+import { useTrueFoundryHistoryControllerContext } from "./truefoundryHistoryController.js";
 
 export type UseTrueFoundryAgentMessagesOptions = {
     client: AgentSessionClient;
@@ -60,6 +65,7 @@ export type UseTrueFoundryAgentMessagesOptions = {
     /** When true the thread is the currently selected (main) thread. */
     isMain?: boolean | undefined;
     listEventsConcurrency?: number | undefined;
+    historyPageSize?: number | undefined;
     onError?: ((error: unknown) => void) | undefined;
     initializeSession?: () => Promise<{
         remoteId: string;
@@ -285,6 +291,7 @@ export function useTrueFoundryAgentMessages({
     sessionId,
     isMain,
     listEventsConcurrency,
+    historyPageSize,
     onError,
     initializeSession,
     resolveConversationSessionId,
@@ -300,9 +307,18 @@ export function useTrueFoundryAgentMessages({
     const [isRunning, setIsRunning] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
+    const [hasMoreHistory, setHasMoreHistory] = useState(false);
+    const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
+
+    const historyControllerContext = useTrueFoundryHistoryControllerContext();
+    const historyNextPageTokenRef = useRef<string | undefined>(undefined);
+    const chronologicalEventItemsRef = useRef<GatewaySessionEventItem[]>([]);
+    const conversationSessionIdRef = useRef<string | undefined>(undefined);
+    const loadOlderPromiseRef = useRef<Promise<void> | null>(null);
+    const loadOlderGenerationRef = useRef(0);
 
     const onErrorRef = useRef(onError);
     onErrorRef.current = onError;
@@ -476,9 +492,15 @@ export function useTrueFoundryAgentMessages({
 
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
+        ++loadOlderGenerationRef.current;
         abortControllerRef.current?.abort();
         createdAtByMessageIdRef.current = new Map();
         setSnapshot(createEmptySessionSnapshot());
+        historyNextPageTokenRef.current = undefined;
+        chronologicalEventItemsRef.current = [];
+        conversationSessionIdRef.current = undefined;
+        setHasMoreHistory(false);
+        setIsLoadingMoreHistory(false);
         setIsLoading(true);
 
         try {
@@ -486,10 +508,13 @@ export function useTrueFoundryAgentMessages({
                 sessionId,
                 resolveConversationSessionIdRef.current,
             );
-            const loadedSnapshot = await loadSessionSnapshot(
+            const loaded = await loadSessionSnapshot(
                 client,
                 conversationSessionId,
-                sessionOptions,
+                {
+                    ...sessionOptions,
+                    historyPageSize,
+                },
                 (snap) => {
                     if (generation === loadGenerationRef.current) {
                         setSnapshot(snap);
@@ -501,8 +526,12 @@ export function useTrueFoundryAgentMessages({
             }
 
             createdAtByMessageIdRef.current = new Map();
-            setSnapshot(loadedSnapshot);
-            runningTurnRef.current = loadedSnapshot.runningTurn;
+            setSnapshot(loaded.snapshot);
+            runningTurnRef.current = loaded.snapshot.runningTurn;
+            historyNextPageTokenRef.current = loaded.nextPageToken;
+            chronologicalEventItemsRef.current = loaded.chronologicalItems;
+            conversationSessionIdRef.current = conversationSessionId;
+            setHasMoreHistory(loaded.hasMore);
 
             // History (and any seeded pendingUser for the in-flight turn) is
             // ready — clear loading before resuming. Awaiting the subscribe
@@ -511,8 +540,8 @@ export function useTrueFoundryAgentMessages({
             // subscribe was already live.
             setIsLoading(false);
 
-            if (loadedSnapshot.runningTurn != null) {
-                const turn = loadedSnapshot.runningTurn;
+            if (loaded.snapshot.runningTurn != null) {
+                const turn = loaded.snapshot.runningTurn;
                 const isContinuation = !extractTurnUserText(turn.input);
                 // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
                 // Use loadedSnapshot directly — snapshotRef.current still points at
@@ -522,10 +551,10 @@ export function useTrueFoundryAgentMessages({
                     (signal) =>
                         resumeTurnStream(
                             turn,
-                            loadedSnapshot.fold,
+                            loaded.snapshot.fold,
                             signal,
                             undefined,
-                            loadedSnapshot.groupRootBaseline,
+                            loaded.snapshot.groupRootBaseline,
                         ),
                     turn.id,
                     isContinuation,
@@ -541,7 +570,104 @@ export function useTrueFoundryAgentMessages({
                 setIsLoading(false);
             }
         }
-    }, [client, runStream, sessionId, sessionOptions, loadRetryTrigger, isMain]);
+    }, [client, runStream, sessionId, sessionOptions, historyPageSize, loadRetryTrigger, isMain]);
+
+    const loadOlderMessages = useCallback(async () => {
+        if (!hasMoreHistory || isLoadingMoreHistory) {
+            return;
+        }
+        const pageToken = historyNextPageTokenRef.current;
+        if (pageToken == null) {
+            return;
+        }
+        const activeConversationSessionId = conversationSessionIdRef.current;
+        if (activeConversationSessionId == null) {
+            return;
+        }
+
+        if (loadOlderPromiseRef.current != null) {
+            return loadOlderPromiseRef.current;
+        }
+
+        const generation = ++loadOlderGenerationRef.current;
+        setIsLoadingMoreHistory(true);
+
+        const run = (async () => {
+            try {
+                const session = await getSession(
+                    client,
+                    activeConversationSessionId,
+                    sessionOptions,
+                );
+                const page = await fetchSessionEventsPage(session, {
+                    pageToken,
+                    limit: historyPageSize,
+                });
+                if (generation !== loadOlderGenerationRef.current) {
+                    return;
+                }
+
+                const merged = prependOlderEventsToSnapshot(
+                    snapshotRef.current,
+                    page.items,
+                    chronologicalEventItemsRef.current,
+                );
+                chronologicalEventItemsRef.current = merged.chronologicalItems;
+                historyNextPageTokenRef.current = page.nextPageToken;
+                setHasMoreHistory(page.hasMore);
+                setSnapshot(merged.snapshot);
+            } catch (error) {
+                if (generation === loadOlderGenerationRef.current) {
+                    onErrorRef.current?.(error);
+                }
+                throw error;
+            } finally {
+                if (generation === loadOlderGenerationRef.current) {
+                    setIsLoadingMoreHistory(false);
+                }
+            }
+        })();
+
+        loadOlderPromiseRef.current = run;
+        void run
+            .catch(() => undefined)
+            .finally(() => {
+                if (loadOlderPromiseRef.current === run) {
+                    loadOlderPromiseRef.current = null;
+                }
+            });
+        return run;
+    }, [client, hasMoreHistory, historyPageSize, isLoadingMoreHistory, sessionOptions]);
+
+    useEffect(() => {
+        const controllerRef = historyControllerContext?.controllerRef;
+        if (controllerRef == null) {
+            return;
+        }
+
+        controllerRef.current = {
+            getHistoryRepository: () => ({
+                messages: repositoryItemsFromMessages(messages),
+                state: { nextPageToken: historyNextPageTokenRef.current },
+            }),
+            getPaginationState: () => ({
+                hasMore: hasMoreHistory,
+                isLoadingMore: isLoadingMoreHistory,
+                nextPageToken: historyNextPageTokenRef.current,
+            }),
+            loadOlder: loadOlderMessages,
+        };
+
+        return () => {
+            controllerRef.current = null;
+        };
+    }, [
+        historyControllerContext,
+        hasMoreHistory,
+        isLoadingMoreHistory,
+        loadOlderMessages,
+        messages,
+    ]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -859,6 +985,9 @@ export function useTrueFoundryAgentMessages({
         messages,
         isRunning,
         isLoading,
+        hasMoreHistory,
+        isLoadingMoreHistory,
+        loadOlderMessages,
         retryLoad,
         sendTurn,
         cancel,

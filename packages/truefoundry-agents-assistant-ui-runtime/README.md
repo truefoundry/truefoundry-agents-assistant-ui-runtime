@@ -90,6 +90,7 @@ See the assistant-ui [Thread UI guide](https://www.assistant-ui.com/docs/ui/thre
 | `threadId` | `string` | No | Controlled active session id; reactive and URL-syncable. |
 | `onThreadIdChange` | `(threadId: string \| undefined) => void` | No | Fires when the active session changes. |
 | `onError` | `(error: unknown) => void` | No | Invoked on stream/load/turn errors. |
+| `historyPageSize` | `number` | No | `listEvents` page size for the initial thread open and `loadOlder` fetches (default `100`). |
 | `adapters` | `{ attachments?, speech?, dictation?, voice?, feedback? }` | No | Optional assistant-ui adapters forwarded to the runtime. See [Unsupported assistant-ui features](#unsupported-assistant-ui-features). |
 
 ### Specifying the agent
@@ -388,6 +389,42 @@ Works out of the box — no server route or Redis store. TrueFoundry persists ev
 
 Contrast with the [AI SDK resumable streams guide](https://www.assistant-ui.com/docs/guides/resumable-streams), which requires a separate encoded-byte store.
 
+## Paginating message history
+
+Thread open loads only the **newest** `listEvents` page (configurable via `historyPageSize`, default `100`). Older pages are fetched on demand through `useTrueFoundryMessagePagination()` — wire this to your own scroll sentinel or button at the top of `ThreadPrimitive.Viewport`.
+
+Each active thread mounts a thread-scoped `ThreadHistoryAdapter` via `RemoteThreadListAdapter.unstable_Provider` (canonical assistant-ui shape). Message truth still lives in `useExternalStoreRuntime` (`messages` from `useTrueFoundryAgentMessages`); the history adapter coordinates pagination state and is forward-compatible with assistant-ui persistence patterns.
+
+```tsx
+import { useEffect, useRef } from "react";
+import { useTrueFoundryMessagePagination } from "truefoundry-agents-assistant-ui-runtime";
+
+function MessageHistoryLoader() {
+  const { hasMore, isLoadingMore, loadOlder } = useTrueFoundryMessagePagination();
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (el == null || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting && !isLoadingMore) void loadOlder();
+      },
+      { root: el.closest("[data-radix-scroll-area-viewport]") },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, loadOlder]);
+
+  return <div ref={sentinelRef} aria-hidden />;
+}
+```
+
+When prepending older messages, preserve scroll position in your viewport (record `scrollHeight` before `loadOlder()`, then adjust `scrollTop` after the new messages render).
+
+Gateway pagination: initial `listEvents({ limit })` omits `pageToken`; subsequent `loadOlder()` calls pass `pageToken` from the previous page's `nextPageToken` to walk backward toward older events.
+
 ## Public API
 
 Everything below is exported from the package root (`truefoundry-agents-assistant-ui-runtime`).
@@ -403,6 +440,12 @@ Everything below is exported from the package root (`truefoundry-agents-assistan
 | `useTrueFoundryRespondToToolResponse` | hook | Same pattern for tool responses. |
 | `useTrueFoundryResumeMcpAuth` | hook | Same pattern for MCP resume. |
 | `useTrueFoundryCancel` | hook | Same pattern for cancel. |
+| `useTrueFoundryMessagePagination` | hook | `{ hasMore, isLoadingMore, loadOlder }` for paginated message history. |
+| `useTrueFoundryReload` | hook | Same pattern for session reload. |
+| `createTrueFoundryThreadHistoryProvider` | fn | Factory for `unstable_Provider` + `ThreadHistoryAdapter` (used by built-in thread-list adapters). |
+| `fetchSessionEventsPage` | fn | Low-level single-page `session.listEvents` fetch. |
+| `prependOlderEventsToSnapshot` | fn | Merge an older events page into a `SessionSnapshot` without duplicate turns. |
+| `DEFAULT_HISTORY_PAGE_SIZE` | const | Default `listEvents` limit (`100`). |
 | `trueFoundryExtras` | namespace | `createRuntimeExtras` channel — `.use()`, `.get(aui)`, `.provide()`. |
 | `TrueFoundryRuntimeExtras` | type | Shape provided into the runtime extras slot. |
 | `PendingApproval`, `PendingToolResponse` | types | Derived pending items for UI rendering. |

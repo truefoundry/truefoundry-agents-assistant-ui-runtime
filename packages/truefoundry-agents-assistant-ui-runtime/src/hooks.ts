@@ -104,6 +104,24 @@ export const useTrueFoundryReload = () => {
     return () => trueFoundryExtras.get(aui).reload();
 };
 
+/** Paginated message history controls for the active thread. */
+export const useTrueFoundryMessagePagination = () => {
+    const extras = trueFoundryExtras.use((e) => e.history, undefined);
+
+    return useMemo(
+        () => ({
+            hasMore: extras?.hasMore ?? false,
+            isLoadingMore: extras?.isLoadingMore ?? false,
+            loadOlder:
+                extras?.loadOlder ??
+                (async () => {
+                    throw new Error("TrueFoundry runtime is not ready yet");
+                }),
+        }),
+        [extras],
+    );
+};
+
 /** Returns a function to reset (re-submit) a user turn from any render context. */
 export const useTrueFoundryResetFromTurn = () => {
     const aui = useAui();

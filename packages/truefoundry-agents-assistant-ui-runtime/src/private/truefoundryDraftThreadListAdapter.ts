@@ -3,8 +3,10 @@ import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import { draftSessionTitle, type AgentSpec } from "./agentSpec.js";
 import { sessionListStartTimestamp } from "../sessionListStartTimestamp.js";
+import { createTrueFoundryThreadHistoryProvider } from "../truefoundryThreadHistoryProvider.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
+const threadHistoryProvider = createTrueFoundryThreadHistoryProvider();
 
 export function createTrueFoundryDraftThreadListAdapter(options: {
     gateway: TrueFoundryGateway;
@@ -14,6 +16,8 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
     const { gateway, defaultAgentSpec, getAgentSpec } = options;
 
     return {
+        unstable_Provider: threadHistoryProvider,
+
         async list({ after } = {}) {
             const page = await gateway.agents.private.draftSessions.list({
                 limit: THREAD_LIST_PAGE_SIZE,

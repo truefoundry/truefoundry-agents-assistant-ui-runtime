@@ -42,6 +42,7 @@ import {
     type ProjectSessionMessagesOptions,
     type SessionTurnRecord,
     type RequiredActionsOverlay,
+    cloneRequiredActionsOverlay,
     createEmptySessionSnapshot,
     emptyRequiredActionsOverlay,
     replaceSessionSnapshot,
@@ -198,14 +199,39 @@ import {
 const TURN_EVENTS_PAGE_SIZE = 25;
 const SESSION_EVENTS_PAGE_SIZE = 100;
 
+/** Default `listEvents` page size for initial and older history loads. */
+export const DEFAULT_HISTORY_PAGE_SIZE = SESSION_EVENTS_PAGE_SIZE;
+
 /**
  * Session-level event item — structurally equivalent to
  * `TrueFoundryGateway.SessionEventItem` from
  * `AgentSession.listEvents` (not re-exported from agents subpath).
  */
-type GatewaySessionEventItem = {
+export type GatewaySessionEventItem = {
     turnId: string;
     event: TurnCreatedEvent | TurnDoneEvent | TurnEvent;
+};
+
+export type FetchSessionEventsPageOptions = {
+    /** Initial load only — newest turn in the listing window. */
+    lastTurnId?: string;
+    /** Token from the previous page's `nextPageToken` when loading older events. */
+    pageToken?: string;
+    limit?: number;
+};
+
+export type SessionEventsPageResult = {
+    /** Events in chronological (asc) order. */
+    items: GatewaySessionEventItem[];
+    nextPageToken: string | undefined;
+    hasMore: boolean;
+};
+
+export type SessionEventsPageLoadResult = {
+    snapshot: SessionSnapshot;
+    chronologicalItems: GatewaySessionEventItem[];
+    nextPageToken: string | undefined;
+    hasMore: boolean;
 };
 
 export type ConvertTurnsResult = {
@@ -760,6 +786,38 @@ type FetchSessionEventsOptions = {
  * in desc order (newest first); the collected array is reversed before returning
  * so callers receive events in chronological (asc) order.
  */
+function readSessionEventsNextPageToken(
+    response: { pagination?: { nextPageToken?: string } },
+): string | undefined {
+    const token = response.pagination?.nextPageToken;
+    if (token == null || token === "") {
+        return undefined;
+    }
+    return token;
+}
+
+/**
+ * Fetches a single page of session-level events. The API returns items in desc
+ * order (newest first); the returned `items` array is chronological (asc).
+ */
+export async function fetchSessionEventsPage(
+    session: AgentSession,
+    options?: FetchSessionEventsPageOptions,
+): Promise<SessionEventsPageResult> {
+    const page = await session.listEvents({
+        limit: options?.limit ?? SESSION_EVENTS_PAGE_SIZE,
+        ...(options?.pageToken != null ? { pageToken: options.pageToken } : {}),
+        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
+    });
+    const items = [...page.data] as GatewaySessionEventItem[];
+    items.reverse();
+    return {
+        items,
+        nextPageToken: readSessionEventsNextPageToken(page.response),
+        hasMore: page.hasNextPage(),
+    };
+}
+
 async function fetchAllSessionEvents(
     session: AgentSession,
     options?: FetchSessionEventsOptions,
@@ -773,6 +831,81 @@ async function fetchAllSessionEvents(
     }
     items.reverse();
     return items;
+}
+
+export function filterOlderEventsWithoutDuplicateTurns(
+    olderItems: readonly GatewaySessionEventItem[],
+    existingTurnIds: ReadonlySet<string>,
+): GatewaySessionEventItem[] {
+    return olderItems.filter((item) => !existingTurnIds.has(item.turnId));
+}
+
+export function mergeChronologicalEventItems(
+    olderItems: readonly GatewaySessionEventItem[],
+    existingItems: readonly GatewaySessionEventItem[],
+): GatewaySessionEventItem[] {
+    if (olderItems.length === 0) {
+        return [...existingItems];
+    }
+    if (existingItems.length === 0) {
+        return [...olderItems];
+    }
+    const existingTurnIds = new Set(existingItems.map((item) => item.turnId));
+    const filteredOlder = olderItems.filter((item) => !existingTurnIds.has(item.turnId));
+    return [...filteredOlder, ...existingItems];
+}
+
+type LiveSnapshotState = Pick<
+    SessionSnapshot,
+    | "runningTurn"
+    | "pendingUser"
+    | "activeStream"
+    | "unstable_resume"
+    | "groupRootBaseline"
+    | "requiredActions"
+    | "pendingMcpAuth"
+>;
+
+function extractLiveSnapshotState(snapshot: SessionSnapshot): LiveSnapshotState {
+    return {
+        runningTurn: snapshot.runningTurn,
+        pendingUser: snapshot.pendingUser,
+        activeStream: snapshot.activeStream,
+        unstable_resume: snapshot.unstable_resume,
+        groupRootBaseline: snapshot.groupRootBaseline,
+        requiredActions: snapshot.requiredActions,
+        pendingMcpAuth: snapshot.pendingMcpAuth,
+    };
+}
+
+/** Rebuilds historical fold/turns from chronological events and re-attaches live state. */
+export function rebuildSnapshotFromChronologicalEvents(
+    items: readonly GatewaySessionEventItem[],
+    liveState: LiveSnapshotState,
+): SessionSnapshot {
+    const snapshot = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(snapshot, [...items]);
+    return replaceSessionSnapshot(snapshot, {
+        ...liveState,
+        requiredActions: cloneRequiredActionsOverlay(liveState.requiredActions),
+    });
+}
+
+export function prependOlderEventsToSnapshot(
+    snapshot: SessionSnapshot,
+    olderItems: readonly GatewaySessionEventItem[],
+    chronologicalItems: readonly GatewaySessionEventItem[],
+): { snapshot: SessionSnapshot; chronologicalItems: GatewaySessionEventItem[] } {
+    const existingTurnIds = new Set(snapshot.turns.map((turn) => turn.id));
+    const filteredOlder = filterOlderEventsWithoutDuplicateTurns(olderItems, existingTurnIds);
+    const mergedItems = mergeChronologicalEventItems(filteredOlder, chronologicalItems);
+    return {
+        snapshot: rebuildSnapshotFromChronologicalEvents(
+            mergedItems,
+            extractLiveSnapshotState(snapshot),
+        ),
+        chronologicalItems: mergedItems,
+    };
 }
 
 /**
@@ -863,29 +996,10 @@ function ingestSessionEventsIntoSnapshot(
  * `onProgress` is called after each complete turn is ingested so callers can
  * update the UI progressively while the processing loop runs.
  */
-export async function buildSnapshotFromSessionEvents(
-    session: AgentSession,
-    onProgress?: (snap: SessionSnapshot) => void,
-): Promise<SessionSnapshot> {
-    // Detect a running turn with a single minimal listTurns call.
-    let runningTurn: Turn | undefined;
-    for await (const turn of await session.listTurns({ limit: 1 })) {
-        if ((turn as Turn).state?.status === "running") {
-            runningTurn = turn as Turn;
-        }
-    }
-
-    const items = await fetchAllSessionEvents(session);
-
-    const snapshot = createEmptySessionSnapshot();
-    ingestSessionEventsIntoSnapshot(snapshot, items, onProgress);
-
-    if (runningTurn == null) {
-        return snapshot;
-    }
-
-    // Session listEvents excludes the running turn. Seed its user message so
-    // reconnect UI can show the in-flight bubble before subscribe yields.
+function applyRunningTurnToSnapshot(
+    snapshot: SessionSnapshot,
+    runningTurn: Turn,
+): SessionSnapshot {
     const pendingUserText = extractTurnUserText(runningTurn.input);
     return replaceSessionSnapshot(snapshot, {
         runningTurn,
@@ -901,6 +1015,64 @@ export async function buildSnapshotFromSessionEvents(
               }
             : {}),
     });
+}
+
+/**
+ * Builds a session snapshot from a single `listEvents` page (newest window on
+ * initial load, older window when `pageToken` is set).
+ */
+export async function buildSnapshotFromSessionEventsPage(
+    session: AgentSession,
+    options?: FetchSessionEventsPageOptions & {
+        onProgress?: (snap: SessionSnapshot) => void;
+    },
+): Promise<SessionEventsPageLoadResult> {
+    let runningTurn: Turn | undefined;
+    if (options?.pageToken == null) {
+        for await (const turn of await session.listTurns({ limit: 1 })) {
+            if ((turn as Turn).state?.status === "running") {
+                runningTurn = turn as Turn;
+            }
+        }
+    }
+
+    const page = await fetchSessionEventsPage(session, options);
+    const snapshot = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(snapshot, page.items, options?.onProgress);
+
+    const resultSnapshot =
+        runningTurn != null && options?.pageToken == null
+            ? applyRunningTurnToSnapshot(snapshot, runningTurn)
+            : snapshot;
+
+    return {
+        snapshot: resultSnapshot,
+        chronologicalItems: page.items,
+        nextPageToken: page.nextPageToken,
+        hasMore: page.hasMore,
+    };
+}
+
+export async function buildSnapshotFromSessionEvents(
+    session: AgentSession,
+    onProgress?: (snap: SessionSnapshot) => void,
+): Promise<SessionSnapshot> {
+    let runningTurn: Turn | undefined;
+    for await (const turn of await session.listTurns({ limit: 1 })) {
+        if ((turn as Turn).state?.status === "running") {
+            runningTurn = turn as Turn;
+        }
+    }
+
+    const items = await fetchAllSessionEvents(session);
+    const snapshot = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(snapshot, items, onProgress);
+
+    if (runningTurn == null) {
+        return snapshot;
+    }
+
+    return applyRunningTurnToSnapshot(snapshot, runningTurn);
 }
 
 function ingestTurnsIntoSnapshot(

@@ -7,7 +7,7 @@ import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
-import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
+import { loadSessionSnapshot, type LoadSessionSnapshotResult } from "./loadSessionSnapshot.js";
 import {
     buildRootAssistantContent,
     ingestTurnEvent,
@@ -125,8 +125,7 @@ function snapshotWithAskUserPendingInFold(): SessionSnapshot {
 
     const content = buildRootAssistantContent(fold);
 
-    return replaceSessionSnapshot(createEmptySessionSnapshot(), {
-        fold,
+    const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
         pendingUser: {
             turnId,
             content: "ask me a question",
@@ -143,6 +142,8 @@ function snapshotWithAskUserPendingInFold(): SessionSnapshot {
             },
         },
     });
+    snapshot.fold = fold;
+    return snapshot;
 }
 
 function assistantMessageWithPendingApproval() {
@@ -279,11 +280,26 @@ async function* singleUpdateStream() {
     yield { content: [{ type: "text" as const, text: "streamed reply" }] };
 }
 
+function loadSessionResult(
+    snapshot: SessionSnapshot,
+    overrides?: Partial<LoadSessionSnapshotResult>,
+): LoadSessionSnapshotResult {
+    return {
+        snapshot,
+        chronologicalItems: [],
+        nextPageToken: undefined,
+        hasMore: false,
+        ...overrides,
+    };
+}
+
 describe("useTrueFoundryAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(getSession).mockResolvedValue({} as never);
-        vi.mocked(loadSessionSnapshot).mockResolvedValue(createEmptySessionSnapshot());
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            loadSessionResult(createEmptySessionSnapshot()),
+        );
         vi.mocked(streamTurnContent).mockReturnValue(singleUpdateStream());
         vi.mocked(resumeTurnStream).mockReturnValue(singleUpdateStream());
     });
@@ -331,7 +347,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("loads converted session history on mount", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            snapshotWithUserTurn("hello"),
+            loadSessionResult(snapshotWithUserTurn("hello")),
         );
 
         const { result } = renderHook(() =>
@@ -347,7 +363,8 @@ describe("useTrueFoundryAgentMessages", () => {
     it("resumes a running turn after load", async () => {
         const runningTurn = { id: "turn-running" } as Turn;
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+            loadSessionResult(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
                 turns: [
                     {
                         id: runningTurn.id,
@@ -359,6 +376,7 @@ describe("useTrueFoundryAgentMessages", () => {
                 runningTurn,
                 unstable_resume: true,
             }),
+            ),
         );
 
         const { result } = renderHook(() =>
@@ -393,7 +411,8 @@ describe("useTrueFoundryAgentMessages", () => {
             createdAt: new Date().toISOString(),
         } as Turn;
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+            loadSessionResult(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
                 runningTurn,
                 unstable_resume: true,
                 pendingUser: {
@@ -402,6 +421,7 @@ describe("useTrueFoundryAgentMessages", () => {
                     createdAt: new Date(runningTurn.createdAt),
                 },
             }),
+            ),
         );
 
         const { result } = renderHook(() =>
@@ -457,25 +477,24 @@ describe("useTrueFoundryAgentMessages", () => {
             content: "How are you",
         } as never);
 
-        vi.mocked(loadSessionSnapshot).mockResolvedValue({
-            ...replaceSessionSnapshot(createEmptySessionSnapshot(), {
-                turns: [
-                    {
-                        id: "turn-1",
-                        userText: "Hello",
-                        createdAt,
-                        state: {
-                            status: "done",
-                            requiredActions: [],
-                            completedAt: createdAt,
-                        },
-                        input: [{ type: "user.message", content: "Hello" }],
-                        rootModelMessageIds: ["model-1"],
+        const snapshot = replaceSessionSnapshot(createEmptySessionSnapshot(), {
+            turns: [
+                {
+                    id: "turn-1",
+                    userText: "Hello",
+                    createdAt,
+                    state: {
+                        status: "done",
+                        requiredActions: [],
+                        completedAt: createdAt,
                     },
-                ],
-            }),
-            fold,
+                    input: [{ type: "user.message", content: "Hello" }],
+                    rootModelMessageIds: ["model-1"],
+                },
+            ],
         });
+        snapshot.fold = fold;
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(loadSessionResult(snapshot));
         vi.mocked(getSession).mockResolvedValue({
             cancel: vi.fn().mockResolvedValue(undefined),
             listTurns: vi.fn(async function* () {}),
@@ -646,7 +665,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("sendTurn with approvals streams a continuation without adding a user message", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            snapshotWithAssistantMessage(assistantMessageWithPendingApproval()),
+            loadSessionResult(snapshotWithAssistantMessage(assistantMessageWithPendingApproval())),
         );
 
         const { result } = renderHook(() =>
@@ -689,7 +708,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("respondToToolApproval records approval decisions on the pending tool call", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            snapshotWithAssistantMessage(assistantMessageWithPendingApproval()),
+            loadSessionResult(snapshotWithAssistantMessage(assistantMessageWithPendingApproval())),
         );
 
         const { result } = renderHook(() =>
@@ -723,7 +742,9 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("respondToToolApproval sends combined inputs only after responses are answered", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            snapshotWithAssistantMessage(assistantMessageWithPendingApprovalAndResponse()),
+            loadSessionResult(
+                snapshotWithAssistantMessage(assistantMessageWithPendingApprovalAndResponse()),
+            ),
         );
 
         const { result } = renderHook(() =>
@@ -782,7 +803,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("keeps ask-user resolved after respond and stream completion clears overlay", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
-            snapshotWithAskUserPendingInFold(),
+            loadSessionResult(snapshotWithAskUserPendingInFold()),
         );
 
         const { result } = renderHook(() =>
@@ -810,7 +831,9 @@ describe("useTrueFoundryAgentMessages", () => {
     describe("batched resume invariant", () => {
         it("issues exactly one prepareTurn input batch across root and sub-agent threads", async () => {
             vi.mocked(loadSessionSnapshot).mockResolvedValue(
-                snapshotWithAssistantMessage(assistantMessageWithMultiThreadPendingActions()),
+                loadSessionResult(
+                    snapshotWithAssistantMessage(assistantMessageWithMultiThreadPendingActions()),
+                ),
             );
 
             const { result } = renderHook(() =>
@@ -860,7 +883,9 @@ describe("useTrueFoundryAgentMessages", () => {
 
         it("does not resume after the first resolved action when another is still pending", async () => {
             vi.mocked(loadSessionSnapshot).mockResolvedValue(
+                loadSessionResult(
                 snapshotWithAssistantMessage(assistantMessageWithPendingApprovalAndResponse()),
+            ),
             );
 
             const { result } = renderHook(() =>

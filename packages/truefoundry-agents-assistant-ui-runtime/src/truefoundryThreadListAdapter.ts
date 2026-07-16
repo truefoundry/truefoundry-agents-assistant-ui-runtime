@@ -4,7 +4,10 @@ import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 import { getSession } from "./sessions.js";
 import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
 
+import { createTrueFoundryThreadHistoryProvider } from "./truefoundryThreadHistoryProvider.js";
+
 const THREAD_LIST_PAGE_SIZE = 20;
+const threadHistoryProvider = createTrueFoundryThreadHistoryProvider();
 
 export function createTrueFoundryThreadListAdapter(options: {
     client: AgentSessionClient;
@@ -13,6 +16,8 @@ export function createTrueFoundryThreadListAdapter(options: {
     const { client, agentName } = options;
 
     return {
+        unstable_Provider: threadHistoryProvider,
+
         async list({ after } = {}) {
             const page = await client.listSessions({
                 agentName,

@@ -16,6 +16,12 @@ export type TrueFoundryDraftRuntimeExtras = {
     updateAgentSpec: (update: AgentSpecUpdate) => void;
 };
 
+export type TrueFoundryHistoryRuntimeExtras = {
+    hasMore: boolean;
+    isLoadingMore: boolean;
+    loadOlder: () => Promise<void>;
+};
+
 export type TrueFoundryRuntimeExtras = {
     pendingApprovals: PendingApproval[];
     pendingToolResponses: PendingToolResponse[];
@@ -28,6 +34,7 @@ export type TrueFoundryRuntimeExtras = {
     cancel: () => Promise<void>;
     resetFromTurn: (turnId: string) => Promise<void>;
     reload: () => void;
+    history: TrueFoundryHistoryRuntimeExtras;
     draft: TrueFoundryDraftRuntimeExtras | null;
 };
 

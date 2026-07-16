@@ -19,12 +19,15 @@ import { collectPendingToolResponses } from "./collectPending.js";
 import {
     buildSnapshotBeforeTurnIndex,
     buildSnapshotFromSessionEvents,
+    buildSnapshotFromSessionEventsPage,
     buildTurnAssistantContent,
     buildUserMessageContent,
     buildUserMessageFromTurnInput,
     convertTurnsToThreadMessages,
     getTurnMessageContent,
     projectSessionMessages,
+    prependOlderEventsToSnapshot,
+    fetchSessionEventsPage,
     repositoryItemsFromMessages,
     streamTurnEvents,
     turnStreamUpdateToAssistantMessage,
@@ -2348,6 +2351,157 @@ describe("buildSnapshotBeforeTurnIndex", () => {
         ]);
         const snapshot = await buildSnapshotBeforeTurnIndex(session, 0);
         expect(snapshot.turns).toHaveLength(0);
+    });
+});
+
+function mockSingleListEventsPage(
+    items: SessionEventItem[],
+    nextPageToken?: string,
+) {
+    return async () => ({
+        data: [...items].reverse(),
+        response: {
+            pagination: {
+                nextPageToken,
+            },
+        },
+        hasNextPage: () => nextPageToken != null && nextPageToken !== "",
+    });
+}
+
+describe("message history pagination helpers", () => {
+    it("fetchSessionEventsPage returns one page and cursor", async () => {
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c1",
+                    turnId: "t1",
+                    input: [{ type: "user.message", content: "hello" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d1",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+
+        const session = {
+            listEvents: mockSingleListEventsPage(items, "older-page"),
+        } as unknown as AgentSession;
+
+        const page = await fetchSessionEventsPage(session, { limit: 10 });
+        expect(page.items).toHaveLength(2);
+        expect(page.items[0]?.turnId).toBe("t1");
+        expect(page.nextPageToken).toBe("older-page");
+        expect(page.hasMore).toBe(true);
+    });
+
+    it("prependOlderEventsToSnapshot dedupes overlapping turns", async () => {
+        const newerItems: SessionEventItem[] = [
+            {
+                turnId: "t2",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c2",
+                    turnId: "t2",
+                    input: [{ type: "user.message", content: "second" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t2",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d2",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+        const olderItems: SessionEventItem[] = [
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c1",
+                    turnId: "t1",
+                    input: [{ type: "user.message", content: "first" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d1",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+            ...newerItems,
+        ];
+
+        const initial = await buildSnapshotFromSessionEvents(
+            mockSessionWithEvents([], newerItems),
+        );
+        const merged = prependOlderEventsToSnapshot(initial, olderItems, newerItems);
+        const messages = projectSessionMessages(merged.snapshot);
+        expect(messages.map((message) => message.id)).toEqual([
+            "t1-user",
+            "t1-assistant",
+            "t2-user",
+            "t2-assistant",
+        ]);
+    });
+
+    it("buildSnapshotFromSessionEventsPage loads only the first page", async () => {
+        const pageOne: SessionEventItem[] = [
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c1",
+                    turnId: "t1",
+                    input: [{ type: "user.message", content: "only page" }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t1",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d1",
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+
+        const session = {
+            listTurns: turnsPage([]),
+            listEvents: mockSingleListEventsPage(pageOne, "next"),
+        } as unknown as AgentSession;
+
+        const result = await buildSnapshotFromSessionEventsPage(session, { limit: 10 });
+        expect(result.snapshot.turns).toHaveLength(1);
+        expect(result.hasMore).toBe(true);
+        expect(result.nextPageToken).toBe("next");
     });
 });
 

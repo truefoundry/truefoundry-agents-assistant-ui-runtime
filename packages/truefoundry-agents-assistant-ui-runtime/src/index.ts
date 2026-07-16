@@ -34,7 +34,7 @@ export type {
 } from "./messageCustomMetadata.js";
 export type { SandboxCreatedEvent } from "truefoundry-gateway-sdk/agents";
 export type { PendingApproval, PendingToolResponse } from "./collectPending.js";
-export type { TrueFoundryRuntimeExtras } from "./truefoundryExtras.js";
+export type { TrueFoundryHistoryRuntimeExtras, TrueFoundryRuntimeExtras } from "./truefoundryExtras.js";
 export { trueFoundryExtras } from "./truefoundryExtras.js";
 export {
     useTrueFoundryApprovals,
@@ -48,6 +48,7 @@ export {
     useTrueFoundryCancel,
     useTrueFoundryResetFromTurn,
     useTrueFoundryReload,
+    useTrueFoundryMessagePagination,
 } from "./hooks.js";
 export {
     collectApprovalInputs,
@@ -65,5 +66,17 @@ export {
     findPausedAssistantMessage,
 } from "./requiredActionInputs.js";
 export { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
+export { createTrueFoundryThreadHistoryProvider } from "./truefoundryThreadHistoryProvider.js";
+export {
+    DEFAULT_HISTORY_PAGE_SIZE,
+    fetchSessionEventsPage,
+    prependOlderEventsToSnapshot,
+} from "./convertTurnMessages.js";
+export type {
+    FetchSessionEventsPageOptions,
+    GatewaySessionEventItem,
+    SessionEventsPageLoadResult,
+    SessionEventsPageResult,
+} from "./convertTurnMessages.js";
 export { getSession } from "./sessions.js";
 export { trueFoundryAttachmentAdapter } from "./attachmentAdapter.js";

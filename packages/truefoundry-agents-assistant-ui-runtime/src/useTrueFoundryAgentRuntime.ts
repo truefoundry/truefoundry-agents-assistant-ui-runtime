@@ -47,6 +47,7 @@ function useTrueFoundryAgentRuntimeImpl(
         adapters,
         onError,
         listEventsConcurrency,
+        historyPageSize,
         ...sharedOptions
     } = options;
 
@@ -98,11 +99,15 @@ function useTrueFoundryAgentRuntimeImpl(
         editFromTurn,
         resetFromTurn,
         retryLoad,
+        hasMoreHistory,
+        isLoadingMoreHistory,
+        loadOlderMessages,
     } = useTrueFoundryAgentMessages({
         client,
         sessionId,
         isMain,
         listEventsConcurrency,
+        historyPageSize,
         onError,
         initializeSession,
         draftGateway: agent.mode === "draft" ? gateway : undefined,
@@ -181,6 +186,11 @@ function useTrueFoundryAgentRuntimeImpl(
                     onError?.(error);
                 }),
             reload: retryLoad,
+            history: {
+                hasMore: hasMoreHistory,
+                isLoadingMore: isLoadingMoreHistory,
+                loadOlder: loadOlderMessages,
+            },
             draft: draftExtras,
         }),
         unstable_enableToolInvocations: true,
