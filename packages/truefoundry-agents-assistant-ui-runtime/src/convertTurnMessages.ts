@@ -199,9 +199,9 @@ import {
  */
 
 const TURN_EVENTS_PAGE_SIZE = 25;
-const SESSION_EVENTS_PAGE_SIZE = 10;
+const SESSION_EVENTS_PAGE_SIZE = 100;
 /** Cap how many event pages initial load / load-older may chain for a group boundary. */
-const MAX_HISTORY_BOUNDARY_PAGES = 100;
+const MAX_HISTORY_BOUNDARY_PAGES = 10;
 
 type FetchSessionEventsOptions = {
     /**
