@@ -104,6 +104,24 @@ export const useTrueFoundryReload = () => {
     return () => trueFoundryExtras.get(aui).reload();
 };
 
+/** Older history pagination state plus a load-more action for scroll-up. */
+export const useTrueFoundryHistoryPagination = () => {
+    const extras = trueFoundryExtras.use((e) => e, undefined);
+
+    return useMemo(
+        () => ({
+            hasOlderHistory: extras?.hasOlderHistory ?? false,
+            isLoadingOlderHistory: extras?.isLoadingOlderHistory ?? false,
+            loadOlderHistory:
+                extras?.loadOlderHistory ??
+                (async () => {
+                    throw new Error("TrueFoundry runtime is not ready yet");
+                }),
+        }),
+        [extras],
+    );
+};
+
 /** Returns a function to reset (re-submit) a user turn from any render context. */
 export const useTrueFoundryResetFromTurn = () => {
     const aui = useAui();

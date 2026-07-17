@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   ErrorToasterProvider,
+  SlotsProvider,
   Thread,
   ThreadListContainer,
   TooltipProvider,
@@ -11,6 +12,7 @@ import {
   useTrueFoundryAgentRuntime,
 } from "@truefoundry/assistant-ui-runtime";
 
+import { HistoryViewportShell } from "./HistoryViewportShell";
 import { getAgentSessionClient } from "./lib/agentClient";
 import { loadCredentials, type GatewayCredentials } from "./lib/credentials";
 
@@ -61,14 +63,16 @@ function AppContent({ credentials }: { credentials: GatewayCredentials }) {
     <AssistantRuntimeProvider runtime={runtime}>
       <ErrorToasterProvider>
         <TooltipProvider>
-          <div className="flex h-dvh overflow-hidden">
-            <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-border">
-              <ThreadListContainer />
-            </aside>
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-              <Thread />
+          <SlotsProvider overrides={{ ThreadViewportShell: HistoryViewportShell }}>
+            <div className="flex h-dvh overflow-hidden">
+              <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-border">
+                <ThreadListContainer />
+              </aside>
+              <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                <Thread />
+              </div>
             </div>
-          </div>
+          </SlotsProvider>
         </TooltipProvider>
       </ErrorToasterProvider>
     </AssistantRuntimeProvider>

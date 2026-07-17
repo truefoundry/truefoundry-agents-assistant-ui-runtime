@@ -48,6 +48,7 @@ export {
     useTrueFoundryCancel,
     useTrueFoundryResetFromTurn,
     useTrueFoundryReload,
+    useTrueFoundryHistoryPagination,
 } from "./hooks.js";
 export {
     collectApprovalInputs,

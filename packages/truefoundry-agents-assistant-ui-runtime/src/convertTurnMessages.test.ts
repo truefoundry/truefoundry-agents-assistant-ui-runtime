@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AppendMessage } from "@assistant-ui/core";
 import type {
     AgentSession,
@@ -24,6 +24,7 @@ import {
     buildUserMessageFromTurnInput,
     convertTurnsToThreadMessages,
     getTurnMessageContent,
+    prependOlderSessionHistory,
     projectSessionMessages,
     repositoryItemsFromMessages,
     streamTurnEvents,
@@ -95,6 +96,12 @@ function eventsPage(events: TurnEvent[]) {
 
 function turnsPage(turns: Turn[]) {
     return async () => ({
+        data: turns,
+        response: {
+            data: turns,
+            pagination: { limit: turns.length || 1 },
+        },
+        hasNextPage: () => false,
         async *[Symbol.asyncIterator]() {
             for (const turn of turns) {
                 yield turn;
@@ -194,12 +201,18 @@ async function sessionEventItemsFromTurns(
 function mockSession(turns: ReturnType<typeof mockTurn>[]): AgentSession {
     return {
         listTurns: turnsPage(turns as Turn[]) as unknown as AgentSession["listTurns"],
-        listEvents: async (opts?: { lastTurnId?: string }) => {
+        listEvents: async (opts?: { lastTurnId?: string; pageToken?: string; limit?: number }) => {
             const items = await sessionEventItemsFromTurns(turns, opts?.lastTurnId);
+            const newestFirst = [...items].reverse();
             return {
+                data: newestFirst,
+                response: {
+                    data: newestFirst,
+                    pagination: { limit: newestFirst.length || 1 },
+                },
+                hasNextPage: () => false,
                 async *[Symbol.asyncIterator]() {
-                    // session.listEvents yields newest-first.
-                    for (const item of [...items].reverse()) {
+                    for (const item of newestFirst) {
                         yield item;
                     }
                 },
@@ -2105,8 +2118,15 @@ describe("convertTurnMessages", () => {
 type SessionEventItem = { turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent };
 
 /** Simulates session.listEvents — returns items in desc order (newest first). */
-function sessionEventsPage(items: SessionEventItem[]) {
-    return async (opts?: { lastTurnId?: string }) => {
+function sessionEventsPage(
+    items: SessionEventItem[],
+    options?: { pageSize?: number },
+) {
+    return async (opts?: {
+        lastTurnId?: string;
+        pageToken?: string;
+        limit?: number;
+    }) => {
         let filtered = items;
         if (opts?.lastTurnId != null) {
             // Chronological items: keep through lastTurnId, drop later turns.
@@ -2115,9 +2135,28 @@ function sessionEventsPage(items: SessionEventItem[]) {
             );
             filtered = lastIndex === -1 ? [] : filtered.slice(0, lastIndex + 1);
         }
+        const newestFirst = [...filtered].reverse();
+        // Prefer fixture pageSize so pagination tests are not forced to the API default limit.
+        const pageSize =
+            options?.pageSize ?? opts?.limit ?? (newestFirst.length || 1);
+        const pageIndex = opts?.pageToken != null ? Number(opts.pageToken) : 0;
+        const start = pageIndex * pageSize;
+        const slice = newestFirst.slice(start, start + pageSize);
+        const hasMore = start + pageSize < newestFirst.length;
+        const nextPageToken = hasMore ? String(pageIndex + 1) : undefined;
         return {
+            data: slice,
+            response: {
+                data: slice,
+                pagination: {
+                    limit: pageSize,
+                    ...(nextPageToken != null ? { nextPageToken } : {}),
+                },
+            },
+            hasNextPage: () => hasMore,
             async *[Symbol.asyncIterator]() {
-                for (const item of [...filtered].reverse()) {
+                // Full drain for rewind paths that still iterate all pages.
+                for (const item of newestFirst) {
                     yield item;
                 }
             },
@@ -2298,6 +2337,106 @@ describe("buildSnapshotFromSessionEvents", () => {
         );
 
         expect(progressSnapshots).toEqual([1, 2]);
+    });
+
+    it("only inspects the newest listTurns page for a running turn", async () => {
+        const listTurns = vi.fn(async () => ({
+            data: [
+                {
+                    id: "t-running",
+                    state: { status: "running" },
+                    input: [{ type: "user.message", content: "now" }],
+                    createdAt,
+                },
+            ],
+            response: { data: [], pagination: { limit: 1, nextPageToken: "more" } },
+            hasNextPage: () => true,
+            getNextPage: async () => {
+                throw new Error("listTurns must not paginate on initial load");
+            },
+            async *[Symbol.asyncIterator]() {
+                throw new Error("listTurns must not be fully iterated on initial load");
+            },
+        }));
+
+        const session = {
+            listTurns,
+            listEvents: sessionEventsPage([]),
+        } as unknown as AgentSession;
+
+        const snapshot = await buildSnapshotFromSessionEvents(session);
+        expect(listTurns).toHaveBeenCalledWith({ limit: 1 });
+        expect(snapshot.runningTurn?.id).toBe("t-running");
+        expect(snapshot.pendingUser?.content).toBe("now");
+    });
+
+    it("loads only the newest event page and exposes an older-history cursor", async () => {
+        const makeTurnItems = (id: string, text: string): SessionEventItem[] => [
+            {
+                turnId: id,
+                event: {
+                    type: "turn.created",
+                    id: `evt-c-${id}`,
+                    turnId: id,
+                    input: [{ type: "user.message", content: text }],
+                    state: { status: "running" },
+                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: id,
+                event: modelMessage({
+                    id: `m-${id}`,
+                    threadId: ROOT_THREAD_ID,
+                    content: `reply ${text}`,
+                }),
+            },
+            {
+                turnId: id,
+                event: {
+                    type: "turn.done",
+                    id: `evt-d-${id}`,
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+
+        // 3 events per turn; pageSize 3 → one turn per page (newest first).
+        const items = [
+            ...makeTurnItems("t1", "first"),
+            ...makeTurnItems("t2", "second"),
+            ...makeTurnItems("t3", "third"),
+        ];
+        const listEvents = sessionEventsPage(items, { pageSize: 3 });
+        const listEventsSpy = vi.fn(listEvents);
+        const session = {
+            listTurns: turnsPage([]),
+            listEvents: listEventsSpy,
+        } as unknown as AgentSession;
+
+        const snapshot = await buildSnapshotFromSessionEvents(session);
+        expect(listEventsSpy).toHaveBeenCalledTimes(1);
+        expect(snapshot.turns.map((t) => t.id)).toEqual(["t3"]);
+        expect(snapshot.historyPagination).toEqual({
+            hasOlder: true,
+            olderPageToken: "1",
+        });
+
+        const withOlder = await prependOlderSessionHistory(session, snapshot);
+        expect(withOlder.turns.map((t) => t.id)).toEqual(["t2", "t3"]);
+        expect(projectSessionMessages(withOlder).map((m) => m.role)).toEqual([
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+        ]);
+        expect(withOlder.historyPagination?.hasOlder).toBe(true);
+
+        const withAll = await prependOlderSessionHistory(session, withOlder);
+        expect(withAll.turns.map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
+        expect(withAll.historyPagination?.hasOlder).toBe(false);
     });
 });
 
