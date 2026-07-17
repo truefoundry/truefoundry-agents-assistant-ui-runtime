@@ -100,4 +100,54 @@ describe("useDraftAgentSpec", () => {
         expect(syncAgentSpec).toHaveBeenCalledOnce();
         expect(timestamp).toBe("2026-06-30T13:00:00.000Z");
     });
+
+    it("drops pending sync state and stored timestamp when draftSessionId changes", async () => {
+        const syncAgentSpec = vi
+            .fn()
+            .mockResolvedValue("2026-06-30T14:00:00.000Z");
+        const draftBridge: DraftSessionBridge = {
+            getDraftAgentSpec: vi.fn().mockResolvedValue(defaultAgentSpec),
+            syncAgentSpec,
+        };
+
+        const { result, rerender } = renderHook(
+            ({ draftSessionId }: { draftSessionId: string }) =>
+                useDraftAgentSpec({
+                    draftSessionId,
+                    draftBridge,
+                    defaultAgentSpec,
+                }),
+            { initialProps: { draftSessionId: "draft-1" } },
+        );
+
+        await flushMicrotasks();
+
+        // A completed sync stores a timestamp for draft-1...
+        act(() => {
+            result.current.updateAgentSpec({ instructions: "for draft-1" });
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+        await flushMicrotasks();
+        expect(syncAgentSpec).toHaveBeenCalledWith("draft-1", expect.anything());
+
+        // ...and another edit leaves a pending debounced flush for draft-1.
+        act(() => {
+            result.current.updateAgentSpec({ instructions: "pending for draft-1" });
+        });
+
+        rerender({ draftSessionId: "draft-2" });
+        await flushMicrotasks();
+
+        let timestamp: string | undefined;
+        await act(async () => {
+            timestamp = await result.current.takeTurnHeaderTimestamp();
+        });
+
+        // Neither draft-1's stored timestamp nor its pending flush leaks into draft-2.
+        expect(timestamp).toBeUndefined();
+        expect(syncAgentSpec).toHaveBeenCalledOnce();
+        expect(result.current.isSpecSyncing).toBe(false);
+    });
 });

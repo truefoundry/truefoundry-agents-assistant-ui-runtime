@@ -50,6 +50,32 @@ export function useDraftAgentSpec({
     const lastUpdatedAtRef = useRef<string | undefined>(undefined);
     const pendingFlushRef = useRef<(() => Promise<void>) | undefined>(undefined);
     const inFlightFlushRef = useRef<Promise<void> | undefined>(undefined);
+    const activeDraftIdRef = useRef(draftSessionId);
+
+    // Invalidate sync state from the previous draft so a stale pending flush or
+    // stored updatedAt can't update the wrong draft or leak into the next
+    // turn's header. Bumping the generation makes any in-flight sync a no-op.
+    useEffect(() => {
+        const previousDraftId = activeDraftIdRef.current;
+        if (previousDraftId === draftSessionId) {
+            return;
+        }
+        activeDraftIdRef.current = draftSessionId;
+        syncGenerationRef.current++;
+        if (syncTimeoutRef.current != null) {
+            clearTimeout(syncTimeoutRef.current);
+            syncTimeoutRef.current = undefined;
+        }
+        pendingFlushRef.current = undefined;
+        inFlightFlushRef.current = undefined;
+        lastUpdatedAtRef.current = undefined;
+        setIsSpecSyncing(false);
+        // Dirty edits made against a previous draft must not be replayed onto
+        // the new one. Keep them only for lazy creation (undefined -> id).
+        if (previousDraftId != null) {
+            localDirtyRef.current = false;
+        }
+    }, [draftSessionId]);
 
     useEffect(() => {
         if (!enabled || draftBridge == null) {
