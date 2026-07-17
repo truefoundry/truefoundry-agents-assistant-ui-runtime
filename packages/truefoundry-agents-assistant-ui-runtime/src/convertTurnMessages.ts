@@ -27,6 +27,7 @@ import {
     ingestStreamEvent,
     ingestTurnEvent,
     PeerThreadFoldState,
+    type ThreadBucket,
 } from "./foldPeerThreads.js";
 import {
     appendMcpAuthToTurnContent,
@@ -42,6 +43,8 @@ import {
     type ProjectSessionMessagesOptions,
     type SessionTurnRecord,
     type RequiredActionsOverlay,
+    type GatewaySessionEventItem,
+    type SessionHistoryPagination,
     createEmptySessionSnapshot,
     emptyRequiredActionsOverlay,
     replaceSessionSnapshot,
@@ -197,16 +200,435 @@ import {
 
 const TURN_EVENTS_PAGE_SIZE = 25;
 const SESSION_EVENTS_PAGE_SIZE = 100;
+/** Cap how many event pages initial load / load-older may chain for a group boundary. */
+const MAX_HISTORY_BOUNDARY_PAGES = 10;
+
+type FetchSessionEventsOptions = {
+    /**
+     * Newest turn in the listing window (initial load only). Lists that turn and
+     * its ancestors. Omit to use the session last turn. Running-turn events are
+     * excluded by the API — subscribe to that turn for live events.
+     */
+    lastTurnId?: string;
+};
+
+type SessionEventsPageResult = {
+    /** Newest-first items from this request. */
+    itemsNewestFirst: GatewaySessionEventItem[];
+    olderPageToken?: string;
+    hasOlder: boolean;
+};
 
 /**
- * Session-level event item — structurally equivalent to
- * `TrueFoundryGateway.SessionEventItem` from
- * `AgentSession.listEvents` (not re-exported from agents subpath).
+ * Drops a leading incomplete turn (events before the first `turn.created`) that
+ * appears when a page boundary splits a turn.
  */
-type GatewaySessionEventItem = {
-    turnId: string;
-    event: TurnCreatedEvent | TurnDoneEvent | TurnEvent;
-};
+function trimIncompleteLeadingEvents(
+    itemsAsc: GatewaySessionEventItem[],
+): GatewaySessionEventItem[] {
+    const start = itemsAsc.findIndex((item) => item.event.type === "turn.created");
+    if (start === -1) {
+        return [];
+    }
+    return itemsAsc.slice(start);
+}
+
+/**
+ * Whether the oldest complete turn in a chronological window opens a user group.
+ * `incomplete` means we still lack a finished oldest turn (need an older page).
+ */
+function oldestCompleteTurnGroupState(
+    itemsAsc: GatewaySessionEventItem[],
+): "user-group" | "continuation" | "incomplete" {
+    const trimmed = trimIncompleteLeadingEvents(itemsAsc);
+    if (trimmed.length === 0) {
+        return "incomplete";
+    }
+    const created = trimmed[0];
+    if (created?.event.type !== "turn.created") {
+        return "incomplete";
+    }
+    const hasDone = trimmed.some(
+        (item) => item.turnId === created.turnId && item.event.type === "turn.done",
+    );
+    if (!hasDone) {
+        return "incomplete";
+    }
+    return extractTurnUserText(created.event.input) != null
+        ? "user-group"
+        : "continuation";
+}
+
+async function fetchSessionEventsPage(
+    session: AgentSession,
+    options?: FetchSessionEventsOptions & { pageToken?: string },
+): Promise<SessionEventsPageResult> {
+    const page = await session.listEvents({
+        limit: SESSION_EVENTS_PAGE_SIZE,
+        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
+        ...(options?.pageToken != null ? { pageToken: options.pageToken } : {}),
+    });
+    const response = page.response as {
+        pagination?: { nextPageToken?: string };
+    };
+    const olderPageToken = response.pagination?.nextPageToken;
+    const hasOlder =
+        typeof page.hasNextPage === "function"
+            ? page.hasNextPage()
+            : olderPageToken != null && olderPageToken !== "";
+    return {
+        itemsNewestFirst: page.data as GatewaySessionEventItem[],
+        ...(olderPageToken != null && olderPageToken !== ""
+            ? { olderPageToken }
+            : {}),
+        hasOlder,
+    };
+}
+
+/**
+ * Fetches pages until the chronological window starts on a complete user-message
+ * turn group (or history is exhausted).
+ */
+async function fetchSessionEventsWindow(
+    session: AgentSession,
+    options?: FetchSessionEventsOptions & { pageToken?: string },
+): Promise<{
+    itemsAsc: GatewaySessionEventItem[];
+    olderPageToken?: string;
+    hasOlder: boolean;
+}> {
+    let itemsNewestFirst: GatewaySessionEventItem[] = [];
+    let pageToken = options?.pageToken;
+    let olderPageToken: string | undefined;
+    let hasOlder = false;
+
+    for (let pageCount = 0; pageCount < MAX_HISTORY_BOUNDARY_PAGES; pageCount++) {
+        const page = await fetchSessionEventsPage(session, {
+            ...options,
+            ...(pageToken != null ? { pageToken } : {}),
+        });
+        itemsNewestFirst = [...itemsNewestFirst, ...page.itemsNewestFirst];
+        olderPageToken = page.olderPageToken;
+        hasOlder = page.hasOlder;
+
+        const itemsAsc = trimIncompleteLeadingEvents([...itemsNewestFirst].reverse());
+        const groupState = oldestCompleteTurnGroupState(itemsAsc);
+        if (groupState === "user-group" || !hasOlder) {
+            return {
+                itemsAsc,
+                ...(olderPageToken != null ? { olderPageToken } : {}),
+                hasOlder,
+            };
+        }
+
+        if (olderPageToken == null) {
+            return { itemsAsc, hasOlder: false };
+        }
+        pageToken = olderPageToken;
+    }
+
+    const itemsAsc = trimIncompleteLeadingEvents([...itemsNewestFirst].reverse());
+    return {
+        itemsAsc,
+        ...(olderPageToken != null ? { olderPageToken } : {}),
+        hasOlder,
+    };
+}
+
+/**
+ * Fetches session-level events via `session.listEvents()`. The API returns pages
+ * in desc order (newest first); the collected array is reversed before returning
+ * so callers receive events in chronological (asc) order.
+ *
+ * Used by rewind/edit paths that need the full ancestor window.
+ */
+async function fetchAllSessionEvents(
+    session: AgentSession,
+    options?: FetchSessionEventsOptions,
+): Promise<GatewaySessionEventItem[]> {
+    const items: GatewaySessionEventItem[] = [];
+    for await (const item of await session.listEvents({
+        limit: SESSION_EVENTS_PAGE_SIZE,
+        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
+    })) {
+        items.push(item as GatewaySessionEventItem);
+    }
+    items.reverse();
+    return items;
+}
+
+function cloneThreadBucket(bucket: ThreadBucket): ThreadBucket {
+    return {
+        events: new Map(bucket.events),
+        modelMessageIds: [...bucket.modelMessageIds],
+        toolResults: new Map(bucket.toolResults),
+        pendingApprovals: new Map(bucket.pendingApprovals),
+        approvalDecisions: new Map(bucket.approvalDecisions),
+        pendingResponses: new Map(bucket.pendingResponses),
+        done: bucket.done,
+        ...(bucket.title != null ? { title: bucket.title } : {}),
+        ...(bucket.agentInfo != null ? { agentInfo: bucket.agentInfo } : {}),
+    };
+}
+
+/** Prepends older fold state ahead of the currently loaded fold (scroll-up). */
+export function prependFoldState(
+    older: PeerThreadFoldState,
+    newer: PeerThreadFoldState,
+): PeerThreadFoldState {
+    const result = new PeerThreadFoldState();
+    const threadIds = new Set([...older.threads.keys(), ...newer.threads.keys()]);
+    for (const threadId of threadIds) {
+        const olderBucket = older.threads.get(threadId);
+        const newerBucket = newer.threads.get(threadId);
+        if (olderBucket == null && newerBucket != null) {
+            result.threads.set(threadId, cloneThreadBucket(newerBucket));
+            continue;
+        }
+        if (newerBucket == null && olderBucket != null) {
+            result.threads.set(threadId, cloneThreadBucket(olderBucket));
+            continue;
+        }
+        if (olderBucket == null || newerBucket == null) {
+            continue;
+        }
+        result.threads.set(threadId, {
+            events: new Map([...olderBucket.events, ...newerBucket.events]),
+            modelMessageIds: [
+                ...olderBucket.modelMessageIds,
+                ...newerBucket.modelMessageIds,
+            ],
+            toolResults: new Map([
+                ...olderBucket.toolResults,
+                ...newerBucket.toolResults,
+            ]),
+            pendingApprovals: new Map([
+                ...olderBucket.pendingApprovals,
+                ...newerBucket.pendingApprovals,
+            ]),
+            approvalDecisions: new Map([
+                ...olderBucket.approvalDecisions,
+                ...newerBucket.approvalDecisions,
+            ]),
+            pendingResponses: new Map([
+                ...olderBucket.pendingResponses,
+                ...newerBucket.pendingResponses,
+            ]),
+            done: newerBucket.done || olderBucket.done,
+            ...(newerBucket.title != null || olderBucket.title != null
+                ? { title: newerBucket.title ?? olderBucket.title }
+                : {}),
+            ...(newerBucket.agentInfo != null || olderBucket.agentInfo != null
+                ? { agentInfo: newerBucket.agentInfo ?? olderBucket.agentInfo }
+                : {}),
+        });
+    }
+    for (const [threadId, link] of older.threadParents) {
+        result.threadParents.set(threadId, link);
+    }
+    for (const [threadId, link] of newer.threadParents) {
+        result.threadParents.set(threadId, link);
+    }
+    return result;
+}
+
+/**
+ * Ingests a chronologically ordered list of session-level event items into the
+ * snapshot. `turn.created` marks the start of a turn (provides user input),
+ * content events are folded as usual, and `turn.done` finalises the turn record
+ * and pushes it to `snapshot.turns`.
+ *
+ * `onTurnComplete` is called after each `turn.done` with the partially-built
+ * snapshot so callers can update UI progressively. The fold state is correct at
+ * that point for every turn up to and including the just-completed one.
+ */
+function ingestSessionEventsIntoSnapshot(
+    snapshot: SessionSnapshot,
+    items: GatewaySessionEventItem[],
+    onTurnComplete?: (snap: SessionSnapshot) => void,
+): void {
+    let currentTurnId: string | null = null;
+    let currentCreatedEvent: TurnCreatedEvent | null = null;
+    let currentContentEvents: TurnEvent[] = [];
+    let beforeCount = 0;
+
+    for (const item of items) {
+        const { turnId, event } = item;
+
+        if (event.type === "turn.created") {
+            currentTurnId = turnId;
+            currentCreatedEvent = event;
+            currentContentEvents = [];
+            beforeCount =
+                snapshot.fold.threads.get(ROOT_THREAD_ID)?.modelMessageIds.length ?? 0;
+        } else if (event.type === "turn.done") {
+            if (currentTurnId == null || currentCreatedEvent == null) {
+                continue;
+            }
+
+            const afterBucket = snapshot.fold.threads.get(ROOT_THREAD_ID);
+            const rootModelMessageIds = (afterBucket?.modelMessageIds ?? []).slice(
+                beforeCount,
+            );
+
+            const sandboxEvent = currentContentEvents.find(
+                (ev): ev is Extract<TurnEvent, { type: "sandbox.created" }> =>
+                    ev.type === "sandbox.created",
+            );
+
+            applyUserToolResponsesToFold(
+                snapshot.fold,
+                currentCreatedEvent.input ?? [],
+            );
+            snapshot.turns.push(
+                sessionEventsToSessionRecord(
+                    currentTurnId,
+                    currentCreatedEvent,
+                    event,
+                    rootModelMessageIds,
+                    sandboxEvent?.sandboxId,
+                ),
+            );
+
+            // Pass a new object reference so React's Object.is check in
+            // useState sees a changed value and schedules a re-render.
+            // The snapshot is mutated in place throughout this loop, so
+            // passing `snapshot` directly would make every tick look identical
+            // to React after the first setSnapshot call.
+            onTurnComplete?.(replaceSessionSnapshot(snapshot, {}));
+
+            currentTurnId = null;
+            currentCreatedEvent = null;
+            currentContentEvents = [];
+        } else {
+            if (currentTurnId != null) {
+                ingestTurnEvent(snapshot.fold, event as TurnEvent);
+                currentContentEvents.push(event as TurnEvent);
+            }
+        }
+    }
+}
+
+function attachRunningTurn(
+    snapshot: SessionSnapshot,
+    runningTurn: Turn | undefined,
+): SessionSnapshot {
+    if (runningTurn == null) {
+        return snapshot;
+    }
+    const pendingUserText = extractTurnUserText(runningTurn.input);
+    return replaceSessionSnapshot(snapshot, {
+        runningTurn,
+        unstable_resume: true as const,
+        groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
+        ...(pendingUserText
+            ? {
+                  pendingUser: {
+                      turnId: runningTurn.id,
+                      content: extractTurnUserMessageContent(runningTurn.input),
+                      createdAt: new Date(runningTurn.createdAt),
+                  },
+              }
+            : {}),
+    });
+}
+
+/**
+ * Builds a session snapshot using the session-level `listEvents` API.
+ *
+ * Loads the newest event page (extending only when a page boundary splits a
+ * turn group), then leaves older pages for `prependOlderSessionHistory`.
+ * Only `listTurns({ limit: 1 })` is called first to detect a currently-running
+ * turn (the session-level API does not return events for the running turn).
+ *
+ * `onProgress` is called after each complete turn is ingested so callers can
+ * update the UI progressively while the processing loop runs.
+ */
+export async function buildSnapshotFromSessionEvents(
+    session: AgentSession,
+    onProgress?: (snap: SessionSnapshot) => void,
+): Promise<SessionSnapshot> {
+    // Detect a running turn with a single listTurns page — do not drain pagination.
+    const turnsPage = await session.listTurns({ limit: 1 });
+    const newestTurn = turnsPage.data[0] as Turn | undefined;
+    const runningTurn =
+        newestTurn?.state?.status === "running" ? newestTurn : undefined;
+
+    const window = await fetchSessionEventsWindow(session);
+    const historyPagination: SessionHistoryPagination = {
+        hasOlder: window.hasOlder,
+        ...(window.olderPageToken != null
+            ? { olderPageToken: window.olderPageToken }
+            : {}),
+    };
+
+    const snapshot = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(snapshot, window.itemsAsc, onProgress);
+
+    const withHistory = replaceSessionSnapshot(snapshot, {
+        historyEvents: window.itemsAsc,
+        historyPagination,
+    });
+
+    return attachRunningTurn(withHistory, runningTurn);
+}
+
+/**
+ * Fetches the next older `listEvents` window and prepends it onto `snapshot`
+ * without tearing down live stream / pending UI state.
+ */
+export async function prependOlderSessionHistory(
+    session: AgentSession,
+    snapshot: SessionSnapshot,
+): Promise<SessionSnapshot> {
+    const pagination = snapshot.historyPagination;
+    if (pagination?.hasOlder !== true || pagination.olderPageToken == null) {
+        return snapshot;
+    }
+
+    const window = await fetchSessionEventsWindow(session, {
+        pageToken: pagination.olderPageToken,
+    });
+    if (window.itemsAsc.length === 0) {
+        return replaceSessionSnapshot(snapshot, {
+            historyPagination: { hasOlder: false },
+        });
+    }
+
+    const olderSnap = createEmptySessionSnapshot();
+    ingestSessionEventsIntoSnapshot(olderSnap, window.itemsAsc);
+
+    const existingIds = new Set(snapshot.turns.map((turn) => turn.id));
+    const olderTurns = olderSnap.turns.filter((turn) => !existingIds.has(turn.id));
+    const mergedFold = prependFoldState(olderSnap.fold, snapshot.fold);
+    const historyEvents = [
+        ...window.itemsAsc,
+        ...(snapshot.historyEvents ?? []),
+    ];
+    const olderRootIds = olderTurns.flatMap(
+        (turn) => turn.rootModelMessageIds ?? [],
+    );
+
+    return replaceSessionSnapshot(snapshot, {
+        fold: mergedFold,
+        turns: [...olderTurns, ...snapshot.turns],
+        historyEvents,
+        historyPagination: {
+            hasOlder: window.hasOlder,
+            ...(window.olderPageToken != null
+                ? { olderPageToken: window.olderPageToken }
+                : {}),
+        },
+        ...(snapshot.groupRootBaseline != null
+            ? {
+                  groupRootBaseline: [
+                      ...olderRootIds,
+                      ...snapshot.groupRootBaseline,
+                  ],
+              }
+            : {}),
+    });
+}
 
 export type ConvertTurnsResult = {
     messages: ThreadMessage[];
@@ -746,163 +1168,6 @@ export function projectSessionMessages(
 
 const DEFAULT_LIST_EVENTS_CONCURRENCY = 5;
 
-type FetchSessionEventsOptions = {
-    /**
-     * Newest turn in the listing window (initial load only). Lists that turn and
-     * its ancestors. Omit to use the session last turn. Running-turn events are
-     * excluded by the API — subscribe to that turn for live events.
-     */
-    lastTurnId?: string;
-};
-
-/**
- * Fetches session-level events via `session.listEvents()`. The API returns pages
- * in desc order (newest first); the collected array is reversed before returning
- * so callers receive events in chronological (asc) order.
- */
-async function fetchAllSessionEvents(
-    session: AgentSession,
-    options?: FetchSessionEventsOptions,
-): Promise<GatewaySessionEventItem[]> {
-    const items: GatewaySessionEventItem[] = [];
-    for await (const item of await session.listEvents({
-        limit: SESSION_EVENTS_PAGE_SIZE,
-        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
-    })) {
-        items.push(item as GatewaySessionEventItem);
-    }
-    items.reverse();
-    return items;
-}
-
-/**
- * Ingests a chronologically ordered list of session-level event items into the
- * snapshot. `turn.created` marks the start of a turn (provides user input),
- * content events are folded as usual, and `turn.done` finalises the turn record
- * and pushes it to `snapshot.turns`.
- *
- * `onTurnComplete` is called after each `turn.done` with the partially-built
- * snapshot so callers can update UI progressively. The fold state is correct at
- * that point for every turn up to and including the just-completed one.
- */
-function ingestSessionEventsIntoSnapshot(
-    snapshot: SessionSnapshot,
-    items: GatewaySessionEventItem[],
-    onTurnComplete?: (snap: SessionSnapshot) => void,
-): void {
-    let currentTurnId: string | null = null;
-    let currentCreatedEvent: TurnCreatedEvent | null = null;
-    let currentContentEvents: TurnEvent[] = [];
-    let beforeCount = 0;
-
-    for (const item of items) {
-        const { turnId, event } = item;
-
-        if (event.type === "turn.created") {
-            currentTurnId = turnId;
-            currentCreatedEvent = event;
-            currentContentEvents = [];
-            beforeCount =
-                snapshot.fold.threads.get(ROOT_THREAD_ID)?.modelMessageIds.length ?? 0;
-        } else if (event.type === "turn.done") {
-            if (currentTurnId == null || currentCreatedEvent == null) {
-                continue;
-            }
-
-            const afterBucket = snapshot.fold.threads.get(ROOT_THREAD_ID);
-            const rootModelMessageIds = (afterBucket?.modelMessageIds ?? []).slice(
-                beforeCount,
-            );
-
-            const sandboxEvent = currentContentEvents.find(
-                (ev): ev is Extract<TurnEvent, { type: "sandbox.created" }> =>
-                    ev.type === "sandbox.created",
-            );
-
-            applyUserToolResponsesToFold(
-                snapshot.fold,
-                currentCreatedEvent.input ?? [],
-            );
-            snapshot.turns.push(
-                sessionEventsToSessionRecord(
-                    currentTurnId,
-                    currentCreatedEvent,
-                    event,
-                    rootModelMessageIds,
-                    sandboxEvent?.sandboxId,
-                ),
-            );
-
-            // Pass a new object reference so React's Object.is check in
-            // useState sees a changed value and schedules a re-render.
-            // The snapshot is mutated in place throughout this loop, so
-            // passing `snapshot` directly would make every tick look identical
-            // to React after the first setSnapshot call.
-            onTurnComplete?.(replaceSessionSnapshot(snapshot, {}));
-
-            currentTurnId = null;
-            currentCreatedEvent = null;
-            currentContentEvents = [];
-        } else {
-            if (currentTurnId != null) {
-                ingestTurnEvent(snapshot.fold, event as TurnEvent);
-                currentContentEvents.push(event as TurnEvent);
-            }
-        }
-    }
-}
-
-/**
- * Builds a session snapshot using the session-level `listEvents` API.
- *
- * Compared to `buildSnapshotFromSession`, this makes a single paginated request
- * for all history events instead of one per turn. Only `listTurns({ limit: 1 })`
- * is called first to detect a currently-running turn (the session-level API does
- * not return events for the running turn).
- *
- * `onProgress` is called after each complete turn is ingested so callers can
- * update the UI progressively while the processing loop runs.
- */
-export async function buildSnapshotFromSessionEvents(
-    session: AgentSession,
-    onProgress?: (snap: SessionSnapshot) => void,
-): Promise<SessionSnapshot> {
-    // Detect a running turn with a single minimal listTurns call.
-    let runningTurn: Turn | undefined;
-    for await (const turn of await session.listTurns({ limit: 1 })) {
-        if ((turn as Turn).state?.status === "running") {
-            runningTurn = turn as Turn;
-        }
-    }
-
-    const items = await fetchAllSessionEvents(session);
-
-    const snapshot = createEmptySessionSnapshot();
-    ingestSessionEventsIntoSnapshot(snapshot, items, onProgress);
-
-    if (runningTurn == null) {
-        return snapshot;
-    }
-
-    // Session listEvents excludes the running turn. Seed its user message so
-    // reconnect UI can show the in-flight bubble before subscribe yields.
-    const pendingUserText = extractTurnUserText(runningTurn.input);
-    return replaceSessionSnapshot(snapshot, {
-        runningTurn,
-        unstable_resume: true as const,
-        groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
-        ...(pendingUserText
-            ? {
-                  pendingUser: {
-                      turnId: runningTurn.id,
-                      content: extractTurnUserMessageContent(runningTurn.input),
-                      createdAt: new Date(runningTurn.createdAt),
-                  },
-              }
-            : {}),
-    });
-}
-
 function ingestTurnsIntoSnapshot(
     snapshot: SessionSnapshot,
     turns: Turn[],
@@ -959,10 +1224,13 @@ export async function buildSnapshotFromSession(
     const eventArrays = await fetchAllTurnEventsWithConcurrency([turn], concurrency);
     ingestTurnsIntoSnapshot(snapshot, [turn], eventArrays);
 
+    // Hydrated in-flight content lives in `turns` / `fold` now — drop the
+    // reconnect seed so projection does not duplicate the user bubble.
     return replaceSessionSnapshot(snapshot, {
         runningTurn: turn,
         unstable_resume: true as const,
         groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
+        pendingUser: undefined,
     });
 }
 
@@ -1019,6 +1287,16 @@ export async function resolveGatewayBranchPreviousTurnId(
     }
     const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
     return turns[turnIndex - 1]?.id ?? null;
+}
+
+/** Resolves `previousTurnId` by turn id so partial history windows stay correct. */
+export async function resolveGatewayBranchPreviousTurnIdForTurn(
+    session: AgentSession,
+    turnId: string,
+): Promise<string | null> {
+    const turns = await listSessionTurnsOrdered(session);
+    const turnIndex = turns.findIndex((turn) => turn.id === turnId);
+    return resolveGatewayBranchPreviousTurnId(session, turnIndex, turns);
 }
 
 async function listSessionTurnsOrdered(session: AgentSession): Promise<Turn[]> {

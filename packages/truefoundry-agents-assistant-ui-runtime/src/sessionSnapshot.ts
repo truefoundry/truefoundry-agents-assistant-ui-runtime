@@ -3,6 +3,7 @@ import type {
     Turn,
     TurnCreatedEvent,
     TurnDoneEvent,
+    TurnEvent,
     TurnInputItem,
 } from "truefoundry-gateway-sdk/agents";
 
@@ -11,6 +12,19 @@ import { PeerThreadFoldState } from "./foldPeerThreads.js";
 import type { StoredApprovalDecision } from "./toolApproval.js";
 import type { StoredToolResponse } from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
+
+/** Session-level event item from `AgentSession.listEvents`. */
+export type GatewaySessionEventItem = {
+    turnId: string;
+    event: TurnCreatedEvent | TurnDoneEvent | TurnEvent;
+};
+
+/** Cursor for fetching older `listEvents` pages (scroll-up history). */
+export type SessionHistoryPagination = {
+    /** Token for the next older page; omit when exhausted. */
+    olderPageToken?: string;
+    hasOlder: boolean;
+};
 
 /** Turn metadata retained for cross-turn projection and subsequent required-action replay. */
 export type SessionTurnRecord = Pick<
@@ -55,6 +69,12 @@ export type SessionSnapshot = {
     requiredActions: RequiredActionsOverlay;
     runningTurn?: Turn;
     unstable_resume?: boolean;
+    /**
+     * Chronological `listEvents` items loaded so far (for prepend-on-scroll rebuild).
+     * Live stream commits are not appended here — they live in `turns` / `fold`.
+     */
+    historyEvents?: readonly GatewaySessionEventItem[];
+    historyPagination?: SessionHistoryPagination;
 };
 
 export type ProjectSessionMessagesOptions = {
@@ -110,7 +130,7 @@ export function sessionEventsToSessionRecord(
 /** Returns a new snapshot wrapper; fold maps may be mutated in place before calling. */
 export function replaceSessionSnapshot(
     snapshot: SessionSnapshot,
-    patch: Partial<Omit<SessionSnapshot, "fold" | "requiredActions">> & {
+    patch: Partial<Omit<SessionSnapshot, "requiredActions">> & {
         requiredActions?: RequiredActionsOverlay;
     },
 ): SessionSnapshot {

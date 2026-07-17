@@ -338,6 +338,7 @@ void cancel();
 | `useTrueFoundryRespondToToolResponse()` | `(r: RespondToToolResponseOptions) => void` | Respond to an ask-user / `tool.response_required` prompt from any render context. |
 | `useTrueFoundryResumeMcpAuth()` | `() => Promise<void>` | Resume the paused turn after the user completes MCP OAuth in the browser. |
 | `useTrueFoundryCancel()` | `() => Promise<void>` | Cancel the active turn. Calls `session.cancel()` and drains the stream to its terminal `turn.done`. |
+| `useTrueFoundryHistoryPagination()` | `{ hasOlderHistory, isLoadingOlderHistory, loadOlderHistory }` | Scroll-up older history: call `loadOlderHistory()` when the user nears the top of the thread. |
 
 Where:
 
@@ -371,6 +372,13 @@ const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
 | `respondToToolResponse` | `(r: { toolCallId, content }) => void` | Stage answer; batch-send when complete |
 | `resumeMcpAuth` | `() => Promise<void>` | Resume after OAuth |
 | `cancel` | `() => Promise<void>` | Cancel the active turn: calls `session.cancel()` and lets the stream drain to its terminal `turn.done` (reconciles on next session load) |
+| `resetFromTurn` | `(turnId: string) => Promise<void>` | Re-submit a user turn (branch/reset) |
+| `reload` | `() => void` | Retry the current session load |
+| `downloadSandboxFile` | `(path: string) => Promise<Blob>` | Download a file from the session sandbox |
+| `hasOlderHistory` | `boolean` | True when another older `listEvents` page is available |
+| `isLoadingOlderHistory` | `boolean` | True while `loadOlderHistory` is in flight |
+| `loadOlderHistory` | `() => Promise<void>` | Prepend the next older history window (scroll-up) |
+| `draft` | `TrueFoundryDraftRuntimeExtras \| null` | Draft-mode agent spec sync extras |
 
 Per-part `respondToApproval` from assistant-ui still works for root-thread tool UIs; extras complements that for global chrome and nested renderers.
 
@@ -388,6 +396,28 @@ Works out of the box — no server route or Redis store. TrueFoundry persists ev
 
 Contrast with the [AI SDK resumable streams guide](https://www.assistant-ui.com/docs/guides/resumable-streams), which requires a separate encoded-byte store.
 
+## History pagination
+
+Thread open no longer drains every turn. Initial load:
+
+1. `listTurns({ limit: 1 })` once — detect a running turn (does **not** walk `page_token`).
+2. One (or a few) `listEvents` page(s) for the newest complete user-message group.
+3. Clears `isLoading`, then resumes a running turn via subscribe if needed.
+
+Older history is opt-in via extras / `useTrueFoundryHistoryPagination()`:
+
+```tsx
+const { hasOlderHistory, isLoadingOlderHistory, loadOlderHistory } =
+  useTrueFoundryHistoryPagination();
+
+// e.g. IntersectionObserver at the top of the message list
+if (hasOlderHistory && !isLoadingOlderHistory) {
+  void loadOlderHistory();
+}
+```
+
+`loadOlderHistory` prepends older turns without aborting an active stream.
+
 ## Public API
 
 Everything below is exported from the package root (`truefoundry-agents-assistant-ui-runtime`).
@@ -403,6 +433,7 @@ Everything below is exported from the package root (`truefoundry-agents-assistan
 | `useTrueFoundryRespondToToolResponse` | hook | Same pattern for tool responses. |
 | `useTrueFoundryResumeMcpAuth` | hook | Same pattern for MCP resume. |
 | `useTrueFoundryCancel` | hook | Same pattern for cancel. |
+| `useTrueFoundryHistoryPagination` | hook | `{ hasOlderHistory, isLoadingOlderHistory, loadOlderHistory }` for scroll-up history. |
 | `trueFoundryExtras` | namespace | `createRuntimeExtras` channel — `.use()`, `.get(aui)`, `.provide()`. |
 | `TrueFoundryRuntimeExtras` | type | Shape provided into the runtime extras slot. |
 | `PendingApproval`, `PendingToolResponse` | types | Derived pending items for UI rendering. |

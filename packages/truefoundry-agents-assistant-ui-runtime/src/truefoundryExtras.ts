@@ -28,6 +28,9 @@ export type TrueFoundryRuntimeExtras = {
     cancel: () => Promise<void>;
     resetFromTurn: (turnId: string) => Promise<void>;
     reload: () => void;
+    hasOlderHistory: boolean;
+    isLoadingOlderHistory: boolean;
+    loadOlderHistory: () => Promise<void>;
     draft: TrueFoundryDraftRuntimeExtras | null;
 };
 

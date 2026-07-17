@@ -16,11 +16,12 @@ import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
     buildEditedUserMessageContent,
-    buildSnapshotBeforeTurnIndex,
+    buildSnapshotBeforeTurn,
     computeGroupRootBaseline,
     extractTurnUserMessageContent,
+    prependOlderSessionHistory,
     projectSessionMessages,
-    resolveGatewayBranchPreviousTurnId,
+    resolveGatewayBranchPreviousTurnIdForTurn,
     rootModelMessageIdsSinceBaseline,
     userMessageContentToText,
     type UserMessageContent,
@@ -305,10 +306,12 @@ export function useTrueFoundryAgentMessages({
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
+    const loadOlderInflightRef = useRef<Promise<void> | null>(null);
 
     const onErrorRef = useRef(onError);
     onErrorRef.current = onError;
@@ -485,9 +488,11 @@ export function useTrueFoundryAgentMessages({
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
         abortControllerRef.current?.abort();
+        loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
         setSnapshot(createEmptySessionSnapshot());
         setIsLoading(true);
+        setIsLoadingOlderHistory(false);
 
         try {
             const conversationSessionId = await resolveActiveSessionId(
@@ -794,8 +799,6 @@ export function useTrueFoundryAgentMessages({
             const committed = commitActiveStream(snapshotRef.current);
             setSnapshot(committed);
 
-            const turnIndex = findTurnIndex(committed, turnId);
-
             await cancel();
 
             const conversationSessionId = await resolveActiveSessionId(
@@ -803,13 +806,13 @@ export function useTrueFoundryAgentMessages({
                 resolveConversationSessionIdRef.current,
             );
             const session = await getSession(client, conversationSessionId, sessionOptions);
-            const previousTurnId = await resolveGatewayBranchPreviousTurnId(
+            const previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
                 session,
-                turnIndex,
+                turnId,
             );
-            const rewound = await buildSnapshotBeforeTurnIndex(
+            const rewound = await buildSnapshotBeforeTurn(
                 session,
-                turnIndex,
+                turnId,
                 listEventsConcurrency,
             );
             createdAtByMessageIdRef.current = new Map();
@@ -867,10 +870,70 @@ export function useTrueFoundryAgentMessages({
         setLoadRetryTrigger((n) => n + 1);
     }, []);
 
+    const hasOlderHistory = snapshot.historyPagination?.hasOlder === true;
+
+    const loadOlderHistory = useCallback(async () => {
+        if (sessionId == null || isMain === false) {
+            return;
+        }
+        if (loadOlderInflightRef.current != null) {
+            return loadOlderInflightRef.current;
+        }
+
+        const current = snapshotRef.current;
+        if (current.historyPagination?.hasOlder !== true) {
+            return;
+        }
+        if (current.historyPagination.olderPageToken == null) {
+            return;
+        }
+
+        const generation = loadGenerationRef.current;
+        setIsLoadingOlderHistory(true);
+
+        const run = (async () => {
+            try {
+                const conversationSessionId = await resolveActiveSessionId(
+                    sessionId,
+                    resolveConversationSessionIdRef.current,
+                );
+                const session = await getSession(
+                    client,
+                    conversationSessionId,
+                    sessionOptions,
+                );
+                const next = await prependOlderSessionHistory(
+                    session,
+                    snapshotRef.current,
+                );
+                if (generation !== loadGenerationRef.current) {
+                    return;
+                }
+                setSnapshot(next);
+            } catch (error) {
+                if (generation === loadGenerationRef.current) {
+                    onErrorRef.current?.(error);
+                }
+                throw error;
+            } finally {
+                if (generation === loadGenerationRef.current) {
+                    setIsLoadingOlderHistory(false);
+                }
+                loadOlderInflightRef.current = null;
+            }
+        })();
+
+        loadOlderInflightRef.current = run;
+        return run;
+    }, [client, isMain, sessionId, sessionOptions]);
+
     return {
         messages,
         isRunning,
         isLoading,
+        isLoadingOlderHistory,
+        hasOlderHistory,
+        loadOlderHistory,
         retryLoad,
         sendTurn,
         cancel,
