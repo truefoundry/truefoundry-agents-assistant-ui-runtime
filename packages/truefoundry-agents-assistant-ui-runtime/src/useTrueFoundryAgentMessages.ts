@@ -69,6 +69,11 @@ export type UseTrueFoundryAgentMessagesOptions = {
     resolveConversationSessionId?: (remoteId: string) => Promise<string>;
     /** When set, turns bind to `/agents/sessions/{draftSessionId}/turns` after draft validation. */
     draftGateway?: TrueFoundryGateway;
+    /**
+     * Optional per-turn headers for createTurn. Invoked once per `sendTurn` after
+     * the session is resolved; return value is forwarded to `turn.execute`.
+     */
+    getTurnHeaders?: () => Promise<Record<string, string> | undefined>;
 };
 
 export type SendTurnOptions =
@@ -289,6 +294,7 @@ export function useTrueFoundryAgentMessages({
     initializeSession,
     resolveConversationSessionId,
     draftGateway,
+    getTurnHeaders,
 }: UseTrueFoundryAgentMessagesOptions) {
     const sessionOptions = useMemo<GetSessionOptions | undefined>(
         () =>
@@ -310,6 +316,8 @@ export function useTrueFoundryAgentMessages({
     resolveConversationSessionIdRef.current = resolveConversationSessionId;
     const initializeSessionRef = useRef(initializeSession);
     initializeSessionRef.current = initializeSession;
+    const getTurnHeadersRef = useRef(getTurnHeaders);
+    getTurnHeadersRef.current = getTurnHeaders;
 
     const createdAtByMessageIdRef = useRef(new Map<string, Date>());
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -564,6 +572,9 @@ export function useTrueFoundryAgentMessages({
                 resolveConversationSessionIdRef.current,
             );
             const session = await getSession(client, conversationSessionId, sessionOptions);
+            const turnHeaders = await getTurnHeadersRef.current?.();
+            const streamHeaders =
+                turnHeaders != null ? { headers: turnHeaders } : {};
             const isContinuation =
                 "inputs" in options ||
                 ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
@@ -639,7 +650,7 @@ export function useTrueFoundryAgentMessages({
                         return streamTurnContent(
                             session,
                             snapshotRef.current.fold,
-                            { inputs: options.inputs },
+                            { inputs: options.inputs, ...streamHeaders },
                             signal,
                             groupRootBaseline,
                         );
@@ -648,7 +659,7 @@ export function useTrueFoundryAgentMessages({
                         return streamTurnContent(
                             session,
                             snapshotRef.current.fold,
-                            { resumeMcpAuth: true },
+                            { resumeMcpAuth: true, ...streamHeaders },
                             signal,
                             groupRootBaseline,
                         );
@@ -661,6 +672,7 @@ export function useTrueFoundryAgentMessages({
                             ...(options.previousTurnId !== undefined
                                 ? { previousTurnId: options.previousTurnId }
                                 : {}),
+                            ...streamHeaders,
                         },
                         signal,
                         groupRootBaseline,

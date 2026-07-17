@@ -2,8 +2,10 @@ import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
 
 import type { AgentSpec } from "./agentSpec.js";
 
+export const DRAFT_SESSION_LAST_UPDATED_AT_HEADER = "x-tfy-session-last-updated-at";
+
 export type DraftSessionBridge = {
-    syncAgentSpec: (draftSessionId: string, agentSpec: AgentSpec) => Promise<void>;
+    syncAgentSpec: (draftSessionId: string, agentSpec: AgentSpec) => Promise<string>;
     getDraftAgentSpec: (draftSessionId: string) => Promise<AgentSpec>;
 };
 
@@ -22,7 +24,11 @@ export function createDraftSessionBridge(
         },
 
         async syncAgentSpec(draftSessionId, agentSpec) {
-            await gateway.agents.private.draftSessions.update(draftSessionId, { agentSpec });
+            const response = await gateway.agents.private.draftSessions.update(
+                draftSessionId,
+                { agentSpec },
+            );
+            return response.data.updatedAt;
         },
     };
 }

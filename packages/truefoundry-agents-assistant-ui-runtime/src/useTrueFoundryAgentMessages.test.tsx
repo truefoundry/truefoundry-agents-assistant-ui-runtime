@@ -329,6 +329,56 @@ describe("useTrueFoundryAgentMessages", () => {
         expect(loadSessionSnapshot).not.toHaveBeenCalled();
     });
 
+    it("sendTurn forwards getTurnHeaders only when they resolve to a value", async () => {
+        const getTurnHeaders = vi
+            .fn()
+            .mockResolvedValueOnce({
+                "x-tfy-session-last-updated-at": "2026-06-30T12:00:00.000Z",
+            })
+            .mockResolvedValueOnce(undefined);
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                client: mockClient,
+                sessionId: "session-1",
+                getTurnHeaders,
+            }),
+        );
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            await result.current.sendTurn({ userMessage: "first" });
+        });
+
+        expect(getTurnHeaders).toHaveBeenCalledTimes(1);
+        expect(streamTurnContent).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.any(PeerThreadFoldState),
+            {
+                userMessage: "first",
+                headers: {
+                    "x-tfy-session-last-updated-at": "2026-06-30T12:00:00.000Z",
+                },
+            },
+            expect.any(AbortSignal),
+            expect.any(Array),
+        );
+
+        await act(async () => {
+            await result.current.sendTurn({ userMessage: "second" });
+        });
+
+        expect(getTurnHeaders).toHaveBeenCalledTimes(2);
+        expect(streamTurnContent).toHaveBeenLastCalledWith(
+            expect.anything(),
+            expect.any(PeerThreadFoldState),
+            { userMessage: "second" },
+            expect.any(AbortSignal),
+            expect.any(Array),
+        );
+    });
+
     it("loads converted session history on mount", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
             snapshotWithUserTurn("hello"),
