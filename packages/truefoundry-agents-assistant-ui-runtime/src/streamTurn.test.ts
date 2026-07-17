@@ -193,6 +193,40 @@ describe("streamTurn", () => {
             expect(execute).not.toHaveBeenCalled();
             expect(updates).toEqual([]);
         });
+
+        it("forwards headers to turn.execute request options", async () => {
+            const execute = vi.fn(() => (async function* () {})());
+            const prepareTurn = vi.fn(() => ({ execute }));
+            const session = {
+                prepareTurn,
+                cancel: vi.fn().mockResolvedValue(undefined),
+            } as unknown as AgentSession;
+            const abortSignal = new AbortController().signal;
+
+            await collectUpdates(
+                streamTurnContent(
+                    session,
+                    new PeerThreadFoldState(),
+                    {
+                        userMessage: "hello",
+                        headers: {
+                            "x-tfy-session-last-updated-at": "2026-06-30T10:00:00.000Z",
+                        },
+                    },
+                    abortSignal,
+                ),
+            );
+
+            expect(execute).toHaveBeenCalledWith(
+                { stream: true },
+                {
+                    abortSignal,
+                    headers: {
+                        "x-tfy-session-last-updated-at": "2026-06-30T10:00:00.000Z",
+                    },
+                },
+            );
+        });
     });
 
     describe("resumeTurnStream", () => {

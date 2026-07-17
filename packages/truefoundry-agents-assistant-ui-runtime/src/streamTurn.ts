@@ -21,6 +21,8 @@ export type StreamTurnOptions = {
      * root turn (no `previousTurnId` field).
      */
     previousTurnId?: string | null;
+    /** Extra headers for the createTurn request (`execute` request options). */
+    headers?: Record<string, string>;
 };
 
 function buildTurnInput(options: StreamTurnOptions): TurnInputItem[] {
@@ -68,7 +70,13 @@ export async function* streamTurnContent(
 
     try {
         yield* streamTurnEvents(
-            turn.execute({ stream: true }, { abortSignal }),
+            turn.execute(
+                { stream: true },
+                {
+                    abortSignal,
+                    ...(options.headers != null ? { headers: options.headers } : {}),
+                },
+            ),
             foldState,
             groupRootBaseline,
         );

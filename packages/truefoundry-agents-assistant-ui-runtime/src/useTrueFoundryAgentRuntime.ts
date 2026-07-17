@@ -26,7 +26,10 @@ import {
     extractEditedText,
     parseTurnIdFromMessageId,
 } from "./convertTurnMessages.js";
-import { createDraftSessionBridge } from "./private/draftSessionBridge.js";
+import {
+    createDraftSessionBridge,
+    DRAFT_SESSION_LAST_UPDATED_AT_HEADER,
+} from "./private/draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
@@ -76,6 +79,20 @@ function useTrueFoundryAgentRuntimeImpl(
         onError,
     });
 
+    const takeTurnHeaderTimestampRef = useRef(draftSpec.takeTurnHeaderTimestamp);
+    takeTurnHeaderTimestampRef.current = draftSpec.takeTurnHeaderTimestamp;
+
+    const getTurnHeaders = useCallback(async () => {
+        if (agent.mode !== "draft") {
+            return undefined;
+        }
+        const updatedAt = await takeTurnHeaderTimestampRef.current();
+        if (updatedAt == null) {
+            return undefined;
+        }
+        return { [DRAFT_SESSION_LAST_UPDATED_AT_HEADER]: updatedAt };
+    }, [agent.mode]);
+
     const aui = useAui();
     const initializeSession = useCallback(
         () => aui.threadListItem().initialize(),
@@ -106,6 +123,7 @@ function useTrueFoundryAgentRuntimeImpl(
         onError,
         initializeSession,
         draftGateway: agent.mode === "draft" ? gateway : undefined,
+        getTurnHeaders: agent.mode === "draft" ? getTurnHeaders : undefined,
     });
 
     if (agent.mode === "draft" && draftSpec.agentSpec != null) {

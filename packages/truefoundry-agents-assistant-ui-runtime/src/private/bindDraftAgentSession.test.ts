@@ -31,7 +31,7 @@ describe("bindDraftAgentSession", () => {
 });
 
 describe("createDraftSessionBridge", () => {
-    it("syncs agent spec via draftSessions.update", async () => {
+    it("syncs agent spec via draftSessions.update and returns updatedAt", async () => {
         const { createDraftSessionBridge } = await import("./draftSessionBridge.js");
         const update = vi.fn().mockResolvedValue({ data: draft });
         const gateway = {
@@ -46,10 +46,11 @@ describe("createDraftSessionBridge", () => {
         } as unknown as TrueFoundryGateway;
 
         const bridge = createDraftSessionBridge(gateway);
-        await bridge.syncAgentSpec("draft-1", draft.agentSpec);
+        const updatedAt = await bridge.syncAgentSpec("draft-1", draft.agentSpec);
 
         expect(update).toHaveBeenCalledWith("draft-1", {
             agentSpec: draft.agentSpec,
         });
+        expect(updatedAt).toBe(draft.updatedAt);
     });
 });

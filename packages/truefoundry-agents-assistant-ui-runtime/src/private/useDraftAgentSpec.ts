@@ -19,13 +19,22 @@ export type UseDraftAgentSpecOptions = {
     onError?: ((error: unknown) => void) | undefined;
 };
 
+export type UseDraftAgentSpecResult = {
+    agentSpec: AgentSpec | null;
+    draftSessionId: string | undefined;
+    isSpecSyncing: boolean;
+    specError: unknown | null;
+    updateAgentSpec: (update: AgentSpecUpdate) => void;
+    takeTurnHeaderTimestamp: () => Promise<string | undefined>;
+};
+
 export function useDraftAgentSpec({
     draftSessionId,
     draftBridge,
     defaultAgentSpec,
     onAgentSpecChange,
     onError,
-}: UseDraftAgentSpecOptions) {
+}: UseDraftAgentSpecOptions): UseDraftAgentSpecResult {
     const enabled = draftBridge != null;
     const [agentSpec, setAgentSpec] = useState<AgentSpec>(defaultAgentSpec);
     const [isSpecSyncing, setIsSpecSyncing] = useState(false);
@@ -38,6 +47,35 @@ export function useDraftAgentSpec({
     const syncGenerationRef = useRef(0);
     const loadedDraftIdRef = useRef<string | undefined>(undefined);
     const localDirtyRef = useRef(false);
+    const lastUpdatedAtRef = useRef<string | undefined>(undefined);
+    const pendingFlushRef = useRef<(() => Promise<void>) | undefined>(undefined);
+    const inFlightFlushRef = useRef<Promise<void> | undefined>(undefined);
+    const activeDraftIdRef = useRef(draftSessionId);
+
+    // Invalidate sync state from the previous draft so a stale pending flush or
+    // stored updatedAt can't update the wrong draft or leak into the next
+    // turn's header. Bumping the generation makes any in-flight sync a no-op.
+    useEffect(() => {
+        const previousDraftId = activeDraftIdRef.current;
+        if (previousDraftId === draftSessionId) {
+            return;
+        }
+        activeDraftIdRef.current = draftSessionId;
+        syncGenerationRef.current++;
+        if (syncTimeoutRef.current != null) {
+            clearTimeout(syncTimeoutRef.current);
+            syncTimeoutRef.current = undefined;
+        }
+        pendingFlushRef.current = undefined;
+        inFlightFlushRef.current = undefined;
+        lastUpdatedAtRef.current = undefined;
+        setIsSpecSyncing(false);
+        // Dirty edits made against a previous draft must not be replayed onto
+        // the new one. Keep them only for lazy creation (undefined -> id).
+        if (previousDraftId != null) {
+            localDirtyRef.current = false;
+        }
+    }, [draftSessionId]);
 
     useEffect(() => {
         if (!enabled || draftBridge == null) {
@@ -93,10 +131,12 @@ export function useDraftAgentSpec({
             }
             setIsSpecSyncing(true);
             try {
-                await draftBridge.syncAgentSpec(draftId, spec);
+                const updatedAt = await draftBridge.syncAgentSpec(draftId, spec);
                 if (generation !== syncGenerationRef.current) {
                     return;
                 }
+                lastUpdatedAtRef.current =
+                    updatedAt || new Date().toISOString();
                 setSpecError(null);
                 onAgentSpecChange?.(spec);
             } catch (error) {
@@ -119,8 +159,20 @@ export function useDraftAgentSpec({
                 clearTimeout(syncTimeoutRef.current);
             }
             const generation = ++syncGenerationRef.current;
+            const flush = () => {
+                pendingFlushRef.current = undefined;
+                syncTimeoutRef.current = undefined;
+                const promise = flushSpecSync(draftId, spec, generation).finally(() => {
+                    if (inFlightFlushRef.current === promise) {
+                        inFlightFlushRef.current = undefined;
+                    }
+                });
+                inFlightFlushRef.current = promise;
+                return promise;
+            };
+            pendingFlushRef.current = flush;
             syncTimeoutRef.current = setTimeout(() => {
-                void flushSpecSync(draftId, spec, generation);
+                void flush();
             }, SPEC_SYNC_DEBOUNCE_MS);
         },
         [flushSpecSync],
@@ -128,6 +180,29 @@ export function useDraftAgentSpec({
 
     const scheduleSpecSyncRef = useRef(scheduleSpecSync);
     scheduleSpecSyncRef.current = scheduleSpecSync;
+
+    const flushPendingSpecSyncNow = useCallback(async () => {
+        if (syncTimeoutRef.current != null) {
+            clearTimeout(syncTimeoutRef.current);
+            syncTimeoutRef.current = undefined;
+        }
+        const pending = pendingFlushRef.current;
+        if (pending != null) {
+            pendingFlushRef.current = undefined;
+            await pending();
+            return;
+        }
+        if (inFlightFlushRef.current != null) {
+            await inFlightFlushRef.current;
+        }
+    }, []);
+
+    const takeTurnHeaderTimestamp = useCallback(async () => {
+        await flushPendingSpecSyncNow();
+        const updatedAt = lastUpdatedAtRef.current;
+        lastUpdatedAtRef.current = undefined;
+        return updatedAt;
+    }, [flushPendingSpecSyncNow]);
 
     useEffect(
         () => () => {
@@ -160,6 +235,7 @@ export function useDraftAgentSpec({
             isSpecSyncing: enabled ? isSpecSyncing : false,
             specError: enabled ? specError : null,
             updateAgentSpec,
+            takeTurnHeaderTimestamp,
         }),
         [
             agentSpec,
@@ -167,6 +243,7 @@ export function useDraftAgentSpec({
             enabled,
             isSpecSyncing,
             specError,
+            takeTurnHeaderTimestamp,
             updateAgentSpec,
         ],
     );
