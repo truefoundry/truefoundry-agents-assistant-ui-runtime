@@ -30,6 +30,7 @@ import {
     createDraftSessionBridge,
     DRAFT_SESSION_LAST_UPDATED_AT_HEADER,
 } from "./private/draftSessionBridge.js";
+import { getGatewayFromPrivateClient } from "./private/getGatewayFromPrivateClient.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
@@ -46,7 +47,7 @@ function useTrueFoundryAgentRuntimeImpl(
     const {
         client,
         agent,
-        gateway,
+        privateClient,
         adapters,
         onError,
         listEventsConcurrency,
@@ -54,8 +55,8 @@ function useTrueFoundryAgentRuntimeImpl(
     } = options;
 
     const draftBridgeRef = useRef(
-        agent.mode === "draft" && gateway != null
-            ? createDraftSessionBridge(gateway)
+        agent.mode === "draft" && privateClient != null
+            ? createDraftSessionBridge(privateClient)
             : null,
     );
 
@@ -125,7 +126,7 @@ function useTrueFoundryAgentRuntimeImpl(
         listEventsConcurrency,
         onError,
         initializeSession,
-        draftGateway: agent.mode === "draft" ? gateway : undefined,
+        privateClient: agent.mode === "draft" ? privateClient : undefined,
         getTurnHeaders: agent.mode === "draft" ? getTurnHeaders : undefined,
     });
 
@@ -151,9 +152,9 @@ function useTrueFoundryAgentRuntimeImpl(
 
     const downloadSandboxFile = useCallback(
         async (path: string) => {
-            if (gateway == null) {
+            if (privateClient == null) {
                 const error = new Error(
-                    "Downloading a sandbox file requires a `gateway` TrueFoundryGateway client.",
+                    "Downloading a sandbox file requires a `privateClient` PrivateAgentSessionClient.",
                 );
                 onError?.(error);
                 throw error;
@@ -163,10 +164,12 @@ function useTrueFoundryAgentRuntimeImpl(
                 onError?.(error);
                 throw error;
             }
+            // Same gateway.agents.downloadSandboxFile path as before, via the wrapped client.
+            const gateway = getGatewayFromPrivateClient(privateClient);
             const response = await gateway.agents.downloadSandboxFile(sandboxId, { path });
             return await response.blob();
         },
-        [gateway, sandboxId, onError],
+        [privateClient, sandboxId, onError],
     );
 
     const draftExtras = useMemo(() => {
@@ -264,7 +267,7 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     // causing `threadListAdapter` to be a new object each render.  We compute `resolved`
     // unconditionally and stabilize individual downstream values with primitives/refs.
     const resolved = resolveTrueFoundryAgentRuntimeOptions(options);
-    const { client, agent, gateway } = resolved;
+    const { client, agent, privateClient } = resolved;
 
     const pendingAgentSpecRef = useRef<AgentSpec | undefined>(
         agent.mode === "draft" ? agent.defaultAgentSpec : undefined,
@@ -276,14 +279,14 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     const namedAgentName = agent.mode === "named" ? agent.agentName : undefined;
     const threadListAdapter = useMemo(() => {
         if (agentMode === "draft") {
-            if (gateway == null) {
+            if (privateClient == null) {
                 throw new Error(
-                    "Draft agent mode requires a `gateway` TrueFoundryGateway client.",
+                    "Draft agent mode requires a `privateClient` PrivateAgentSessionClient.",
                 );
             }
             const draftAgent = agent as Extract<typeof agent, { mode: "draft" }>;
             return createTrueFoundryDraftThreadListAdapter({
-                gateway,
+                privateClient,
                 defaultAgentSpec: draftAgent.defaultAgentSpec,
                 getAgentSpec: () => pendingAgentSpecRef.current ?? draftAgent.defaultAgentSpec,
             });
@@ -293,7 +296,7 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
             agentName: namedAgentName!,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agentMode, namedAgentName, client, gateway]);
+    }, [agentMode, namedAgentName, client, privateClient]);
 
     return useRemoteThreadListRuntime({
         allowNesting: true,

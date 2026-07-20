@@ -7,7 +7,7 @@ import type {
     SpeechSynthesisAdapter,
 } from "@assistant-ui/core";
 import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
-import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
+import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 import type { AgentSpec } from "./private/agentSpec.js";
 
@@ -47,13 +47,16 @@ export type UseTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptio
     agent?: TrueFoundryAgentConfig | undefined;
     /** Legacy named-agent shorthand. Prefer `agent: { mode: "named", agentName }`. */
     agentName?: string | undefined;
-    /** Required when `agent.mode === "draft"`. */
-    gateway?: TrueFoundryGateway | undefined;
+    /**
+     * Required when `agent.mode === "draft"`. Also used for sandbox file downloads
+     * (named or draft).
+     */
+    privateClient?: PrivateAgentSessionClient | undefined;
 };
 
 export type ResolvedTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptions & {
     agent: TrueFoundryAgentConfig;
-    gateway?: TrueFoundryGateway | undefined;
+    privateClient?: PrivateAgentSessionClient | undefined;
 };
 
 export function resolveTrueFoundryAgentConfig(
@@ -78,15 +81,15 @@ export function resolveTrueFoundryAgentRuntimeOptions(
 ): ResolvedTrueFoundryAgentRuntimeOptions {
     const agent = resolveTrueFoundryAgentConfig(options);
 
-    if (agent.mode === "draft" && options.gateway == null) {
+    if (agent.mode === "draft" && options.privateClient == null) {
         throw new Error(
-            "Draft agent mode requires a `gateway` TrueFoundryGateway client.",
+            "Draft agent mode requires a `privateClient` PrivateAgentSessionClient.",
         );
     }
 
     return {
         ...options,
         agent,
-        gateway: options.gateway,
+        privateClient: options.privateClient,
     };
 }

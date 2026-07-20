@@ -2,15 +2,15 @@ import type {
     AgentSession,
     AgentSessionClient,
 } from "truefoundry-gateway-sdk/agents";
-import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
+import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 import { bindDraftAgentSession } from "./private/bindDraftAgentSession.js";
 
 const inflightBySessionId = new Map<string, Promise<AgentSession>>();
 
 export type GetSessionOptions = {
-    /** When set, validates the draft and binds turns to `/agents/sessions/{id}/turns`. */
-    draftGateway?: TrueFoundryGateway;
+    /** When set, validates the draft and binds turns via PrivateAgentSessionClient. */
+    privateClient?: PrivateAgentSessionClient;
 };
 
 /** `sessionId` is the assistant-ui thread `remoteId` from `RemoteThreadListAdapter.initialize`. */
@@ -19,8 +19,8 @@ export function getSession(
     sessionId: string,
     options?: GetSessionOptions,
 ): Promise<AgentSession> {
-    if (options?.draftGateway != null) {
-        return bindDraftAgentSession(client, options.draftGateway, sessionId);
+    if (options?.privateClient != null) {
+        return bindDraftAgentSession(options.privateClient, sessionId);
     }
 
     let inflight = inflightBySessionId.get(sessionId);

@@ -11,7 +11,7 @@ import type {
     TurnInputItem,
     TurnStateDone,
 } from "truefoundry-gateway-sdk/agents";
-import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
+import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
@@ -68,8 +68,8 @@ export type UseTrueFoundryAgentMessagesOptions = {
     }>;
     /** Maps a thread `remoteId` to the gateway session id used for turns. */
     resolveConversationSessionId?: (remoteId: string) => Promise<string>;
-    /** When set, turns bind to `/agents/sessions/{draftSessionId}/turns` after draft validation. */
-    draftGateway?: TrueFoundryGateway;
+    /** When set, turns bind via PrivateAgentSessionClient.getDraftSession. */
+    privateClient?: PrivateAgentSessionClient;
     /**
      * Optional per-turn headers for createTurn. Invoked once per `sendTurn` after
      * the session is resolved; return value is forwarded to `turn.execute`.
@@ -294,13 +294,13 @@ export function useTrueFoundryAgentMessages({
     onError,
     initializeSession,
     resolveConversationSessionId,
-    draftGateway,
+    privateClient,
     getTurnHeaders,
 }: UseTrueFoundryAgentMessagesOptions) {
     const sessionOptions = useMemo<GetSessionOptions | undefined>(
         () =>
-            draftGateway != null ? { draftGateway } : undefined,
-        [draftGateway],
+            privateClient != null ? { privateClient } : undefined,
+        [privateClient],
     );
 
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);

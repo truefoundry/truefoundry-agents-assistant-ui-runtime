@@ -3,7 +3,7 @@ import type { ThreadMessage } from "@assistant-ui/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionClient, Turn } from "truefoundry-gateway-sdk/agents";
-import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
+import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
@@ -971,16 +971,16 @@ describe("useTrueFoundryAgentMessages", () => {
         expect(loadSessionSnapshot).toHaveBeenCalledTimes(1);
     });
 
-    it("cancel resolves the session through the draft gateway in draft mode", async () => {
+    it("cancel resolves the session through the private client in draft mode", async () => {
         const cancel = vi.fn().mockResolvedValue(undefined);
         vi.mocked(getSession).mockResolvedValue({ cancel } as never);
-        const draftGateway = {} as TrueFoundryGateway;
+        const privateClient = {} as PrivateAgentSessionClient;
 
         const { result } = renderHook(() =>
             useTrueFoundryAgentMessages({
                 client: mockClient,
                 sessionId: "draft-session-1",
-                draftGateway,
+                privateClient,
             }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -991,7 +991,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
         expect(cancel).toHaveBeenCalled();
         expect(getSession).toHaveBeenCalledWith(mockClient, "draft-session-1", {
-            draftGateway,
+            privateClient,
         });
     });
 });

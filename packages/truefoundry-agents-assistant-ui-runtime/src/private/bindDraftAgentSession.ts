@@ -1,65 +1,27 @@
-import type { TrueFoundryGateway } from "truefoundry-gateway-sdk";
-import type { AgentSession, AgentSessionClient } from "truefoundry-gateway-sdk/agents";
-// SDK does not publicly export the AgentSession class; bind draft ids for turn routes.
-import { AgentSession as AgentSessionClass } from "truefoundry-gateway-sdk/dist/esm/agents/AgentSession.mjs";
-
-import type { DraftSession } from "./agentSpec.js";
-
-type SessionRecord = {
-    id: string;
-    agentName: string;
-    title?: string;
-    createdBySubject: DraftSession["createdBySubject"];
-    createdAt: string;
-    updatedAt: string;
-};
+import type { AgentSession } from "truefoundry-gateway-sdk/agents";
+import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 const inflightByDraftId = new Map<string, Promise<AgentSession>>();
 
-export function getGatewayFromSessionClient(
-    client: AgentSessionClient,
-): TrueFoundryGateway {
-    const internal = client as unknown as { client: TrueFoundryGateway };
-    if (internal.client == null) {
-        throw new Error("AgentSessionClient is missing an internal gateway client.");
-    }
-    return internal.client;
-}
-
-function draftToSessionRecord(draft: DraftSession): SessionRecord {
-    return {
-        id: draft.id,
-        agentName: draft.agentName ?? "",
-        title: draft.title,
-        createdBySubject: draft.createdBySubject,
-        createdAt: draft.createdAt,
-        updatedAt: draft.updatedAt,
-    };
-}
-
 /**
- * Binds an `AgentSession` for turn APIs at `/agents/sessions/{draftSessionId}/turns`
- * after validating the draft via `GET draft-sessions/{draftSessionId}`.
- * Does not call `GET` or `POST` on `/agents/sessions` root.
+ * Binds turn APIs for a draft session via `PrivateAgentSessionClient.getDraftSession`.
+ * Returns an `AgentDraftSession` (identical turn surface to `AgentSession`).
  */
 export async function bindDraftAgentSession(
-    client: AgentSessionClient,
-    gateway: TrueFoundryGateway,
+    privateClient: PrivateAgentSessionClient,
     draftSessionId: string,
 ): Promise<AgentSession> {
     let inflight = inflightByDraftId.get(draftSessionId);
     if (inflight == null) {
-        inflight = (async () => {
-            const response = await gateway.agents.private.draftSessions.get(draftSessionId);
-            return new AgentSessionClass(
-                draftToSessionRecord(response.data),
-                getGatewayFromSessionClient(client),
-            ) as AgentSession;
-        })().finally(() => {
-            if (inflightByDraftId.get(draftSessionId) === inflight) {
-                inflightByDraftId.delete(draftSessionId);
-            }
-        });
+        inflight = privateClient
+            .getDraftSession({ draftSessionId })
+            // AgentDraftSession shares the turn API with AgentSession.
+            .then((draft) => draft as unknown as AgentSession)
+            .finally(() => {
+                if (inflightByDraftId.get(draftSessionId) === inflight) {
+                    inflightByDraftId.delete(draftSessionId);
+                }
+            });
         inflightByDraftId.set(draftSessionId, inflight);
     }
     return inflight;
