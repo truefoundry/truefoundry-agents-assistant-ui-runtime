@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { mergeAgentSpec } from "./private/agentSpec.js";
-import { resolveTrueFoundryAgentConfig } from "./types.js";
+import {
+    resolveTrueFoundryAgentConfig,
+    resolveTrueFoundryAgentRuntimeOptions,
+} from "./types.js";
+import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 describe("resolveTrueFoundryAgentConfig", () => {
     it("supports legacy agentName", () => {
@@ -33,6 +38,30 @@ describe("resolveTrueFoundryAgentConfig", () => {
             mode: "draft",
             defaultAgentSpec: spec,
         });
+    });
+});
+
+describe("resolveTrueFoundryAgentRuntimeOptions", () => {
+    const client = {} as AgentSessionClient;
+
+    it("requires privateClient for draft mode", () => {
+        expect(() =>
+            resolveTrueFoundryAgentRuntimeOptions({
+                client,
+                agent: { mode: "draft", defaultAgentSpec: { model: { name: "x" } } },
+            }),
+        ).toThrow(/privateClient/);
+    });
+
+    it("accepts privateClient for draft mode", () => {
+        const privateClient = {} as PrivateAgentSessionClient;
+        const resolved = resolveTrueFoundryAgentRuntimeOptions({
+            client,
+            privateClient,
+            agent: { mode: "draft", defaultAgentSpec: { model: { name: "x" } } },
+        });
+        expect(resolved.privateClient).toBe(privateClient);
+        expect(resolved.agent.mode).toBe("draft");
     });
 });
 

@@ -16,8 +16,11 @@ export type { UseTrueFoundryAgentRuntimeOptions, NamedAgentConfig, DraftAgentCon
 export type { AgentSpec, AgentSpecUpdate, DraftSession } from "./private/agentSpec.js";
 export { mergeAgentSpec, draftSessionTitle } from "./private/agentSpec.js";
 export { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
+export { createTrueFoundryOwnedSessionsThreadListAdapter } from "./truefoundryOwnedSessionsThreadListAdapter.js";
 export { createDraftSessionBridge } from "./private/draftSessionBridge.js";
 export type { DraftSessionBridge } from "./private/draftSessionBridge.js";
+export { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
+export type { AgentDraftSession } from "truefoundry-gateway-sdk/agents/private";
 export {
     useTrueFoundryAgentSpec,
     useTrueFoundryUpdateAgentSpec,

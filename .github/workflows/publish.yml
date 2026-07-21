@@ -32,4 +32,11 @@ jobs:
 
       - name: Publish
         working-directory: packages/truefoundry-agents-assistant-ui-runtime
-        run: npm publish --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          # Prereleases (e.g. 0.1.3-rc.1) require an explicit dist-tag.
+          if [[ "$VERSION" == *-* ]]; then
+            npm publish --access public --tag next
+          else
+            npm publish --access public
+          fi

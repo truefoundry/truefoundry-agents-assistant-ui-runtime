@@ -21,7 +21,7 @@ export function loadSessionSnapshot(
     onProgress?: (snap: SessionSnapshot) => void,
 ): Promise<SessionSnapshot> {
     const cacheKey =
-        sessionOptions?.draftGateway != null ? `draft:${sessionId}` : sessionId;
+        sessionOptions?.privateClient != null ? `draft:${sessionId}` : sessionId;
     let inflight = inflightBySessionId.get(cacheKey);
     if (inflight == null) {
         inflight = getSession(client, sessionId, sessionOptions)
