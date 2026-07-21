@@ -53,6 +53,13 @@ export async function* streamTurnContent(
     options: StreamTurnOptions,
     abortSignal: AbortSignal,
     groupRootBaseline?: readonly string[],
+    /**
+     * Called once with the gateway-assigned turn ID as soon as it becomes
+     * available (after the first `turn.created` SSE event). Use this to
+     * reconcile the locally-generated optimistic ID with the real gateway ID
+     * so that edit/retry can find the turn in `buildSnapshotBeforeTurn`.
+     */
+    onTurnIdAvailable?: (turnId: string) => void,
 ): AsyncGenerator<TurnStreamUpdate> {
     const previousTurnId =
         options.previousTurnId === null
@@ -69,7 +76,8 @@ export async function* streamTurnContent(
     }
 
     try {
-        yield* streamTurnEvents(
+        let turnIdNotified = false;
+        for await (const update of streamTurnEvents(
             turn.execute(
                 { stream: true },
                 {
@@ -79,7 +87,20 @@ export async function* streamTurnContent(
             ),
             foldState,
             groupRootBaseline,
-        );
+        )) {
+            // After the first `turn.created` event, `turn.id` is set.
+            // Notify BEFORE yielding so the caller can update its tracking
+            // before the snapshot is written with the stream update.
+            if (!turnIdNotified && turn.id != null) {
+                onTurnIdAvailable?.(turn.id);
+                turnIdNotified = true;
+            }
+            yield update;
+        }
+        // Handle streams that complete without yielding any content.
+        if (!turnIdNotified && turn.id != null) {
+            onTurnIdAvailable?.(turn.id);
+        }
     } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
             return;
