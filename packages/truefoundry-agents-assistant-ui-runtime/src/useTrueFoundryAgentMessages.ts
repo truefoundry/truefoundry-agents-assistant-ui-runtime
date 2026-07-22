@@ -353,7 +353,14 @@ export function useTrueFoundryAgentMessages({
     const runStream = useCallback(
         (
             createStream: (signal: AbortSignal) => AsyncGenerator<TurnStreamUpdate>,
-            turnId: string,
+            /**
+             * A mutable ref whose `.current` is the turn ID to use for
+             * `activeStream.turnId`. Callers that capture the gateway turn ID
+             * via `onTurnIdAvailable` update this ref in-place so that both the
+             * pending-update flush and `commitActiveStream` always see the real
+             * gateway ID rather than the locally-generated optimistic one.
+             */
+            turnIdRef: { current: string },
             isContinuation: boolean,
         ): Promise<void> => {
             const streamGeneration = ++streamGenerationRef.current;
@@ -368,7 +375,6 @@ export function useTrueFoundryAgentMessages({
                 // message tree (UI hang). The buffer belongs to this stream only.
                 let pendingStreamUpdate: {
                     update: TurnStreamUpdate;
-                    turnId: string;
                     isContinuation: boolean;
                 } | null = null;
                 let streamUpdateRaf: number | null = null;
@@ -383,12 +389,14 @@ export function useTrueFoundryAgentMessages({
                     ) {
                         return;
                     }
-                    const { update, turnId: pendingTurnId, isContinuation: pendingIsContinuation } =
-                        pending;
+                    const { update, isContinuation: pendingIsContinuation } = pending;
                     setSnapshot((prev) =>
                         replaceSessionSnapshot(prev, {
                             activeStream: {
-                                turnId: pendingTurnId,
+                                // Read from the ref so we always use the latest ID,
+                                // including any gateway ID that arrived after the RAf
+                                // was scheduled.
+                                turnId: turnIdRef.current,
                                 update,
                                 isContinuation: pendingIsContinuation,
                             },
@@ -397,7 +405,7 @@ export function useTrueFoundryAgentMessages({
                 };
 
                 const applyStreamUpdate = (update: TurnStreamUpdate) => {
-                    pendingStreamUpdate = { update, turnId, isContinuation };
+                    pendingStreamUpdate = { update, isContinuation };
                     if (streamUpdateRaf == null) {
                         streamUpdateRaf = requestAnimationFrame(flushPendingStreamUpdate);
                     }
@@ -540,7 +548,7 @@ export function useTrueFoundryAgentMessages({
                             undefined,
                             loadedSnapshot.groupRootBaseline,
                         ),
-                    turn.id,
+                    { current: turn.id },
                     isContinuation,
                 ).catch(() => undefined);
             }
@@ -588,6 +596,11 @@ export function useTrueFoundryAgentMessages({
                 isContinuation && continuationTurnId != null
                     ? continuationTurnId
                     : generateId();
+
+            // Mutable ref so runStream always reads the latest ID. For new
+            // user-message turns the local `generateId()` value is replaced
+            // with the gateway-assigned ID once the first SSE event arrives.
+            const turnIdRef = { current: turnId };
 
             if ("inputs" in options) {
                 applyUserToolResponsesToFold(
@@ -681,9 +694,26 @@ export function useTrueFoundryAgentMessages({
                         },
                         signal,
                         groupRootBaseline,
+                        // Rename the optimistic local ID to the gateway turn ID
+                        // so that edit/retry can resolve the turn via the gateway.
+                        (gatewayTurnId) => {
+                            const oldId = turnIdRef.current;
+                            if (gatewayTurnId === oldId) return;
+                            turnIdRef.current = gatewayTurnId;
+                            // Rename in the ref immediately so any synchronous read
+                            // (e.g. commitActiveStream) sees the correct ID.
+                            const renamePendingUser = (prev: SessionSnapshot): SessionSnapshot => {
+                                if (prev.pendingUser?.turnId !== oldId) return prev;
+                                return replaceSessionSnapshot(prev, {
+                                    pendingUser: { ...prev.pendingUser, turnId: gatewayTurnId },
+                                });
+                            };
+                            snapshotRef.current = renamePendingUser(snapshotRef.current);
+                            setSnapshot(renamePendingUser);
+                        },
                     );
                 },
-                turnId,
+                turnIdRef,
                 isContinuation,
             );
         },
@@ -784,7 +814,7 @@ export function useTrueFoundryAgentMessages({
                     undefined,
                     snapshotRef.current.groupRootBaseline,
                 ),
-            turn.id,
+            { current: turn.id },
             true,
         );
     }, [runStream]);
