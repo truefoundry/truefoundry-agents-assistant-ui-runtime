@@ -592,7 +592,9 @@ export function useTrueFoundryAgentMessages({
             const isFirstTurnInSession =
                 "userMessage" in options &&
                 options.previousTurnId === undefined &&
-                snapshotRef.current.turns.length === 0;
+                snapshotRef.current.turns.length === 0 &&
+                snapshotRef.current.pendingUser == null &&
+                snapshotRef.current.activeStream == null;
 
             if ("inputs" in options) {
                 applyUserToolResponsesToFold(
