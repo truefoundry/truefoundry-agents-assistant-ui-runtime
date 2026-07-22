@@ -2,6 +2,7 @@ import {
     type AgentSession,
     type Turn,
     type TurnInputItem,
+    TrueFoundryGatewayApi,
 } from "truefoundry-gateway-sdk/agents";
 
 import {
@@ -18,7 +19,7 @@ export type StreamTurnOptions = {
     inputs?: RequiredActionInput[];
     /**
      * Branch anchor for `prepareTurn`. Omit for `"auto"`. Pass `null` for a fresh
-     * root turn (no `previousTurnId` field).
+     * root turn — sent as `previous_turn_id: null` on the wire.
      */
     previousTurnId?: string | null;
     /** Extra headers for the createTurn request (`execute` request options). */
@@ -54,13 +55,18 @@ export async function* streamTurnContent(
     abortSignal: AbortSignal,
     groupRootBaseline?: readonly string[],
 ): AsyncGenerator<TurnStreamUpdate> {
-    const previousTurnId =
+    // When previousTurnId is explicitly null, pass it through to prepareTurn so the
+    // SDK serializer emits `previous_turn_id: null` on the wire (first turn in session).
+    // The SDK type doesn't admit null, but the Fern serializer handles it correctly.
+    const previousTurnId: TrueFoundryGatewayApi.PreviousTurnIdInput | null | undefined =
         options.previousTurnId === null
-            ? undefined
+            ? null
             : (options.previousTurnId ?? "auto");
     const turn = session.prepareTurn({
         input: buildTurnInput(options),
-        ...(previousTurnId != null ? { previousTurnId } : {}),
+        ...(previousTurnId !== undefined
+            ? { previousTurnId: previousTurnId as TrueFoundryGatewayApi.PreviousTurnIdInput }
+            : {}),
     });
 
     const onAbort = bindAbort(session, abortSignal);

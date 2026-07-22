@@ -588,6 +588,11 @@ export function useTrueFoundryAgentMessages({
                 isContinuation && continuationTurnId != null
                     ? continuationTurnId
                     : generateId();
+            // First turns must send previousTurnId: null.
+            const isFirstTurnInSession =
+                "userMessage" in options &&
+                options.previousTurnId === undefined &&
+                snapshotRef.current.turns.length === 0;
 
             if ("inputs" in options) {
                 applyUserToolResponsesToFold(
@@ -676,7 +681,9 @@ export function useTrueFoundryAgentMessages({
                             userMessage: options.userMessage,
                             ...(options.previousTurnId !== undefined
                                 ? { previousTurnId: options.previousTurnId }
-                                : {}),
+                                : isFirstTurnInSession
+                                  ? { previousTurnId: null }
+                                  : {}),
                             ...streamHeaders,
                         },
                         signal,
