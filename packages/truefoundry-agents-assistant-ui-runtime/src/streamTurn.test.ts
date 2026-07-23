@@ -227,6 +227,91 @@ describe("streamTurn", () => {
                 },
             );
         });
+
+        it("notifies gateway turn id when turn.done errors with no content yields", async () => {
+            const gatewayTurnId = "01ky6mqzmczwt6ssyd5r02gjjc";
+            const turn = {
+                id: undefined as string | undefined,
+                execute: vi.fn(() =>
+                    (async function* () {
+                        // SDK sets turn.id when turn.created is observed.
+                        turn.id = gatewayTurnId;
+                        yield streamData(1, {
+                            type: "turn.created",
+                            createdAt,
+                            input: [{ type: "user.message", content: "hello" }],
+                        });
+                        yield streamData(2, {
+                            type: "turn.done",
+                            createdAt,
+                            state: {
+                                status: "error",
+                                message:
+                                    "Publisher Model is not servable in region us-central1.",
+                            },
+                        });
+                    })(),
+                ),
+            };
+            const prepareTurn = vi.fn(() => turn);
+            const session = {
+                prepareTurn,
+                cancel: vi.fn().mockResolvedValue(undefined),
+            } as unknown as AgentSession;
+            const onTurnIdAvailable = vi.fn();
+
+            await expect(
+                collectUpdates(
+                    streamTurnContent(
+                        session,
+                        new PeerThreadFoldState(),
+                        { userMessage: "hello" },
+                        new AbortController().signal,
+                        undefined,
+                        onTurnIdAvailable,
+                    ),
+                ),
+            ).rejects.toThrow("Publisher Model is not servable in region us-central1.");
+
+            expect(onTurnIdAvailable).toHaveBeenCalledTimes(1);
+            expect(onTurnIdAvailable).toHaveBeenCalledWith(gatewayTurnId);
+        });
+
+        it("does not notify when an error stream never assigns turn.id", async () => {
+            const execute = vi.fn(() =>
+                (async function* () {
+                    yield streamData(1, {
+                        type: "turn.done",
+                        createdAt,
+                        state: {
+                            status: "error",
+                            message: "boom",
+                        },
+                    });
+                })(),
+            );
+            const prepareTurn = vi.fn(() => ({ id: undefined, execute }));
+            const session = {
+                prepareTurn,
+                cancel: vi.fn().mockResolvedValue(undefined),
+            } as unknown as AgentSession;
+            const onTurnIdAvailable = vi.fn();
+
+            await expect(
+                collectUpdates(
+                    streamTurnContent(
+                        session,
+                        new PeerThreadFoldState(),
+                        { userMessage: "hello" },
+                        new AbortController().signal,
+                        undefined,
+                        onTurnIdAvailable,
+                    ),
+                ),
+            ).rejects.toThrow("boom");
+
+            expect(onTurnIdAvailable).not.toHaveBeenCalled();
+        });
     });
 
     describe("resumeTurnStream", () => {

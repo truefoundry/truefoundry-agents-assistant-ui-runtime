@@ -81,8 +81,15 @@ export async function* streamTurnContent(
         return;
     }
 
+    let turnIdNotified = false;
+    const notifyTurnIdIfAvailable = () => {
+        if (!turnIdNotified && turn.id != null) {
+            onTurnIdAvailable?.(turn.id);
+            turnIdNotified = true;
+        }
+    };
+
     try {
-        let turnIdNotified = false;
         for await (const update of streamTurnEvents(
             turn.execute(
                 { stream: true },
@@ -97,17 +104,17 @@ export async function* streamTurnContent(
             // After the first `turn.created` event, `turn.id` is set.
             // Notify BEFORE yielding so the caller can update its tracking
             // before the snapshot is written with the stream update.
-            if (!turnIdNotified && turn.id != null) {
-                onTurnIdAvailable?.(turn.id);
-                turnIdNotified = true;
-            }
+            notifyTurnIdIfAvailable();
             yield update;
         }
         // Handle streams that complete without yielding any content.
-        if (!turnIdNotified && turn.id != null) {
-            onTurnIdAvailable?.(turn.id);
-        }
+        notifyTurnIdIfAvailable();
     } catch (error) {
+        // Error streams often throw on `turn.done` (status=error) without ever
+        // yielding content (e.g. model not servable). `turn.id` is still set
+        // after `turn.created` — notify so edit/retry can resolve the turn.
+        // Same for AbortError after create: keep local ids aligned with gateway.
+        notifyTurnIdIfAvailable();
         if (error instanceof Error && error.name === "AbortError") {
             return;
         }
