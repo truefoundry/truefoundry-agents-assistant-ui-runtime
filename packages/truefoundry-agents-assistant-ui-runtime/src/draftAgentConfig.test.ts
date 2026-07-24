@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeAgentSpec } from "./private/agentSpec.js";
+import { mergeAgentSpec, type AgentSpec } from "./private/agentSpec.js";
 import {
     resolveTrueFoundryAgentConfig,
     resolveTrueFoundryAgentRuntimeOptions,
@@ -80,14 +80,14 @@ describe("mergeAgentSpec", () => {
     });
 
     it("replaces mcpServers array wholesale", () => {
-        const base = {
+        const base: AgentSpec = {
             model: { name: "openai/gpt-4o" },
-            mcpServers: [{ name: "github", enableTools: ["@all"] }],
+            mcpServers: [{ type: "truefoundry-mcp-registry", name: "github", enableTools: ["@all"] }],
         };
         const next = mergeAgentSpec(base, {
-            mcpServers: [{ name: "slack", enableTools: ["@all"] }],
+            mcpServers: [{ type: "truefoundry-mcp-registry", name: "slack", enableTools: ["@all"] }],
         });
-        expect(next.mcpServers).toEqual([{ name: "slack", enableTools: ["@all"] }]);
+        expect(next.mcpServers).toEqual([{ type: "truefoundry-mcp-registry", name: "slack", enableTools: ["@all"] }]);
     });
 
     it("replaces skills array wholesale", () => {
@@ -102,9 +102,9 @@ describe("mergeAgentSpec", () => {
     });
 
     it("model partial update does not clear mcpServers or skills", () => {
-        const base = {
+        const base: AgentSpec = {
             model: { name: "openai/gpt-4o", params: { maxTokens: 1024 } },
-            mcpServers: [{ name: "github", enableTools: ["@all"] }],
+            mcpServers: [{ type: "truefoundry-mcp-registry", name: "github", enableTools: ["@all"] }],
             skills: [{ fqn: "acme/skill-a:1", preload: false }],
         };
         const next = mergeAgentSpec(base, {

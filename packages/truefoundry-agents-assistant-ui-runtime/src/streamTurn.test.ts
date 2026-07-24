@@ -13,9 +13,9 @@ const createdAt = new Date().toISOString();
 
 function streamData(
     sequenceNumber: number,
-    event: TurnStreamData["event"],
+    event: TurnStreamData["event"] | Record<string, unknown>,
 ): TurnStreamData {
-    return { sequenceNumber, event };
+    return { sequenceNumber, event: event as TurnStreamData["event"] };
 }
 
 async function collectUpdates(
@@ -150,7 +150,7 @@ describe("streamTurn", () => {
             });
         });
 
-        it("omits previousTurnId when branching from root", async () => {
+        it("forwards previousTurnId null when branching from root", async () => {
             const execute = vi.fn(() => (async function* () {})());
             const prepareTurn = vi.fn(() => ({ execute }));
             const session = {
@@ -169,6 +169,7 @@ describe("streamTurn", () => {
 
             expect(prepareTurn).toHaveBeenCalledWith({
                 input: [{ type: "user.message", content: "first" }],
+                previousTurnId: null,
             });
         });
 
@@ -248,6 +249,7 @@ describe("streamTurn", () => {
                                 status: "error",
                                 message:
                                     "Publisher Model is not servable in region us-central1.",
+                                completedAt: createdAt,
                             },
                         });
                     })(),
@@ -285,6 +287,7 @@ describe("streamTurn", () => {
                         createdAt,
                         state: {
                             status: "error",
+                            completedAt: createdAt,
                             message: "boom",
                         },
                     });

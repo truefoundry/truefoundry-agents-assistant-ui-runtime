@@ -74,7 +74,9 @@ function ensureModelMessageContentArray(message: ModelMessageEvent): void {
     if (Array.isArray(message.content)) {
         return;
     }
-    message.content = normalizeModelMessageContent(message);
+    // Gateway may stream `image_url` content blocks that aren't in the SDK content union yet.
+    (message as { content?: ModelMessageContentPart[] }).content =
+        normalizeModelMessageContent(message);
 }
 
 function mergeContentBlockDeltas(

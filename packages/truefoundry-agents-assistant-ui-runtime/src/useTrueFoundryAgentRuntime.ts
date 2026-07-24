@@ -30,7 +30,6 @@ import {
     createDraftSessionBridge,
     DRAFT_SESSION_LAST_UPDATED_AT_HEADER,
 } from "./private/draftSessionBridge.js";
-import { getGatewayFromPrivateClient } from "./private/getGatewayFromPrivateClient.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
@@ -164,9 +163,7 @@ function useTrueFoundryAgentRuntimeImpl(
                 onError?.(error);
                 throw error;
             }
-            // Same gateway.agents.downloadSandboxFile path as before, via the wrapped client.
-            const gateway = getGatewayFromPrivateClient(privateClient);
-            const response = await gateway.agents.downloadSandboxFile(sandboxId, { path });
+            const response = await privateClient.downloadSandboxFile(sandboxId, { path });
             return await response.blob();
         },
         [privateClient, sandboxId, onError],

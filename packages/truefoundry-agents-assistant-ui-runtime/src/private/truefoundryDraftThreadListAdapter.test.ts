@@ -104,7 +104,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
         const liveAgentSpec: AgentSpec = {
             model: { name: "anthropic/claude-opus-4-8" },
             instructions: "You are helpful.",
-            mcpServers: [{ name: "github", enableTools: ["@all"] }],
+            mcpServers: [{ type: "truefoundry-mcp-registry", name: "github", enableTools: ["@all"] }],
             skills: [{ fqn: "acme/skill-a:1", preload: false }],
         };
         const createDraftSession = vi.fn().mockResolvedValue(
