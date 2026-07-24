@@ -142,7 +142,7 @@ describe("foldPeerThreads", () => {
                         id: "spawn-1",
                         type: "function",
                         function: { name: "create_sub_agent", arguments: "{}" },
-                    },
+                    toolInfo: { type: "truefoundry-system", name: "create_sub_agent" }, },
                 ],
             }),
         );

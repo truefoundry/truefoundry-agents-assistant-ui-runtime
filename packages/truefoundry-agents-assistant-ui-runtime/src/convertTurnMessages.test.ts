@@ -178,7 +178,7 @@ async function sessionEventItemsFromTurns(
                 turnId: turn.id,
                 input: turn.input,
                 state: { status: "running" },
-                createdBy: { subjectId: "u1", subjectType: "user" },
+                createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                 createdAt: turn.createdAt,
             },
         });
@@ -636,7 +636,7 @@ describe("convertTurnMessages", () => {
                 input: [{ type: "user.message", content: "run tool" }],
                 state: {
                     status: "done",
-                    output: null,
+                    output: undefined,
                     requiredActions: [
                         approvalRequired({
                             id: "approval-event",
@@ -703,7 +703,7 @@ describe("convertTurnMessages", () => {
                 input: [{ type: "user.message", content: "run tool" }],
                 state: {
                     status: "done",
-                    output: null,
+                    output: undefined,
                     requiredActions: [
                         approvalRequired({
                             id: "approval-event",
@@ -787,7 +787,7 @@ describe("convertTurnMessages", () => {
                 input: [{ type: "user.message", content: "ask me" }],
                 state: {
                     status: "done",
-                    output: null,
+                    output: undefined,
                     requiredActions: [
                         responseRequired({
                             id: "resp-req-1",
@@ -859,7 +859,7 @@ describe("convertTurnMessages", () => {
                 input: [{ type: "user.message", content: "ask me" }],
                 state: {
                     status: "done",
-                    output: null,
+                    output: undefined,
                     requiredActions: [
                         responseRequired({
                             id: "resp-req-1",
@@ -2186,7 +2186,7 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "hello" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2241,7 +2241,7 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "first" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2286,7 +2286,7 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "first" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2311,7 +2311,7 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t2",
                     input: [{ type: "user.message", content: "second" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2380,7 +2380,7 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: id,
                     input: [{ type: "user.message", content: text }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user" },
+                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },

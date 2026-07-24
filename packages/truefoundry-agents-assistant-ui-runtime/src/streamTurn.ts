@@ -1,9 +1,9 @@
-import {
-    type AgentSession,
-    type Turn,
-    type TurnInputItem,
-    TrueFoundryGatewayApi,
+import type {
+    AgentSession,
+    Turn,
+    TurnInputItem,
 } from "truefoundry-gateway-sdk/agents";
+import type { TruefoundryGatewayApi } from "truefoundry-gateway-sdk";
 
 import {
     streamTurnEvents,
@@ -65,14 +65,14 @@ export async function* streamTurnContent(
     // When previousTurnId is explicitly null, pass it through to prepareTurn so the
     // SDK serializer emits `previous_turn_id: null` on the wire (first turn in session).
     // The SDK type doesn't admit null, but the Fern serializer handles it correctly.
-    const previousTurnId: TrueFoundryGatewayApi.PreviousTurnIdInput | null | undefined =
+    const previousTurnId: TruefoundryGatewayApi.PreviousTurnIdInput | null | undefined =
         options.previousTurnId === null
             ? null
             : (options.previousTurnId ?? "auto");
     const turn = session.prepareTurn({
         input: buildTurnInput(options),
         ...(previousTurnId !== undefined
-            ? { previousTurnId: previousTurnId as TrueFoundryGatewayApi.PreviousTurnIdInput }
+            ? { previousTurnId: previousTurnId as TruefoundryGatewayApi.PreviousTurnIdInput }
             : {}),
     });
 

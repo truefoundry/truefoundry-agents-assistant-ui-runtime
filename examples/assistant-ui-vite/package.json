@@ -16,7 +16,7 @@
     "react-dom": "19.2.7",
     "remark-gfm": "^4.0.1",
     "@truefoundry/assistant-ui-runtime": "workspace:*",
-    "truefoundry-gateway-sdk": "^0.3.2-rc.1"
+    "truefoundry-gateway-sdk": "^0.4.0-rc.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4",
