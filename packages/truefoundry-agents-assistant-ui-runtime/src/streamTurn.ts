@@ -18,10 +18,10 @@ export type StreamTurnOptions = {
     resumeMcpAuth?: boolean;
     inputs?: RequiredActionInput[];
     /**
-     * Branch anchor for `prepareTurn`. Omit for `"auto"`. Pass `null` for a fresh
-     * root turn — sent as `previous_turn_id: null` on the wire.
+     * Branch anchor for `prepareTurn`. Omit for `"auto"`. Pass `"none"` for a fresh
+     * root turn — sent as `previous_turn_id: "none"` on the wire.
      */
-    previousTurnId?: string | null;
+    previousTurnId?: TruefoundryGatewayApi.PreviousTurnIdInput;
     /** Extra headers for the createTurn request (`execute` request options). */
     headers?: Record<string, string>;
 };
@@ -62,18 +62,9 @@ export async function* streamTurnContent(
      */
     onTurnIdAvailable?: (turnId: string) => void,
 ): AsyncGenerator<TurnStreamUpdate> {
-    // When previousTurnId is explicitly null, pass it through to prepareTurn so the
-    // SDK serializer emits `previous_turn_id: null` on the wire (first turn in session).
-    // The SDK type doesn't admit null, but the Fern serializer handles it correctly.
-    const previousTurnId: TruefoundryGatewayApi.PreviousTurnIdInput | null | undefined =
-        options.previousTurnId === null
-            ? null
-            : (options.previousTurnId ?? "auto");
     const turn = session.prepareTurn({
         input: buildTurnInput(options),
-        ...(previousTurnId !== undefined
-            ? { previousTurnId: previousTurnId as TruefoundryGatewayApi.PreviousTurnIdInput }
-            : {}),
+        previousTurnId: options.previousTurnId ?? "auto",
     });
 
     const onAbort = bindAbort(session, abortSignal);

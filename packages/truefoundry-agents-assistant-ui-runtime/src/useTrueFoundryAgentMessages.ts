@@ -80,7 +80,7 @@ export type UseTrueFoundryAgentMessagesOptions = {
 export type SendTurnOptions =
     | {
           userMessage: UserMessageContent;
-          previousTurnId?: string | null;
+          previousTurnId?: string;
           /**
            * When branching (edit/reset), the already-rewound history to send from.
            * Applied atomically with `pendingUser` so a stale React snapshot cannot
@@ -596,7 +596,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation && continuationTurnId != null
                     ? continuationTurnId
                     : generateId();
-            // First turns must send previousTurnId: null.
+            // First turns must send previousTurnId: "none".
             const isFirstTurnInSession =
                 "userMessage" in options &&
                 options.previousTurnId === undefined &&
@@ -697,7 +697,7 @@ export function useTrueFoundryAgentMessages({
                             ...(options.previousTurnId !== undefined
                                 ? { previousTurnId: options.previousTurnId }
                                 : isFirstTurnInSession
-                                  ? { previousTurnId: null }
+                                  ? { previousTurnId: "none" }
                                   : {}),
                             ...streamHeaders,
                         },

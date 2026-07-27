@@ -150,7 +150,7 @@ describe("streamTurn", () => {
             });
         });
 
-        it("forwards previousTurnId null when branching from root", async () => {
+        it("forwards previousTurnId \"none\" when branching from root", async () => {
             const execute = vi.fn(() => (async function* () {})());
             const prepareTurn = vi.fn(() => ({ execute }));
             const session = {
@@ -162,14 +162,14 @@ describe("streamTurn", () => {
                 streamTurnContent(
                     session,
                     new PeerThreadFoldState(),
-                    { userMessage: "first", previousTurnId: null },
+                    { userMessage: "first", previousTurnId: "none" },
                     new AbortController().signal,
                 ),
             );
 
             expect(prepareTurn).toHaveBeenCalledWith({
                 input: [{ type: "user.message", content: "first" }],
-                previousTurnId: null,
+                previousTurnId: "none",
             });
         });
 

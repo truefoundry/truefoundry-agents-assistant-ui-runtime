@@ -23,7 +23,7 @@ export function createTrueFoundryThreadListAdapter(options: {
             const threads = page.data.map((session) => ({
                 status: "regular" as const,
                 remoteId: session.id,
-                title: session.title,
+                title: session.title ?? undefined,
                 lastMessageAt: new Date(session.updatedAt),
             }));
             return {
@@ -42,7 +42,7 @@ export function createTrueFoundryThreadListAdapter(options: {
             return {
                 status: "regular" as const,
                 remoteId: session.id,
-                title: session.title,
+                title: session.title ?? undefined,
                 lastMessageAt: new Date(session.updatedAt),
             };
         },

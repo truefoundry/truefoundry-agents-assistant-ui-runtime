@@ -1276,24 +1276,24 @@ export async function buildSnapshotBeforeTurnIndex(
     return snapshot;
 }
 
-/** Gateway turn id to branch from when resubmitting at `turnIndex` (null for first turn). */
+/** Gateway turn id to branch from when resubmitting at `turnIndex` (`"none"` for first turn). */
 export async function resolveGatewayBranchPreviousTurnId(
     session: AgentSession,
     turnIndex: number,
     orderedTurns?: Turn[],
-): Promise<string | null> {
+): Promise<string> {
     if (turnIndex <= 0) {
-        return null;
+        return "none";
     }
     const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
-    return turns[turnIndex - 1]?.id ?? null;
+    return turns[turnIndex - 1]?.id ?? "none";
 }
 
 /** Resolves `previousTurnId` by turn id so partial history windows stay correct. */
 export async function resolveGatewayBranchPreviousTurnIdForTurn(
     session: AgentSession,
     turnId: string,
-): Promise<string | null> {
+): Promise<string> {
     const turns = await listSessionTurnsOrdered(session);
     const turnIndex = turns.findIndex((turn) => turn.id === turnId);
     return resolveGatewayBranchPreviousTurnId(session, turnIndex, turns);
@@ -1456,14 +1456,14 @@ export function parseTurnIdFromMessageId(messageId: string): string {
     return messageId.replace(/-user$/, "");
 }
 
-/** Parent turn id for branching before `turnId`; `null` when editing the first turn. */
+/** Parent turn id for branching before `turnId`; `"none"` when editing the first turn. */
 export function resolveBranchPreviousTurnId(
     turns: readonly SessionTurnRecord[],
     turnId: string,
-): string | null {
+): string {
     const turnIndex = turns.findIndex((turn) => turn.id === turnId);
     if (turnIndex <= 0) {
-        return null;
+        return "none";
     }
     return turns[turnIndex - 1]!.id;
 }

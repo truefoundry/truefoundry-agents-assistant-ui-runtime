@@ -12,11 +12,11 @@ describe("user message branch helpers", () => {
         expect(parseTurnIdFromMessageId("turn-abc-user")).toBe("turn-abc");
     });
 
-    it("resolveBranchPreviousTurnId returns null for the first turn", () => {
+    it("resolveBranchPreviousTurnId returns \"none\" for the first turn", () => {
         const turns: SessionTurnRecord[] = [
             { id: "a", createdAt: "", state: { status: "done", requiredActions: [], completedAt: "" } },
         ];
-        expect(resolveBranchPreviousTurnId(turns, "a")).toBeNull();
+        expect(resolveBranchPreviousTurnId(turns, "a")).toBe("none");
     });
 
     it("resolveBranchPreviousTurnId returns the prior turn id", () => {
