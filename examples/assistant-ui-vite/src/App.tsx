@@ -1,18 +1,6 @@
 import { useMemo } from "react";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import {
-  ErrorToasterProvider,
-  SlotsProvider,
-  Thread,
-  ThreadListContainer,
-  TooltipProvider,
-} from "@truefoundry/agent-ui-sdk";
-import {
-  trueFoundryAttachmentAdapter,
-  useTrueFoundryAgentRuntime,
-} from "@truefoundry/assistant-ui-runtime";
+import { TrueFoundryAssistantUI } from "@truefoundry/agent-ui-sdk";
 
-import { HistoryViewportShell } from "./HistoryViewportShell";
 import { getAgentSessionClient } from "./lib/agentClient";
 import { loadCredentials, type GatewayCredentials } from "./lib/credentials";
 
@@ -52,30 +40,16 @@ function AppContent({ credentials }: { credentials: GatewayCredentials }) {
     [credentials],
   );
 
-  const runtime = useTrueFoundryAgentRuntime({
-    client,
-    agentName: credentials.agentName,
-    adapters: { attachments: trueFoundryAttachmentAdapter },
-    onError: console.error,
-  });
-
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ErrorToasterProvider>
-        <TooltipProvider>
-          <SlotsProvider overrides={{ ThreadViewportShell: HistoryViewportShell }}>
-            <div className="flex h-dvh overflow-hidden">
-              <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-border">
-                <ThreadListContainer />
-              </aside>
-              <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-                <Thread />
-              </div>
-            </div>
-          </SlotsProvider>
-        </TooltipProvider>
-      </ErrorToasterProvider>
-    </AssistantRuntimeProvider>
+    <div className="h-dvh">
+      <TrueFoundryAssistantUI
+        client={client}
+        agentName={credentials.agentName}
+        layout="sidebar"
+        className="h-full"
+        onError={console.error}
+      />
+    </div>
   );
 }
 
