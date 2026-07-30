@@ -24,6 +24,7 @@ import {
 import {
     buildUserMessageContent,
     extractEditedText,
+    getTurnMessageContent,
     parseTurnIdFromMessageId,
 } from "./convertTurnMessages.js";
 import {
@@ -37,7 +38,10 @@ import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapt
 import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { resolveTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { useDraftAgentSpec } from "./private/useDraftAgentSpec.js";
-import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
+import {
+    TrueFoundryPreTurnError,
+    useTrueFoundryAgentMessages,
+} from "./useTrueFoundryAgentMessages.js";
 
 function useTrueFoundryAgentRuntimeImpl(
     options: ReturnType<typeof resolveTrueFoundryAgentRuntimeOptions>,
@@ -59,22 +63,16 @@ function useTrueFoundryAgentRuntimeImpl(
             : null,
     );
 
-    const draftSessionId = useAuiState(
-        (state) =>
-            agent.mode === "draft"
-                ? (state.threadListItem.remoteId ?? undefined)
-                : undefined,
+    const draftSessionId = useAuiState((state) =>
+        agent.mode === "draft" ? (state.threadListItem.remoteId ?? undefined) : undefined,
     );
     const sessionId = useAuiState((state) => state.threadListItem.remoteId ?? undefined);
-    const isMain = useAuiState(
-        (state) => state.threads.mainThreadId === state.threadListItem.id,
-    );
+    const isMain = useAuiState((state) => state.threads.mainThreadId === state.threadListItem.id);
 
     const draftSpec = useDraftAgentSpec({
         draftSessionId,
         draftBridge: draftBridgeRef.current,
-        defaultAgentSpec:
-            agent.mode === "draft" ? agent.defaultAgentSpec : { model: { name: "" } },
+        defaultAgentSpec: agent.mode === "draft" ? agent.defaultAgentSpec : { model: { name: "" } },
         onAgentSpecChange: agent.mode === "draft" ? agent.onAgentSpecChange : undefined,
         onError,
     });
@@ -94,14 +92,9 @@ function useTrueFoundryAgentRuntimeImpl(
     }, [agent.mode]);
 
     const aui = useAui();
-    const initializeSession = useCallback(
-        () => aui.threadListItem().initialize(),
-        [aui],
-    );
+    const initializeSession = useCallback(() => aui.threadListItem().initialize(), [aui]);
     const runtimeAdapters = useRuntimeAdapters();
-    const [toolStatuses, setToolStatuses] = useState<
-        Record<string, ToolExecutionStatus>
-    >({});
+    const [toolStatuses, setToolStatuses] = useState<Record<string, ToolExecutionStatus>>({});
 
     const {
         messages,
@@ -133,21 +126,12 @@ function useTrueFoundryAgentRuntimeImpl(
         pendingAgentSpecRef.current = draftSpec.agentSpec;
     }
 
-    const pendingApprovals = useMemo(
-        () => collectPendingApprovals(messages),
-        [messages],
-    );
-    const pendingToolResponses = useMemo(
-        () => collectPendingToolResponses(messages),
-        [messages],
-    );
+    const pendingApprovals = useMemo(() => collectPendingApprovals(messages), [messages]);
+    const pendingToolResponses = useMemo(() => collectPendingToolResponses(messages), [messages]);
     const pendingMcpAuth = useMemo(() => derivePendingMcpAuth(messages), [messages]);
     const sandboxId = useMemo(() => deriveSandboxId(messages), [messages]);
 
-    const resumeMcpAuth = useMemo(
-        () => () => sendTurn({ resumeMcpAuth: true }),
-        [sendTurn],
-    );
+    const resumeMcpAuth = useMemo(() => () => sendTurn({ resumeMcpAuth: true }), [sendTurn]);
 
     const downloadSandboxFile = useCallback(
         async (path: string) => {
@@ -163,7 +147,9 @@ function useTrueFoundryAgentRuntimeImpl(
                 onError?.(error);
                 throw error;
             }
-            const response = await privateClient.downloadSandboxFile(sandboxId, { path });
+            const response = await privateClient.downloadSandboxFile(sandboxId, {
+                path,
+            });
             return await response.blob();
         },
         [privateClient, sandboxId, onError],
@@ -229,7 +215,17 @@ function useTrueFoundryAgentRuntimeImpl(
                 return;
             }
 
-            await sendTurn({ userMessage: buildUserMessageContent(message) });
+            try {
+                await sendTurn({ userMessage: buildUserMessageContent(message) });
+            } catch (error) {
+                if (error instanceof TrueFoundryPreTurnError) {
+                    const composer = aui.composer();
+                    if (composer.getState().text.length === 0) {
+                        composer.setText(getTurnMessageContent(message));
+                    }
+                }
+                throw error;
+            }
         },
         onCancel: async () => {
             await cancel();

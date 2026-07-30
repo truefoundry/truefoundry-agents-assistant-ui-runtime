@@ -1,6 +1,8 @@
 /// <reference types="@assistant-ui/core/react" />
 
 export { useTrueFoundryAgentRuntime } from "./useTrueFoundryAgentRuntime.js";
+export { TrueFoundryPreTurnError } from "./useTrueFoundryAgentMessages.js";
+export type { PreTurnFailurePhase } from "./useTrueFoundryAgentMessages.js";
 export {
     convertTurnsToThreadMessages,
     buildUserMessageContent,
@@ -12,7 +14,12 @@ export {
 } from "./convertTurnMessages.js";
 export type { ConvertTurnsResult, UserMessageContent } from "./convertTurnMessages.js";
 export { ROOT_THREAD_ID } from "./constants.js";
-export type { UseTrueFoundryAgentRuntimeOptions, NamedAgentConfig, DraftAgentConfig, TrueFoundryAgentConfig } from "./types.js";
+export type {
+    UseTrueFoundryAgentRuntimeOptions,
+    NamedAgentConfig,
+    DraftAgentConfig,
+    TrueFoundryAgentConfig,
+} from "./types.js";
 export type { AgentSpec, AgentSpecUpdate, DraftSession } from "./private/agentSpec.js";
 export { mergeAgentSpec, draftSessionTitle } from "./private/agentSpec.js";
 export { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
@@ -21,10 +28,7 @@ export { createDraftSessionBridge } from "./private/draftSessionBridge.js";
 export type { DraftSessionBridge } from "./private/draftSessionBridge.js";
 export { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 export type { AgentDraftSession } from "truefoundry-gateway-sdk/agents/private";
-export {
-    useTrueFoundryAgentSpec,
-    useTrueFoundryUpdateAgentSpec,
-} from "./hooks.js";
+export { useTrueFoundryAgentSpec, useTrueFoundryUpdateAgentSpec } from "./hooks.js";
 export type { TrueFoundryDraftRuntimeExtras } from "./truefoundryExtras.js";
 export type { SubAgentArtifact, SubAgentCustomMetadata } from "./foldPeerThreads.js";
 export type {
