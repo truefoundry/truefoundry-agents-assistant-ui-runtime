@@ -8,7 +8,9 @@ export default defineConfig({
     clean: true,
     target: "es2022",
     external: [
-        "react",
-        "@assistant-ui/core",
+        "@truefoundry/assistant-ui-runtime",
+        "truefoundry-gateway-sdk",
+        "truefoundry-gateway-sdk/agents",
+        "truefoundry-gateway-sdk/agents/private",
     ],
 });

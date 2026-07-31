@@ -5,7 +5,7 @@ import type {
     TurnDoneEvent,
     TurnEvent,
     TurnInputItem,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
 
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import { PeerThreadFoldState } from "./foldPeerThreads.js";

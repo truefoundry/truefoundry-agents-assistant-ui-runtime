@@ -1,4 +1,4 @@
-import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import type { AgentChatServer } from "./server/index.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createEmptySessionSnapshot } from "./sessionSnapshot.js";
@@ -19,7 +19,7 @@ import { buildSnapshotFromSessionEvents } from "./convertTurnMessages.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import { getSession } from "./sessions.js";
 
-const mockClient = {} as AgentSessionClient;
+const mockServer = {} as AgentChatServer;
 
 describe("loadSessionSnapshot", () => {
     beforeEach(() => {
@@ -33,8 +33,8 @@ describe("loadSessionSnapshot", () => {
         );
 
         const [first, second] = await Promise.all([
-            loadSessionSnapshot(mockClient, "session-1"),
-            loadSessionSnapshot(mockClient, "session-1"),
+            loadSessionSnapshot(mockServer, "session-1"),
+            loadSessionSnapshot(mockServer, "session-1"),
         ]);
 
         expect(first).toBe(second);
@@ -48,8 +48,8 @@ describe("loadSessionSnapshot", () => {
             createEmptySessionSnapshot(),
         );
 
-        await loadSessionSnapshot(mockClient, "session-1");
-        await loadSessionSnapshot(mockClient, "session-1");
+        await loadSessionSnapshot(mockServer, "session-1");
+        await loadSessionSnapshot(mockServer, "session-1");
 
         expect(getSession).toHaveBeenCalledTimes(2);
         expect(buildSnapshotFromSessionEvents).toHaveBeenCalledTimes(2);
@@ -62,10 +62,11 @@ describe("loadSessionSnapshot", () => {
         );
 
         const onProgress = vi.fn();
-        await loadSessionSnapshot(mockClient, "session-1", undefined, onProgress);
+        await loadSessionSnapshot(mockServer, "session-1", onProgress);
 
         expect(buildSnapshotFromSessionEvents).toHaveBeenCalledWith(
-            {},
+            mockServer,
+            "session-1",
             onProgress,
         );
     });

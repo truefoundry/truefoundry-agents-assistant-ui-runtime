@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ModelMessageEvent } from "truefoundry-gateway-sdk/agents";
+import type { ModelMessageEvent } from "./server/index.js";
 
 import { buildAssistantContent } from "./modelMessageContent.js";
 import { mergeStreamEventDelta } from "./modelMessageImageContent.js";

@@ -1,26 +1,27 @@
-import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import { createTrueFoundryChatServer } from "@truefoundry/agent-server-adapter";
+import type { AgentChatServer } from "@truefoundry/assistant-ui-runtime";
 
 import type { GatewayCredentials } from "./credentials";
 
-let client: AgentSessionClient | undefined;
-let clientCredentialsKey: string | undefined;
+let server: AgentChatServer | undefined;
+let serverCredentialsKey: string | undefined;
 
 function credentialsKey(credentials: GatewayCredentials): string {
   return `${credentials.apiKey}:${credentials.gatewayUrl}`;
 }
 
-export function getAgentSessionClient(
+export function getAgentChatServer(
   credentials: GatewayCredentials,
-): AgentSessionClient {
+): AgentChatServer {
   const key = credentialsKey(credentials);
-  if (client != null && clientCredentialsKey === key) {
-    return client;
+  if (server != null && serverCredentialsKey === key) {
+    return server;
   }
 
-  client = new AgentSessionClient({
+  server = createTrueFoundryChatServer({
     apiKey: credentials.apiKey,
     baseUrl: credentials.gatewayUrl,
   });
-  clientCredentialsKey = key;
-  return client;
+  serverCredentialsKey = key;
+  return server;
 }

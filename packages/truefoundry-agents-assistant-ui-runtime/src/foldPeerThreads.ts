@@ -1,10 +1,11 @@
 import type { MessageStatus, ThreadMessage } from "@assistant-ui/core";
-import type { ThreadCreatedEvent, ToolResponseRequiredEvent } from "truefoundry-gateway-sdk/agents";
 import {
     isEventDelta,
+    type ThreadCreatedEvent,
+    type ToolResponseRequiredEvent,
     type TurnEvent,
     type TurnStreamingEvent,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
 
 import { parseAskUserQuestionArgs } from "./askUserQuestion.js";
 import { isCreateSubAgentToolCall } from "./createSubAgent.js";

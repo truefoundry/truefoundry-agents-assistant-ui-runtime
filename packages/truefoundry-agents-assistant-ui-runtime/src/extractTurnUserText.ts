@@ -1,4 +1,4 @@
-import type { Turn } from "truefoundry-gateway-sdk/agents";
+import type { Turn } from "./server/index.js";
 
 export function extractTurnUserText(input: Turn["input"]): string {
     const parts: string[] = [];

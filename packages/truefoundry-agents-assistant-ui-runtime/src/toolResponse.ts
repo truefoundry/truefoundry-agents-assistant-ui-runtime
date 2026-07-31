@@ -9,7 +9,7 @@ import type {
     Turn,
     TurnInputItem,
     UserToolResponseEvent,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
@@ -85,10 +85,10 @@ export function findResponseRequiredInTurn(
     if (turn.state.status !== "done") {
         return undefined;
     }
-    return turn.state.requiredActions?.find(
-        (action): action is ToolResponseRequiredEvent =>
-            action.type === "tool.response_required",
+    const found = turn.state.requiredActions?.find(
+        (action) => action.type === "tool.response_required",
     );
+    return found?.type === "tool.response_required" ? found : undefined;
 }
 
 function applyToolResponseToToolCall(

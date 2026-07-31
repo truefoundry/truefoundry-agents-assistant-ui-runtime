@@ -3,15 +3,14 @@
 import { generateId } from "@assistant-ui/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-    AgentSessionClient,
     McpAuthRequiredEvent,
     ToolApprovalRequiredEvent,
     ToolResponseRequiredEvent,
     Turn,
     TurnInputItem,
     TurnStateDone,
-} from "truefoundry-gateway-sdk/agents";
-import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
+} from "./server/index.js";
+import type { AgentChatServer } from "./server/types.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
@@ -36,7 +35,6 @@ import {
     messageHasPendingRequiredActions,
     type RequiredActionInput,
 } from "./requiredActionInputs.js";
-import { getSession, type GetSessionOptions } from "./sessions.js";
 import {
     createEmptySessionSnapshot,
     replaceSessionSnapshot,
@@ -56,7 +54,7 @@ import {
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
 export type UseTrueFoundryAgentMessagesOptions = {
-    client: AgentSessionClient;
+    server: AgentChatServer;
     sessionId: string | undefined;
     /** When true the thread is the currently selected (main) thread. */
     isMain?: boolean | undefined;
@@ -68,8 +66,6 @@ export type UseTrueFoundryAgentMessagesOptions = {
     }>;
     /** Maps a thread `remoteId` to the gateway session id used for turns. */
     resolveConversationSessionId?: (remoteId: string) => Promise<string>;
-    /** When set, turns bind via PrivateAgentSessionClient.getDraftSession. */
-    privateClient?: PrivateAgentSessionClient;
     /**
      * Optional per-turn headers for createTurn. Invoked once per `sendTurn` after
      * the session is resolved; return value is forwarded to `turn.execute`.
@@ -287,22 +283,15 @@ function resolveTurnInput(
 }
 
 export function useTrueFoundryAgentMessages({
-    client,
+    server,
     sessionId,
     isMain,
     listEventsConcurrency,
     onError,
     initializeSession,
     resolveConversationSessionId,
-    privateClient,
     getTurnHeaders,
 }: UseTrueFoundryAgentMessagesOptions) {
-    const sessionOptions = useMemo<GetSessionOptions | undefined>(
-        () =>
-            privateClient != null ? { privateClient } : undefined,
-        [privateClient],
-    );
-
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -508,9 +497,8 @@ export function useTrueFoundryAgentMessages({
                 resolveConversationSessionIdRef.current,
             );
             const loadedSnapshot = await loadSessionSnapshot(
-                client,
+                server,
                 conversationSessionId,
-                sessionOptions,
                 (snap) => {
                     if (generation === loadGenerationRef.current) {
                         setSnapshot(snap);
@@ -542,7 +530,9 @@ export function useTrueFoundryAgentMessages({
                 void runStream(
                     (signal) =>
                         resumeTurnStream(
-                            turn,
+                            server,
+                            conversationSessionId,
+                            turn.id,
                             loadedSnapshot.fold,
                             signal,
                             undefined,
@@ -562,7 +552,7 @@ export function useTrueFoundryAgentMessages({
                 setIsLoading(false);
             }
         }
-    }, [client, runStream, sessionId, sessionOptions, loadRetryTrigger, isMain]);
+    }, [server, runStream, sessionId, loadRetryTrigger, isMain]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -584,7 +574,6 @@ export function useTrueFoundryAgentMessages({
                 activeSessionId,
                 resolveConversationSessionIdRef.current,
             );
-            const session = await getSession(client, conversationSessionId, sessionOptions);
             const turnHeaders = await getTurnHeadersRef.current?.();
             const streamHeaders =
                 turnHeaders != null ? { headers: turnHeaders } : {};
@@ -596,7 +585,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation && continuationTurnId != null
                     ? continuationTurnId
                     : generateId();
-            // First turns must send previousTurnId: null.
+            // First turns must send previousTurnId: "none".
             const isFirstTurnInSession =
                 "userMessage" in options &&
                 options.previousTurnId === undefined &&
@@ -673,7 +662,8 @@ export function useTrueFoundryAgentMessages({
                 (signal) => {
                     if ("inputs" in options) {
                         return streamTurnContent(
-                            session,
+                            server,
+                            conversationSessionId,
                             snapshotRef.current.fold,
                             { inputs: options.inputs, ...streamHeaders },
                             signal,
@@ -682,7 +672,8 @@ export function useTrueFoundryAgentMessages({
                     }
                     if ("resumeMcpAuth" in options) {
                         return streamTurnContent(
-                            session,
+                            server,
+                            conversationSessionId,
                             snapshotRef.current.fold,
                             { resumeMcpAuth: true, ...streamHeaders },
                             signal,
@@ -690,14 +681,15 @@ export function useTrueFoundryAgentMessages({
                         );
                     }
                     return streamTurnContent(
-                        session,
+                        server,
+                        conversationSessionId,
                         snapshotRef.current.fold,
                         {
                             userMessage: options.userMessage,
                             ...(options.previousTurnId !== undefined
-                                ? { previousTurnId: options.previousTurnId }
+                                ? { previousTurnId: options.previousTurnId ?? "none" }
                                 : isFirstTurnInSession
-                                  ? { previousTurnId: null }
+                                  ? { previousTurnId: "none" }
                                   : {}),
                             ...streamHeaders,
                         },
@@ -726,7 +718,7 @@ export function useTrueFoundryAgentMessages({
                 isContinuation,
             );
         },
-        [client, runStream, sessionId, sessionOptions],
+        [server, runStream, sessionId],
     );
 
     const cancel = useCallback(async () => {
@@ -738,17 +730,16 @@ export function useTrueFoundryAgentMessages({
             sessionId,
             resolveConversationSessionIdRef.current,
         );
-        const session = await getSession(client, conversationSessionId, sessionOptions);
         // Request cancellation but keep consuming the stream. After cancel(),
         // the backend gracefully closes the SSE stream: it emits a terminal
         // turn.done event and then ends the stream, which lets the active run
         // drain to completion on its own instead of being torn down mid-flight.
-        await session.cancel().catch(() => undefined);
+        await server.cancelSession({ sessionId: conversationSessionId }).catch(() => undefined);
         // Wait for the in-flight stream to finish draining. No explicit
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [client, sessionId, sessionOptions]);
+    }, [server, sessionId]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -817,7 +808,9 @@ export function useTrueFoundryAgentMessages({
         await runStream(
             (signal) =>
                 resumeTurnStream(
-                    turn,
+                    server,
+                    turn.sessionId,
+                    turn.id,
                     snapshotRef.current.fold,
                     signal,
                     undefined,
@@ -826,7 +819,7 @@ export function useTrueFoundryAgentMessages({
             { current: turn.id },
             true,
         );
-    }, [runStream]);
+    }, [runStream, server]);
 
     const branchFromTurn = useCallback(
         async (turnId: string, userMessage: UserMessageContent) => {
@@ -844,13 +837,14 @@ export function useTrueFoundryAgentMessages({
                 activeSessionId,
                 resolveConversationSessionIdRef.current,
             );
-            const session = await getSession(client, conversationSessionId, sessionOptions);
             const previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
-                session,
+                server,
+                conversationSessionId,
                 turnId,
             );
             const rewound = await buildSnapshotBeforeTurn(
-                session,
+                server,
+                conversationSessionId,
                 turnId,
                 listEventsConcurrency,
             );
@@ -868,11 +862,10 @@ export function useTrueFoundryAgentMessages({
         },
         [
             cancel,
-            client,
+            server,
             listEventsConcurrency,
             sendTurn,
             sessionId,
-            sessionOptions,
         ],
     );
 
@@ -936,13 +929,9 @@ export function useTrueFoundryAgentMessages({
                     sessionId,
                     resolveConversationSessionIdRef.current,
                 );
-                const session = await getSession(
-                    client,
-                    conversationSessionId,
-                    sessionOptions,
-                );
                 const next = await prependOlderSessionHistory(
-                    session,
+                    server,
+                    conversationSessionId,
                     snapshotRef.current,
                 );
                 if (generation !== loadGenerationRef.current) {
@@ -964,7 +953,7 @@ export function useTrueFoundryAgentMessages({
 
         loadOlderInflightRef.current = run;
         return run;
-    }, [client, isMain, sessionId, sessionOptions]);
+    }, [server, isMain, sessionId]);
 
     return {
         messages,
@@ -986,4 +975,3 @@ export function useTrueFoundryAgentMessages({
 }
 
 export { findPausedAssistantMessage, MCP_AUTH_RESUME_RUN_CUSTOM_KEY };
-

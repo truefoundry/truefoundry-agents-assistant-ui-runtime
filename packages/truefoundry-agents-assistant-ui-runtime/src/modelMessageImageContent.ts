@@ -1,10 +1,11 @@
 import type { CompleteAttachment } from "@assistant-ui/core";
-import type {
-    ModelMessageEvent,
-    TurnEvent,
-    TurnStreamingEvent,
-} from "truefoundry-gateway-sdk/agents";
-import { isEventDelta, mergeEventDelta } from "truefoundry-gateway-sdk/agents";
+import {
+    isEventDelta,
+    mergeEventDelta,
+    type ModelMessageEvent,
+    type TurnEvent,
+    type TurnStreamingEvent,
+} from "./server/index.js";
 
 import type { AssistantContentPart } from "./modelMessageContent.js";
 

@@ -1,5 +1,5 @@
 import type { MessageStatus } from "@assistant-ui/core";
-import type { McpAuthRequiredEvent, TurnStateDone } from "truefoundry-gateway-sdk/agents";
+import type { McpAuthRequiredEvent, TurnStateDone } from "./server/index.js";
 
 import type { AssistantContentPart } from "./modelMessageContent.js";
 import type { McpAuthMessageCustomMetadata } from "./messageCustomMetadata.js";
@@ -28,9 +28,12 @@ export function buildMcpAuthTextParts(
 export function findMcpAuthRequired(
     requiredActions: TurnStateDone["requiredActions"] | undefined,
 ): McpAuthRequiredEvent | undefined {
-    return requiredActions?.find(
-        (action): action is McpAuthRequiredEvent => action.type === "mcp.auth_required",
+    const found = requiredActions?.find(
+        (action) => action.type === "mcp.auth_required",
     );
+    return found?.type === "mcp.auth_required"
+        ? (found as McpAuthRequiredEvent)
+        : undefined;
 }
 
 export function mcpAuthAssistantStatus(): MessageStatus {

@@ -1,4 +1,4 @@
-import type { Turn } from "truefoundry-gateway-sdk/agents";
+import type { Turn } from "./server/index.js";
 
 import {
     buildMcpAuthTextParts,

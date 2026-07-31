@@ -1,11 +1,11 @@
-import type { ToolCall } from "truefoundry-gateway-sdk/agents";
+import type { ToolCall } from "./server/index.js";
 
 export function isAskUserQuestionToolCall(
     toolCall: Pick<ToolCall, "toolInfo">,
 ): boolean {
     return (
-        toolCall.toolInfo.type === "truefoundry-system" &&
-        toolCall.toolInfo.name === "ask_user_question"
+        toolCall.toolInfo?.type === "truefoundry-system" &&
+        toolCall.toolInfo?.name === "ask_user_question"
     );
 }
 

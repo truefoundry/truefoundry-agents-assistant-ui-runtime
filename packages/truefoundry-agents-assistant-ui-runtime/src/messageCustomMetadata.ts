@@ -1,4 +1,4 @@
-import type { McpAuthRequiredEvent } from "truefoundry-gateway-sdk/agents";
+import type { McpAuthRequiredEvent } from "./server/index.js";
 
 import type { SubAgentCustomMetadata } from "./foldPeerThreads.js";
 import { TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY } from "./toolApproval.js";

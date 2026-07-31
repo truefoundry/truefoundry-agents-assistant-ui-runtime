@@ -3,7 +3,7 @@ import type {
     ModelMessageEvent,
     ThreadCreatedEvent,
     TurnEvent,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import {

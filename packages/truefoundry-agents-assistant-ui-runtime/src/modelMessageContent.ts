@@ -1,5 +1,5 @@
 import type { ThreadAssistantMessagePart } from "@assistant-ui/core";
-import type { ModelMessageEvent } from "truefoundry-gateway-sdk/agents";
+import type { ModelMessageEvent } from "./server/index.js";
 import type { PendingResponseRef } from "./foldPeerThreads.js";
 import { extractImagePartsFromModelMessage } from "./modelMessageImageContent.js";
 

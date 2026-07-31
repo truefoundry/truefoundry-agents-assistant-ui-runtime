@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AppendMessage } from "@assistant-ui/core";
 import type {
-    AgentSession,
+    AgentChatServer,
     ModelMessageEvent,
     SandboxCreatedEvent,
+    SessionEventItem,
     ThreadCreatedEvent,
     ToolApprovalRequiredEvent,
     ToolResponseRequiredEvent,
@@ -12,7 +13,7 @@ import type {
     TurnDoneEvent,
     TurnEvent,
     TurnStreamData,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
@@ -45,6 +46,9 @@ import {
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
 const createdAt = new Date().toISOString();
+const SESSION_ID = "session-1";
+
+type TurnFixture = Turn & { events: TurnEvent[] };
 
 function modelMessage(
     event: Omit<ModelMessageEvent, "type" | "createdAt">,
@@ -65,9 +69,15 @@ function threadCreated(
 }
 
 function sandboxCreated(
-    event: Omit<SandboxCreatedEvent, "type" | "createdAt">,
+    event: { id: string; sandboxId: string; threadId?: string | null },
 ): SandboxCreatedEvent {
-    return { type: "sandbox.created", createdAt, ...event };
+    return {
+        type: "sandbox.created",
+        createdAt,
+        threadId: event.threadId ?? null,
+        id: event.id,
+        sandboxId: event.sandboxId,
+    };
 }
 
 function responseRequired(
@@ -82,32 +92,6 @@ async function* streamFrom(
     for (const [index, event] of events.entries()) {
         yield { sequenceNumber: index + 1, event };
     }
-}
-
-function eventsPage(events: TurnEvent[]) {
-    return async () => ({
-        async *[Symbol.asyncIterator]() {
-            for (const event of events) {
-                yield event;
-            }
-        },
-    });
-}
-
-function turnsPage(turns: Turn[]) {
-    return async () => ({
-        data: turns,
-        response: {
-            data: turns,
-            pagination: { limit: turns.length || 1 },
-        },
-        hasNextPage: () => false,
-        async *[Symbol.asyncIterator]() {
-            for (const turn of turns) {
-                yield turn;
-            }
-        },
-    });
 }
 
 function appendUserMessage(
@@ -127,48 +111,45 @@ function appendUserMessage(
 }
 
 function mockTurn(
-    overrides: Partial<Turn> & Pick<Turn, "id" | "createdAt">,
-): Pick<Turn, "id" | "createdAt" | "input" | "state" | "listEvents"> {
-    return {
-        input: [{ type: "user.message", content: "hello" }],
-        state: { status: "done", requiredActions: [], completedAt: createdAt },
-        listEvents: eventsPage([
+    overrides: Partial<Turn> &
+        Pick<Turn, "id" | "createdAt"> & {
+            events?: TurnEvent[];
+        },
+): TurnFixture {
+    const {
+        events = [
             modelMessage({
                 id: "m1",
                 threadId: ROOT_THREAD_ID,
                 content: "assistant reply",
             }),
-        ]) as unknown as Turn["listEvents"],
-        ...overrides,
+        ],
+        ...rest
+    } = overrides;
+    return {
+        sessionId: SESSION_ID,
+        input: [{ type: "user.message", content: "hello" }],
+        state: { status: "done", requiredActions: [], completedAt: createdAt },
+        ...rest,
+        events,
     };
-}
-
-async function collectTurnListEvents(
-    turn: Pick<Turn, "listEvents">,
-): Promise<TurnEvent[]> {
-    const events: TurnEvent[] = [];
-    for await (const event of await turn.listEvents()) {
-        events.push(event as TurnEvent);
-    }
-    return events;
 }
 
 /**
  * Builds session-level event items from per-turn mocks — newest-first turns,
  * running turns excluded (matches session.listEvents API contract).
  */
-async function sessionEventItemsFromTurns(
-    turnsNewestFirst: ReturnType<typeof mockTurn>[],
+function sessionEventItemsFromTurns(
+    turnsNewestFirst: TurnFixture[],
     lastTurnId?: string,
-): Promise<{ turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent }[]> {
+): SessionEventItem[] {
     let chain = turnsNewestFirst.filter((turn) => turn.state.status !== "running");
     if (lastTurnId != null) {
         const anchorIndex = chain.findIndex((turn) => turn.id === lastTurnId);
         chain = anchorIndex === -1 ? [] : chain.slice(anchorIndex);
     }
 
-    const items: { turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent }[] =
-        [];
+    const items: SessionEventItem[] = [];
     for (const turn of [...chain].reverse()) {
         items.push({
             turnId: turn.id,
@@ -178,11 +159,10 @@ async function sessionEventItemsFromTurns(
                 turnId: turn.id,
                 input: turn.input,
                 state: { status: "running" },
-                createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                 createdAt: turn.createdAt,
             },
         });
-        for (const event of await collectTurnListEvents(turn as Turn)) {
+        for (const event of turn.events) {
             items.push({ turnId: turn.id, event });
         }
         items.push({
@@ -198,27 +178,21 @@ async function sessionEventItemsFromTurns(
     return items;
 }
 
-function mockSession(turns: ReturnType<typeof mockTurn>[]): AgentSession {
+function mockServerWithTurns(turns: TurnFixture[]): AgentChatServer {
+    const eventsByTurnId = new Map(turns.map((turn) => [turn.id, turn.events]));
     return {
-        listTurns: turnsPage(turns as Turn[]) as unknown as AgentSession["listTurns"],
-        listEvents: async (opts?: { lastTurnId?: string; pageToken?: string; limit?: number }) => {
-            const items = await sessionEventItemsFromTurns(turns, opts?.lastTurnId);
+        listTurns: async ({ limit }: { limit?: number } = {}) => ({
+            data: limit != null ? turns.slice(0, limit) : turns,
+        }),
+        listEvents: async (opts: { lastTurnId?: string } = {}) => {
+            const items = sessionEventItemsFromTurns(turns, opts.lastTurnId);
             const newestFirst = [...items].reverse();
-            return {
-                data: newestFirst,
-                response: {
-                    data: newestFirst,
-                    pagination: { limit: newestFirst.length || 1 },
-                },
-                hasNextPage: () => false,
-                async *[Symbol.asyncIterator]() {
-                    for (const item of newestFirst) {
-                        yield item;
-                    }
-                },
-            };
+            return { data: newestFirst };
         },
-    } as unknown as AgentSession;
+        listTurnEvents: async ({ turnId }: { turnId: string }) => ({
+            data: eventsByTurnId.get(turnId) ?? [],
+        }),
+    } as unknown as AgentChatServer;
 }
 
 async function collectStream<T>(stream: AsyncGenerator<T>): Promise<T[]> {
@@ -513,11 +487,14 @@ describe("convertTurnMessages", () => {
 
     describe("buildTurnAssistantContent", () => {
         it("aggregates turn listEvents into root assistant content", async () => {
+            const turn = mockTurn({
+                id: "turn-1",
+                createdAt,
+            });
             const content = await buildTurnAssistantContent(
-                mockTurn({
-                    id: "turn-1",
-                    createdAt,
-                }),
+                mockServerWithTurns([turn]),
+                SESSION_ID,
+                turn,
             );
             expect(content).toEqual([{ type: "text", text: "assistant reply" }]);
         });
@@ -526,14 +503,13 @@ describe("convertTurnMessages", () => {
     describe("convertTurnsToThreadMessages", () => {
         it("builds user and assistant messages from completed turns", async () => {
             const result = await convertTurnsToThreadMessages(
-                mockSession([
+                mockServerWithTurns([
                     mockTurn({
                         id: "turn-1",
                         createdAt,
                         input: [{ type: "user.message", content: "hello" }],
                     }),
-                ]),
-            );
+                ]), SESSION_ID);
 
             expect(result.messages).toHaveLength(2);
             expect(result.messages[0]).toMatchObject({
@@ -552,22 +528,21 @@ describe("convertTurnMessages", () => {
 
         it("carries sandboxId from a historical sandbox.created event onto the assistant message", async () => {
             const result = await convertTurnsToThreadMessages(
-                mockSession([
+                mockServerWithTurns([
                     mockTurn({
                         id: "turn-1",
                         createdAt,
                         input: [{ type: "user.message", content: "hello" }],
-                        listEvents: eventsPage([
+                        events: [
                             sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
                             modelMessage({
                                 id: "m1",
                                 threadId: ROOT_THREAD_ID,
                                 content: "assistant reply",
                             }),
-                        ]) as unknown as Turn["listEvents"],
+                ],
                     }),
-                ]),
-            );
+                ]), SESSION_ID);
 
             expect(result.messages[1]).toMatchObject({
                 role: "assistant",
@@ -581,7 +556,7 @@ describe("convertTurnMessages", () => {
                 createdAt,
                 state: { status: "running" },
             });
-            const result = await convertTurnsToThreadMessages(mockSession([runningTurn]));
+            const result = await convertTurnsToThreadMessages(mockServerWithTurns([runningTurn]), SESSION_ID);
 
             expect(result.runningTurn).toBe(runningTurn);
             expect(result.unstable_resume).toBe(true);
@@ -592,30 +567,29 @@ describe("convertTurnMessages", () => {
             const firstTurn = mockTurn({
                 id: "turn-1",
                 createdAt,
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m1",
                         threadId: ROOT_THREAD_ID,
                         content: "first chunk",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const continuationTurn = mockTurn({
                 id: "turn-2",
                 createdAt,
                 input: [{ type: "user.tool_approval", threadId: ROOT_THREAD_ID, toolCallId: "tc-1", approval: { status: "allow" } }],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m2",
                         threadId: ROOT_THREAD_ID,
                         content: " after approval",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
             const result = await convertTurnsToThreadMessages(
-                mockSession([continuationTurn, firstTurn]),
-            );
+                mockServerWithTurns([continuationTurn, firstTurn]), SESSION_ID);
 
             expect(result.messages).toHaveLength(2);
             const assistant = result.messages[1];
@@ -643,10 +617,10 @@ describe("convertTurnMessages", () => {
                             threadId: ROOT_THREAD_ID,
                             toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
                         }),
-                    ],
+                    ] as never,
                     completedAt: createdAt,
                 },
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m1",
                         threadId: ROOT_THREAD_ID,
@@ -670,10 +644,10 @@ describe("convertTurnMessages", () => {
                         threadId: ROOT_THREAD_ID,
                         toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
-            const result = await convertTurnsToThreadMessages(mockSession([pausedTurn]));
+            const result = await convertTurnsToThreadMessages(mockServerWithTurns([pausedTurn]), SESSION_ID);
 
             expect(result.messages).toHaveLength(2);
             const assistant = result.messages[1];
@@ -710,10 +684,10 @@ describe("convertTurnMessages", () => {
                             threadId: ROOT_THREAD_ID,
                             toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
                         }),
-                    ],
+                    ] as never,
                     completedAt: createdAt,
                 },
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m1",
                         threadId: ROOT_THREAD_ID,
@@ -737,7 +711,7 @@ describe("convertTurnMessages", () => {
                         threadId: ROOT_THREAD_ID,
                         toolCalls: [{ id: "approval-1", sourceEventId: "m1" }],
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const continuationTurn = mockTurn({
                 id: "turn-approval-resume",
@@ -750,18 +724,17 @@ describe("convertTurnMessages", () => {
                         approval: { status: "allow" },
                     },
                 ],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m2",
                         threadId: ROOT_THREAD_ID,
                         content: "done",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
             const result = await convertTurnsToThreadMessages(
-                mockSession([continuationTurn, pausedTurn]),
-            );
+                mockServerWithTurns([continuationTurn, pausedTurn]), SESSION_ID);
 
             const assistant = result.messages[1];
             expect(assistant?.role).toBe("assistant");
@@ -794,10 +767,10 @@ describe("convertTurnMessages", () => {
                             threadId: ROOT_THREAD_ID,
                             toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
                         }),
-                    ],
+                    ] as never,
                     completedAt: createdAt,
                 },
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "model-1",
                         threadId: ROOT_THREAD_ID,
@@ -824,10 +797,10 @@ describe("convertTurnMessages", () => {
                         threadId: ROOT_THREAD_ID,
                         toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
-            const result = await convertTurnsToThreadMessages(mockSession([pausedTurn]));
+            const result = await convertTurnsToThreadMessages(mockServerWithTurns([pausedTurn]), SESSION_ID);
 
             const assistant = result.messages[1];
             expect(assistant?.role).toBe("assistant");
@@ -866,10 +839,10 @@ describe("convertTurnMessages", () => {
                             threadId: ROOT_THREAD_ID,
                             toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
                         }),
-                    ],
+                    ] as never,
                     completedAt: createdAt,
                 },
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "model-1",
                         threadId: ROOT_THREAD_ID,
@@ -896,7 +869,7 @@ describe("convertTurnMessages", () => {
                         threadId: ROOT_THREAD_ID,
                         toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const continuationTurn = mockTurn({
                 id: "turn-response-resume",
@@ -909,18 +882,17 @@ describe("convertTurnMessages", () => {
                         content: "A",
                     },
                 ],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "model-2",
                         threadId: ROOT_THREAD_ID,
                         content: "Thanks",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
             const result = await convertTurnsToThreadMessages(
-                mockSession([continuationTurn, pausedTurn]),
-            );
+                mockServerWithTurns([continuationTurn, pausedTurn]), SESSION_ID);
 
             const assistant = result.messages[1];
             expect(assistant?.role).toBe("assistant");
@@ -944,25 +916,25 @@ describe("convertTurnMessages", () => {
                 id: "turn-hello",
                 createdAt,
                 input: [{ type: "user.message", content: "hello" }],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m-hello",
                         threadId: ROOT_THREAD_ID,
                         content: "Hello! How can I help?",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const analyzeTurn = mockTurn({
                 id: "turn-analyze",
                 createdAt,
                 input: [{ type: "user.message", content: "analyze" }],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m-analyze",
                         threadId: ROOT_THREAD_ID,
                         content: "Let me look at the file.",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const ticketsTurn = mockTurn({
                 id: "turn-tickets",
@@ -973,18 +945,17 @@ describe("convertTurnMessages", () => {
                         content: "create linear tickets",
                     },
                 ],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m-tickets",
                         threadId: ROOT_THREAD_ID,
                         content: "Creating tickets now.",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
             const result = await convertTurnsToThreadMessages(
-                mockSession([ticketsTurn, analyzeTurn, helloTurn]),
-            );
+                mockServerWithTurns([ticketsTurn, analyzeTurn, helloTurn]), SESSION_ID);
 
             expect(result.messages).toHaveLength(6);
             expect(result.messages[1]).toMatchObject({
@@ -1018,16 +989,16 @@ describe("convertTurnMessages", () => {
                         ],
                     },
                 ],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m-analyze",
                         threadId: ROOT_THREAD_ID,
                         content: "File analyzed.",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
-            const result = await convertTurnsToThreadMessages(mockSession([analyzeTurn]));
+            const result = await convertTurnsToThreadMessages(mockServerWithTurns([analyzeTurn]), SESSION_ID);
 
             expect(result.messages).toHaveLength(2);
             expect(result.messages[0]).toMatchObject({
@@ -1060,7 +1031,7 @@ describe("convertTurnMessages", () => {
                 id: "turn-spawn",
                 createdAt,
                 input: [{ type: "user.message", content: "spawn agent" }],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "root-spawn",
                         threadId: ROOT_THREAD_ID,
@@ -1092,7 +1063,7 @@ describe("convertTurnMessages", () => {
                         threadId: "child-1",
                         content: "initial child work",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const continuationTurn = mockTurn({
                 id: "turn-continuation",
@@ -1105,30 +1076,29 @@ describe("convertTurnMessages", () => {
                         approval: { status: "allow" },
                     },
                 ],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "child-msg-2",
                         threadId: "child-1",
                         content: "more child work",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
             const nextUserTurn = mockTurn({
                 id: "turn-next",
                 createdAt,
                 input: [{ type: "user.message", content: "thanks" }],
-                listEvents: eventsPage([
+                events: [
                     modelMessage({
                         id: "m-thanks",
                         threadId: ROOT_THREAD_ID,
                         content: "You're welcome!",
                     }),
-                ]) as unknown as Turn["listEvents"],
+                ],
             });
 
             const result = await convertTurnsToThreadMessages(
-                mockSession([nextUserTurn, continuationTurn, spawnTurn]),
-            );
+                mockServerWithTurns([nextUserTurn, continuationTurn, spawnTurn]), SESSION_ID);
 
             expect(result.messages).toHaveLength(4);
             const groupAssistant = result.messages[1];
@@ -1830,7 +1800,7 @@ describe("convertTurnMessages", () => {
                                     threadId: ROOT_THREAD_ID,
                                     toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
                                 }),
-                            ],
+                            ] as never,
                             completedAt: createdAt,
                         },
                         input: [{ type: "user.message", content: "ask me a question" }],
@@ -2115,14 +2085,13 @@ describe("convertTurnMessages", () => {
 // buildSnapshotFromSessionEvents
 // ---------------------------------------------------------------------------
 
-type SessionEventItem = { turnId: string; event: TurnCreatedEvent | TurnDoneEvent | TurnEvent };
-
 /** Simulates session.listEvents — returns items in desc order (newest first). */
 function sessionEventsPage(
     items: SessionEventItem[],
     options?: { pageSize?: number },
 ) {
     return async (opts?: {
+        sessionId?: string;
         lastTurnId?: string;
         pageToken?: string;
         limit?: number;
@@ -2146,33 +2115,23 @@ function sessionEventsPage(
         const nextPageToken = hasMore ? String(pageIndex + 1) : undefined;
         return {
             data: slice,
-            response: {
-                data: slice,
-                pagination: {
-                    limit: pageSize,
-                    ...(nextPageToken != null ? { nextPageToken } : {}),
-                },
-            },
-            hasNextPage: () => hasMore,
-            async *[Symbol.asyncIterator]() {
-                // Full drain for rewind paths that still iterate all pages.
-                for (const item of newestFirst) {
-                    yield item;
-                }
-            },
+            ...(nextPageToken != null ? { nextPageToken } : {}),
         };
     };
 }
 
-/** Builds a mock AgentSession with listTurns and listEvents. */
-function mockSessionWithEvents(
+/** Builds a mock AgentChatServer with listTurns and listEvents. */
+function mockServerWithEvents(
     turns: Turn[],
     eventItems: SessionEventItem[],
-): AgentSession {
+): AgentChatServer {
     return {
-        listTurns: turnsPage(turns),
+        listTurns: async ({ limit }: { limit?: number } = {}) => ({
+            data: limit != null ? turns.slice(0, limit) : turns,
+        }),
         listEvents: sessionEventsPage(eventItems),
-    } as unknown as AgentSession;
+        listTurnEvents: async () => ({ data: [] }),
+    } as unknown as AgentChatServer;
 }
 
 describe("buildSnapshotFromSessionEvents", () => {
@@ -2186,7 +2145,6 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "hello" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2205,7 +2163,7 @@ describe("buildSnapshotFromSessionEvents", () => {
             },
         ];
 
-        const snapshot = await buildSnapshotFromSessionEvents(mockSessionWithEvents([], items));
+        const snapshot = await buildSnapshotFromSessionEvents(mockServerWithEvents([], items), SESSION_ID);
 
         expect(snapshot.turns).toHaveLength(1);
         expect(snapshot.turns[0]?.id).toBe("t1");
@@ -2241,7 +2199,6 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "first" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2261,9 +2218,7 @@ describe("buildSnapshotFromSessionEvents", () => {
             // t2 (running) has no events — it is excluded from session-level listEvents
         ];
 
-        const snapshot = await buildSnapshotFromSessionEvents(
-            mockSessionWithEvents([runningTurn], items),
-        );
+        const snapshot = await buildSnapshotFromSessionEvents(mockServerWithEvents([runningTurn], items), SESSION_ID);
 
         expect(snapshot.turns).toHaveLength(1);
         expect(snapshot.turns[0]?.id).toBe("t1");
@@ -2286,7 +2241,6 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "first" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2311,7 +2265,6 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t2",
                     input: [{ type: "user.message", content: "second" }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2331,10 +2284,7 @@ describe("buildSnapshotFromSessionEvents", () => {
         ];
 
         const progressSnapshots: number[] = [];
-        await buildSnapshotFromSessionEvents(
-            mockSessionWithEvents([], items),
-            (snap) => progressSnapshots.push(snap.turns.length),
-        );
+        await buildSnapshotFromSessionEvents(mockServerWithEvents([], items), SESSION_ID, (snap) => progressSnapshots.push(snap.turns.length));
 
         expect(progressSnapshots).toEqual([1, 2]);
     });
@@ -2344,28 +2294,23 @@ describe("buildSnapshotFromSessionEvents", () => {
             data: [
                 {
                     id: "t-running",
+                    sessionId: SESSION_ID,
                     state: { status: "running" },
                     input: [{ type: "user.message", content: "now" }],
                     createdAt,
                 },
             ],
-            response: { data: [], pagination: { limit: 1, nextPageToken: "more" } },
-            hasNextPage: () => true,
-            getNextPage: async () => {
-                throw new Error("listTurns must not paginate on initial load");
-            },
-            async *[Symbol.asyncIterator]() {
-                throw new Error("listTurns must not be fully iterated on initial load");
-            },
+            nextPageToken: "more",
         }));
 
-        const session = {
+        const server = {
             listTurns,
             listEvents: sessionEventsPage([]),
-        } as unknown as AgentSession;
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
 
-        const snapshot = await buildSnapshotFromSessionEvents(session);
-        expect(listTurns).toHaveBeenCalledWith({ limit: 1 });
+        const snapshot = await buildSnapshotFromSessionEvents(server, SESSION_ID);
+        expect(listTurns).toHaveBeenCalledWith({ sessionId: SESSION_ID, limit: 1 });
         expect(snapshot.runningTurn?.id).toBe("t-running");
         expect(snapshot.pendingUser?.content).toBe("now");
     });
@@ -2380,7 +2325,6 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: id,
                     input: [{ type: "user.message", content: text }],
                     state: { status: "running" },
-                    createdBy: { subjectId: "u1", subjectType: "user", subjectSlug: "u1" },
                     createdAt,
                 },
             },
@@ -2411,12 +2355,13 @@ describe("buildSnapshotFromSessionEvents", () => {
         ];
         const listEvents = sessionEventsPage(items, { pageSize: 3 });
         const listEventsSpy = vi.fn(listEvents);
-        const session = {
-            listTurns: turnsPage([]),
+        const server = {
+            listTurns: async () => ({ data: [] }),
             listEvents: listEventsSpy,
-        } as unknown as AgentSession;
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
 
-        const snapshot = await buildSnapshotFromSessionEvents(session);
+        const snapshot = await buildSnapshotFromSessionEvents(server, SESSION_ID);
         expect(listEventsSpy).toHaveBeenCalledTimes(1);
         expect(snapshot.turns.map((t) => t.id)).toEqual(["t3"]);
         expect(snapshot.historyPagination).toEqual({
@@ -2424,7 +2369,7 @@ describe("buildSnapshotFromSessionEvents", () => {
             olderPageToken: "1",
         });
 
-        const withOlder = await prependOlderSessionHistory(session, snapshot);
+        const withOlder = await prependOlderSessionHistory(server, SESSION_ID, snapshot);
         expect(withOlder.turns.map((t) => t.id)).toEqual(["t2", "t3"]);
         expect(projectSessionMessages(withOlder).map((m) => m.role)).toEqual([
             "user",
@@ -2434,7 +2379,7 @@ describe("buildSnapshotFromSessionEvents", () => {
         ]);
         expect(withOlder.historyPagination?.hasOlder).toBe(true);
 
-        const withAll = await prependOlderSessionHistory(session, withOlder);
+        const withAll = await prependOlderSessionHistory(server, SESSION_ID, withOlder);
         expect(withAll.turns.map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
         expect(withAll.historyPagination?.hasOlder).toBe(false);
     });
@@ -2446,30 +2391,30 @@ describe("buildSnapshotBeforeTurnIndex", () => {
             id: "t1",
             createdAt,
             input: [{ type: "user.message", content: "first" }],
-            listEvents: eventsPage([
+            events: [
                 modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
-            ]) as unknown as Turn["listEvents"],
+                ],
         });
         const t2 = mockTurn({
             id: "t2",
             createdAt,
             input: [{ type: "user.message", content: "second" }],
-            listEvents: eventsPage([
+            events: [
                 modelMessage({ id: "m2", threadId: ROOT_THREAD_ID, content: "reply 2" }),
-            ]) as unknown as Turn["listEvents"],
+                ],
         });
         const t3 = mockTurn({
             id: "t3",
             createdAt,
             input: [{ type: "user.message", content: "third" }],
-            listEvents: eventsPage([
+            events: [
                 modelMessage({ id: "m3", threadId: ROOT_THREAD_ID, content: "reply 3" }),
-            ]) as unknown as Turn["listEvents"],
+                ],
         });
 
         // listTurns is newest-first.
-        const session = mockSession([t3, t2, t1]);
-        const snapshot = await buildSnapshotBeforeTurnIndex(session, 2);
+        const server = mockServerWithTurns([t3, t2, t1]);
+        const snapshot = await buildSnapshotBeforeTurnIndex(server, SESSION_ID, 2);
 
         expect(snapshot.turns.map((turn) => turn.id)).toEqual(["t1", "t2"]);
         const messages = projectSessionMessages(snapshot);
@@ -2482,10 +2427,10 @@ describe("buildSnapshotBeforeTurnIndex", () => {
     });
 
     it("returns an empty snapshot when branching from the first turn", async () => {
-        const session = mockSession([
+        const server = mockServerWithTurns([
             mockTurn({ id: "t1", createdAt }),
         ]);
-        const snapshot = await buildSnapshotBeforeTurnIndex(session, 0);
+        const snapshot = await buildSnapshotBeforeTurnIndex(server, SESSION_ID, 0);
         expect(snapshot.turns).toHaveLength(0);
     });
 });

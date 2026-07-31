@@ -1,4 +1,4 @@
-import type { ToolCall } from "truefoundry-gateway-sdk/agents";
+import type { ToolCall } from "./server/index.js";
 
 export function isCreateSubAgentToolCall(
     toolCall: Pick<ToolCall, "toolInfo" | "function">,

@@ -6,10 +6,9 @@ import type {
     RealtimeVoiceAdapter,
     SpeechSynthesisAdapter,
 } from "@assistant-ui/core";
-import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
-import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
 import type { AgentSpec } from "./private/agentSpec.js";
+import type { AgentChatServer } from "./server/types.js";
 
 export type NamedAgentConfig = {
     mode: "named";
@@ -25,7 +24,7 @@ export type DraftAgentConfig = {
 export type TrueFoundryAgentConfig = NamedAgentConfig | DraftAgentConfig;
 
 type TrueFoundryAgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
-    client: AgentSessionClient;
+    server: AgentChatServer;
     initialSessionId?: string | undefined;
     threadId?: string | undefined;
     onThreadIdChange?: ((threadId: string | undefined) => void) | undefined;
@@ -47,16 +46,10 @@ export type UseTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptio
     agent?: TrueFoundryAgentConfig | undefined;
     /** Legacy named-agent shorthand. Prefer `agent: { mode: "named", agentName }`. */
     agentName?: string | undefined;
-    /**
-     * Required when `agent.mode === "draft"`. Also used for sandbox file downloads
-     * (named or draft).
-     */
-    privateClient?: PrivateAgentSessionClient | undefined;
 };
 
 export type ResolvedTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptions & {
     agent: TrueFoundryAgentConfig;
-    privateClient?: PrivateAgentSessionClient | undefined;
 };
 
 export function resolveTrueFoundryAgentConfig(
@@ -81,15 +74,8 @@ export function resolveTrueFoundryAgentRuntimeOptions(
 ): ResolvedTrueFoundryAgentRuntimeOptions {
     const agent = resolveTrueFoundryAgentConfig(options);
 
-    if (agent.mode === "draft" && options.privateClient == null) {
-        throw new Error(
-            "Draft agent mode requires a `privateClient` PrivateAgentSessionClient.",
-        );
-    }
-
     return {
         ...options,
         agent,
-        privateClient: options.privateClient,
     };
 }
