@@ -86,21 +86,11 @@ async function toListResult<TIn, TOut>(
     };
 }
 
-async function resolveRaw(
-    client: AgentSessionClient,
-    privateClient: PrivateAgentSessionClient,
-    sessionId: string,
-): Promise<GwSession> {
-    try {
-        return await client.getSession({ sessionId });
-    } catch {
-        return privateClient.getDraftSession({ draftSessionId: sessionId });
-    }
-}
-
 /**
  * Wraps TrueFoundry gateway clients into a flat `AgentChatServer`.
- * Named vs draft fan-out is internal; hosts only see unified Session DTOs.
+ * Named vs draft routing is fully internal — an in-memory session-type cache
+ * (populated by createSession/listSessions) determines which gateway client
+ * to call. No try/catch fallback, no double network calls.
  */
 export function createTrueFoundryChatServer(
     opts: CreateTrueFoundryChatServerOptions,
@@ -110,6 +100,26 @@ export function createTrueFoundryChatServer(
     const privateClient =
         opts.privateClient ?? new PrivateAgentSessionClient(gatewayOpts);
 
+    const sessionTypeCache = new Map<string, boolean>();
+
+    function cacheSessionType(session: Session): void {
+        sessionTypeCache.set(session.id, session.isMutable);
+    }
+
+    function getSessionObj(sessionId: string): Promise<GwSession> {
+        const isMutable = sessionTypeCache.get(sessionId);
+        if (isMutable === true) {
+            return privateClient.getDraftSession({ draftSessionId: sessionId });
+        }
+        if (isMutable === false) {
+            return client.getSession({ sessionId });
+        }
+        throw new Error(
+            `Cannot resolve session "${sessionId}": session type not cached. ` +
+                `Ensure createSession or listSessions was called first.`,
+        );
+    }
+
     const server: TrueFoundryChatServer = {
         async createSession(req) {
             if (req.agentSpec != null) {
@@ -117,43 +127,45 @@ export function createTrueFoundryChatServer(
                     agentSpec: req.agentSpec as never,
                     ...(req.agentName != null ? { agentName: req.agentName } : {}),
                 });
-                return toSession(draft);
+                const session = toSession(draft);
+                cacheSessionType(session);
+                return session;
             }
             if (req.agentName != null) {
                 const named = await client.createSession({
                     agentName: req.agentName,
                 });
-                return toSession(named);
+                const session = toSession(named);
+                cacheSessionType(session);
+                return session;
             }
             throw new Error("createSession requires agentName and/or agentSpec");
         },
 
         async listSessions(req) {
-            if (req?.agentName != null) {
-                const page = await client.listSessions({
-                    agentName: req.agentName,
-                    limit: req.limit,
-                    order: req.order,
-                    pageToken: req.pageToken,
-                    startTimestamp: req.startTimestamp,
-                });
-                return toListResult(page, toSession);
-            }
             const page = await privateClient.listOwnedSessions({
                 limit: req?.limit,
                 order: req?.order,
                 pageToken: req?.pageToken,
                 startTimestamp: req?.startTimestamp,
+                ...(req?.agentName != null ? { agentName: req.agentName } : {}),
             });
-            return toListResult(page, toSession);
+            const result = await toListResult(page, toSession);
+            for (const session of result.data) {
+                cacheSessionType(session);
+            }
+            return result;
         },
 
-        async getSession(req) {
-            return toSession(await resolveRaw(client, privateClient, req.sessionId));
+        async getSession({ sessionId }) {
+            const raw = await getSessionObj(sessionId);
+            const session = toSession(raw);
+            cacheSessionType(session);
+            return session;
         },
 
         async updateSession(req) {
-            const raw = await resolveRaw(client, privateClient, req.sessionId);
+            const raw = await getSessionObj(req.sessionId);
             if (!isDraft(raw)) {
                 throw new Error(
                     "updateSession: session is not mutable (isMutable=false)",
@@ -173,11 +185,7 @@ export function createTrueFoundryChatServer(
             headers?: Record<string, string>;
         }): AsyncIterable<TurnStreamData> {
             return (async function* () {
-                const session = await resolveRaw(
-                    client,
-                    privateClient,
-                    req.sessionId,
-                );
+                const session = await getSessionObj(req.sessionId);
                 const prepared = session.prepareTurn({
                     input: req.input,
                     previousTurnId: req.previousTurnId ?? "auto",
@@ -195,7 +203,7 @@ export function createTrueFoundryChatServer(
         },
 
         async cancelSession({ sessionId }) {
-            await (await resolveRaw(client, privateClient, sessionId)).cancel();
+            await (await getSessionObj(sessionId)).cancel();
         },
 
         async deleteSession({ sessionId }) {
@@ -208,7 +216,7 @@ export function createTrueFoundryChatServer(
         },
 
         async listTurns({ sessionId, limit, pageToken, order }) {
-            const raw = await resolveRaw(client, privateClient, sessionId);
+            const raw = await getSessionObj(sessionId);
             const page = await raw.listTurns({
                 ...(limit != null ? { limit } : {}),
                 ...(pageToken != null ? { pageToken } : {}),
@@ -218,12 +226,12 @@ export function createTrueFoundryChatServer(
         },
 
         async getTurn({ sessionId, turnId }) {
-            const raw = await resolveRaw(client, privateClient, sessionId);
+            const raw = await getSessionObj(sessionId);
             return toTurn(await raw.getTurn({ turnId }));
         },
 
         async listEvents({ sessionId, pageToken, lastTurnId, limit }) {
-            const raw = await resolveRaw(client, privateClient, sessionId);
+            const raw = await getSessionObj(sessionId);
             const page = await raw.listEvents({
                 ...(limit != null ? { limit } : {}),
                 ...(pageToken != null ? { pageToken } : {}),
@@ -236,7 +244,7 @@ export function createTrueFoundryChatServer(
         },
 
         async listTurnEvents({ sessionId, turnId, limit, pageToken, order }) {
-            const raw = await resolveRaw(client, privateClient, sessionId);
+            const raw = await getSessionObj(sessionId);
             const turn = await raw.getTurn({ turnId });
             const page = await turn.listEvents({
                 ...(limit != null ? { limit } : {}),
@@ -252,7 +260,7 @@ export function createTrueFoundryChatServer(
             afterSequenceNumber,
             abortSignal,
         }) {
-            const raw = await resolveRaw(client, privateClient, sessionId);
+            const raw = await getSessionObj(sessionId);
             const turn = await raw.getTurn({ turnId });
             yield* turn.stream(
                 afterSequenceNumber != null ? { afterSequenceNumber } : {},
