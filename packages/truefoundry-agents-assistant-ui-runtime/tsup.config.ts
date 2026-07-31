@@ -1,7 +1,10 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-    entry: ["src/index.ts"],
+    entry: [
+        "src/index.ts",
+        "src/plugins/truefoundry-agent-server-adapter/index.ts",
+    ],
     format: ["esm"],
     dts: true,
     sourcemap: true,
@@ -10,5 +13,6 @@ export default defineConfig({
     external: [
         "react",
         "@assistant-ui/core",
+        "truefoundry-gateway-sdk",
     ],
 });

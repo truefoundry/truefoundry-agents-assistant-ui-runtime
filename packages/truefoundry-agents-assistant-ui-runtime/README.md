@@ -8,7 +8,7 @@ Connect assistant-ui components (`Thread`, `Composer`, tool UIs, `ThreadList`) t
 
 - **React** `^18 || ^19` (peer dependency)
 - **`@assistant-ui/react`** in the host app for the UI primitives
-- An **`AgentChatServer`** implementation — either use [`@truefoundry/agent-server-adapter`](../truefoundry-agent-server-adapter) (wraps the TrueFoundry gateway SDK) or bring your own
+- An **`AgentChatServer`** implementation — either use the built-in TrueFoundry gateway plugin (see below) or bring your own
 
 Bundled deps `@assistant-ui/core` and `@assistant-ui/store` are pulled in automatically.
 
@@ -16,8 +16,12 @@ Bundled deps `@assistant-ui/core` and `@assistant-ui/store` are pulled in automa
 
 ```bash
 npm install @truefoundry/assistant-ui-runtime @assistant-ui/react
-# If using the TrueFoundry gateway:
-npm install @truefoundry/agent-server-adapter truefoundry-gateway-sdk
+```
+
+If using the built-in TrueFoundry gateway adapter plugin, also install the gateway SDK:
+
+```bash
+npm install truefoundry-gateway-sdk
 ```
 
 ## Quickstart
@@ -26,10 +30,10 @@ npm install @truefoundry/agent-server-adapter truefoundry-gateway-sdk
 
 The runtime accepts any object implementing the `AgentChatServer` interface — a flat, stateless port with methods like `createSession`, `listSessions`, `prepareAndExecuteTurn`, etc. It never reads credentials itself.
 
-Using the TrueFoundry adapter:
+Using the built-in TrueFoundry gateway plugin (requires `truefoundry-gateway-sdk`):
 
 ```tsx
-import { createTrueFoundryChatServer } from "@truefoundry/agent-server-adapter";
+import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter";
 
 const server = createTrueFoundryChatServer({
   apiKey: process.env.TFY_API_KEY!,

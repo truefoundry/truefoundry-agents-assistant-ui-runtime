@@ -26,6 +26,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./plugins/truefoundry-agent-server-adapter": {
+      "types": "./dist/plugins/truefoundry-agent-server-adapter/index.d.ts",
+      "import": "./dist/plugins/truefoundry-agent-server-adapter/index.js",
+      "default": "./dist/plugins/truefoundry-agent-server-adapter/index.js"
     }
   },
   "main": "./dist/index.js",
@@ -49,10 +54,14 @@
   },
   "peerDependencies": {
     "@types/react": "*",
-    "react": "^18 || ^19"
+    "react": "^18 || ^19",
+    "truefoundry-gateway-sdk": "^0.4.0-rc.5"
   },
   "peerDependenciesMeta": {
     "@types/react": {
+      "optional": true
+    },
+    "truefoundry-gateway-sdk": {
       "optional": true
     }
   },
@@ -62,6 +71,7 @@
     "@types/react": "^19.2.17",
     "jsdom": "^29.1.1",
     "react": "^19.2.4",
+    "truefoundry-gateway-sdk": "0.4.0-rc.5",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "vitest": "4.1.9"
