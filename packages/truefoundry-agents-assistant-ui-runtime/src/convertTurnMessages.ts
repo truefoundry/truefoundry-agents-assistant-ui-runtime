@@ -1339,14 +1339,18 @@ export async function convertTurnsToThreadMessages(
     };
 }
 
-export function getTurnMessageContent(message: AppendMessage): string {
+export function getTurnMessageText(message: AppendMessage): string {
     const parts: string[] = [];
     for (const part of message.content) {
         if (part.type === "text") {
             parts.push(part.text);
         }
     }
-    const text = parts.join("\n").trim();
+    return parts.join("\n").trim();
+}
+
+export function getTurnMessageContent(message: AppendMessage): string {
+    const text = getTurnMessageText(message);
     if (!text) {
         throw new Error("User message must contain text content.");
     }

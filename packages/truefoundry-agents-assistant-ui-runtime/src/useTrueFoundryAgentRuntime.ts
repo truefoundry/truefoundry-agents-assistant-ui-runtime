@@ -24,7 +24,7 @@ import {
 import {
     buildUserMessageContent,
     extractEditedText,
-    getTurnMessageContent,
+    getTurnMessageText,
     parseTurnIdFromMessageId,
 } from "./convertTurnMessages.js";
 import {
@@ -220,8 +220,9 @@ function useTrueFoundryAgentRuntimeImpl(
             } catch (error) {
                 if (error instanceof TrueFoundryPreTurnError) {
                     const composer = aui.composer();
-                    if (composer.getState().text.length === 0) {
-                        composer.setText(getTurnMessageContent(message));
+                    const text = getTurnMessageText(message);
+                    if (text.length > 0 && composer.getState().text.length === 0) {
+                        composer.setText(text);
                     }
                 }
                 throw error;

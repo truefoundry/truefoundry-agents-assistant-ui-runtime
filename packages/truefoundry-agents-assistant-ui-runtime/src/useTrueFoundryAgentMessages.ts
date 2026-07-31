@@ -600,6 +600,7 @@ export function useTrueFoundryAgentMessages({
 
   const sendTurn = useCallback(
     async (options: SendTurnOptions) => {
+      const streamGenerationAtStart = streamGenerationRef.current;
       // Include session creation and other pre-turn work in the running state.
       // This also lets composer busy-state consumers recover when preparation
       // fails before runStream is reached.
@@ -792,7 +793,12 @@ export function useTrueFoundryAgentMessages({
           isContinuation,
         );
       } finally {
-        setIsRunning(false);
+        // runStream owns the running state once it starts. Only clear here when
+        // no stream started (for example, a pre-turn step failed). A newer
+        // stream must remain running when this send settles after supersession.
+        if (streamGenerationAtStart === streamGenerationRef.current) {
+          setIsRunning(false);
+        }
       }
     },
     [client, runStream, sessionId, sessionOptions],
