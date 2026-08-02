@@ -52,9 +52,10 @@ type RuntimeMcpServerMount = NonNullable<NonNullable<AgentSpec["mcpServers"]>[nu
 // Mounts — runtime base + gateway fields (fqn, type, url, tool selectors)
 // ---------------------------------------------------------------------------
 
-export interface TfySkillMount
-    extends RuntimeSkillMount,
-        TruefoundryGatewayApi.SkillMount {}
+// Both gateway types are unions (git vs registry source, inline vs registry
+// server), so these must be intersections — an interface cannot `extends` a
+// union, and doing so silently degrades to the runtime base under skipLibCheck.
+export type TfySkillMount = RuntimeSkillMount & TruefoundryGatewayApi.SkillMount;
 
 export type TfyMcpServerMount = RuntimeMcpServerMount & TruefoundryGatewayApi.McpServer;
 

@@ -53,17 +53,23 @@ export type SearchAgentSelectorParams = {
 // Mounts — neutral SDK base (host extends with backend-specific fields)
 // ---------------------------------------------------------------------------
 
-/** Skill mount base written to AgentSpec.skills[]. Host extends for fqn, preload, etc. */
-export interface SkillMount {
-    id: string;
-    name: string;
-}
+/**
+ * Mounts written to AgentSpec.skills[] / AgentSpec.mcpServers[].
+ *
+ * These are opaque to the runtime — it stores and forwards them but never reads
+ * a field, and the backend owns the shape (the gateway identifies a skill by
+ * `fqn`, with no `id` or `name` anywhere). So the base constrains only that a
+ * mount is an object; hosts intersect their concrete mount type over it, as
+ * `TfySkillMount` / `TfyMcpServerMount` do in the gateway adapter.
+ *
+ * Naming a field here would not just be unread, it would be wrong: a base with
+ * required fields rejects the backend's own payloads, and one with only optional
+ * fields is a weak type, which TypeScript rejects for a source that shares no
+ * property with it — the gateway's registry skill shares none.
+ */
+export type SkillMount = object;
 
-/** MCP server mount base written to AgentSpec.mcpServers[]. Host extends for type, enableTools, etc. */
-export interface McpServerMount {
-    id: string;
-    name: string;
-}
+export type McpServerMount = object;
 
 // ---------------------------------------------------------------------------
 // AgentSpec — model + skills + mcpServers on base; host widens the rest

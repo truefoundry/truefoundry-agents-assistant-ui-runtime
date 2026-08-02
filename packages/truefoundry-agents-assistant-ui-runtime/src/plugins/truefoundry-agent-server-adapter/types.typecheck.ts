@@ -3,12 +3,13 @@
  *
  * TfySkillMount / TfyMcpServerMount are built by indexing into the runtime's
  * exported AgentSpec. If that indexed access ever degrades to `unknown`, the
- * `extends` becomes a silent no-op and the required fields disappear without
+ * intersection becomes a silent no-op and the gateway fields disappear without
  * any error. These assertions fail `pnpm typecheck` if that happens.
  *
  * Not an entry point — tsup only bundles src/index.ts.
  */
 
+import type { AgentSpec } from "../../server/types.js";
 import type { createTrueFoundryChatServer } from "./index.js";
 import type {
     TfyAgentSpec,
@@ -19,22 +20,29 @@ import type {
     TfyTurn,
 } from "./types.js";
 
-// Runtime side (id/name) and gateway side (fqn/preload) both present.
-export const skill: TfySkillMount = {
-    id: "tfy:skill:v1",
-    name: "tfy:skill:v1",
+// Both gateway source variants must survive the intersection with the base.
+export const registrySkill: TfySkillMount = {
+    type: "truefoundry-skills-registry",
     fqn: "tfy:skill:v1",
     preload: true,
 };
 
-// @ts-expect-error fqn is required — gateway side must survive the derivation
-export const skillWithoutFqn: TfySkillMount = { id: "a", name: "a" };
+export const gitSkill: TfySkillMount = {
+    type: "git",
+    url: "https://github.com/acme/skills",
+    name: "reviewer",
+    ref: "main",
+};
 
-// @ts-expect-error id is required — runtime side must survive the derivation
-export const skillWithoutId: TfySkillMount = { name: "a", fqn: "a" };
+// @ts-expect-error the type discriminant must survive the intersection
+export const skillWithoutType: TfySkillMount = { fqn: "a" };
+
+// @ts-expect-error registry variant requires fqn
+export const registrySkillWithoutFqn: TfySkillMount = {
+    type: "truefoundry-skills-registry",
+};
 
 export const registeredMcp: TfyMcpServerMount = {
-    id: "github",
     name: "github",
     type: "truefoundry-mcp-registry",
     enableTools: ["@read-only"],
@@ -42,21 +50,25 @@ export const registeredMcp: TfyMcpServerMount = {
 };
 
 export const inlineMcp: TfyMcpServerMount = {
-    id: "custom",
     name: "custom",
     type: "inline",
     url: "https://example.com/mcp",
 };
 
 // @ts-expect-error the type discriminant must survive the intersection
-export const mcpWithoutType: TfyMcpServerMount = { id: "a", name: "a" };
+export const mcpWithoutType: TfyMcpServerMount = { name: "a" };
 
 // @ts-expect-error inline variant requires url
 export const inlineMcpWithoutUrl: TfyMcpServerMount = {
-    id: "a",
     name: "a",
     type: "inline",
 };
+
+// The gateway's own spec — a registry skill carries neither `id` nor `name` —
+// must satisfy the runtime base. A base that rejects it makes every server
+// response unassignable, which is the regression these mounts are guarding.
+declare const gatewayShapedSpec: TfyAgentSpec;
+export const asRuntimeSpec: AgentSpec = gatewayShapedSpec;
 
 // ---------------------------------------------------------------------------
 // Generic TSpec — a host extension must reach the returned server's types,
@@ -129,7 +141,7 @@ declare const doneTurn: Extract<TfyTurn["state"], { status: "done" }>;
 
 // `output` is the gateway's model message; on the runtime base this is `unknown`
 // and would not permit a property access at all.
-export const doneFinishReason: TfyFinishReason | undefined =
+export const doneFinishReason: TfyFinishReason | null | undefined =
     doneTurn.output?.finishReason;
 export const doneTokens: number | undefined = doneTurn.output?.usage?.inputTokens;
 
