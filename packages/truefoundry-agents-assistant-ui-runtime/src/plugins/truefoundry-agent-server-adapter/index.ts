@@ -4,18 +4,61 @@ import { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/privat
 import type { AgentDraftSession } from "truefoundry-gateway-sdk/agents/private";
 import type {
     AgentChatServer,
-    AgentSpec,
     ListResult,
-    Session,
-    Turn,
     TurnInputItem,
     PreviousTurnIdInput,
+    UpdateSessionRequest,
 } from "../../server/types.js";
 import type {
+    SessionEventItem,
     TurnEvent,
     TurnStreamData,
-    SessionEventItem,
 } from "../../server/events.js";
+import type {
+    TfyAgentSpec,
+    TfyCreateSessionRequest,
+    TfyListSessionsParams,
+    TfySession,
+    TfyTurn,
+    TfyTurnState,
+} from "./types.js";
+
+export {
+    type TfyAgentSpec,
+    type TfySkillMount,
+    type TfyMcpServerMount,
+    type TfyModelParams,
+    type TfyRuntimeConfig,
+    type TfyResponseFormat,
+    type TfySubject,
+    type ToolsSelectorItem,
+    type ToolsSelectorTag,
+    type RequireApprovalToolSelectorItem,
+    type RequireApprovalToolsSelectorTag,
+    type TfyTurn,
+    type TfyTurnState,
+    type TfyTurnCancelledReason,
+    type TfyTurnStateDoneOutput,
+    type TfySession,
+    type TfyCreateSessionRequest,
+    type TfyListSessionsParams,
+    type TfyToolInfo,
+    type TfySystemToolInfo,
+    type TfyMcpToolInfo,
+    type TfyModelMessageUsage,
+    type TfyFinishReason,
+    type TfyThreadState,
+    type TfyMcpServerInitInfo,
+} from "./types.js";
+
+export {
+    isTfyToolInfo,
+    isTfySystemToolInfo,
+    isTfyMcpToolInfo,
+    getTfyUsage,
+    getTfyThreadState,
+    getTfyMcpInitServers,
+} from "./guards.js";
 
 type GwSession = AgentSession | AgentDraftSession;
 
@@ -28,26 +71,42 @@ export type CreateTrueFoundryChatServerOptions = {
     deleteSession?: (req: { sessionId: string }) => Promise<void>;
 };
 
-export type TrueFoundryChatServer = AgentChatServer & {
-    /** Escape hatch for hosts that still need raw gateway clients. */
-    getGatewayClients(): {
-        client: AgentSessionClient;
-        privateClient: PrivateAgentSessionClient;
+/**
+ * Only the spec is generic. Session/Turn/list-params are the concrete Tfy*
+ * types because the adapter builds them as fixed object literals — a generic
+ * there would type fields that nothing ever populates. The spec is safe: the
+ * gateway SDK serializes with `unrecognizedObjectKeys: "passthrough"`, so
+ * host-added spec fields survive the round trip.
+ */
+export type TrueFoundryChatServer<TSpec extends TfyAgentSpec = TfyAgentSpec> =
+    AgentChatServer<
+        TSpec,
+        TfySession<TSpec>,
+        TfyCreateSessionRequest<TSpec>,
+        TfyListSessionsParams,
+        UpdateSessionRequest<TSpec>,
+        TfyTurn
+    > & {
+        /** Escape hatch for hosts that still need raw gateway clients. */
+        getGatewayClients(): {
+            client: AgentSessionClient;
+            privateClient: PrivateAgentSessionClient;
+        };
     };
-};
 
 function isDraft(session: GwSession): session is AgentDraftSession {
     return (session as AgentDraftSession).type === "session/draft";
 }
 
-function toSession(raw: GwSession): Session {
+function toSession<TSpec extends TfyAgentSpec>(raw: GwSession): TfySession<TSpec> {
     const mutable = isDraft(raw);
     return {
         id: raw.id,
         title: raw.title,
         agentName: raw.agentName,
-        ...(mutable ? { agentSpec: raw.agentSpec as AgentSpec } : {}),
+        ...(mutable ? { agentSpec: raw.agentSpec as TSpec } : {}),
         isMutable: mutable,
+        createdBySubject: raw.createdBySubject,
         createdAt: raw.createdAt,
         updatedAt: raw.updatedAt,
     };
@@ -58,15 +117,17 @@ function toTurn(raw: {
     sessionId: string;
     previousTurnId?: string | null;
     input?: TurnInputItem[];
-    state: Turn["state"];
+    state: unknown;
+    createdBySubject: TfyTurn["createdBySubject"];
     createdAt: string;
-}): Turn {
+}): TfyTurn {
     return {
         id: raw.id,
         sessionId: raw.sessionId,
         previousTurnId: raw.previousTurnId,
-        input: raw.input as TurnInputItem[] | undefined,
-        state: raw.state as Turn["state"],
+        input: raw.input,
+        state: raw.state as TfyTurnState,
+        createdBySubject: raw.createdBySubject,
         createdAt: raw.createdAt,
     };
 }
@@ -94,9 +155,11 @@ async function toListResult<TIn, TOut>(
  * (populated by createSession/listSessions) determines which gateway client
  * to call. No try/catch fallback, no double network calls.
  */
-export function createTrueFoundryChatServer(
+export function createTrueFoundryChatServer<
+    TSpec extends TfyAgentSpec = TfyAgentSpec,
+>(
     opts: CreateTrueFoundryChatServerOptions,
-): TrueFoundryChatServer {
+): TrueFoundryChatServer<TSpec> {
     const gatewayOpts = { apiKey: opts.apiKey, baseUrl: opts.baseUrl };
     const client = opts.client ?? new AgentSessionClient(gatewayOpts);
     const privateClient =
@@ -104,7 +167,10 @@ export function createTrueFoundryChatServer(
 
     const sessionTypeCache = new Map<string, boolean>();
 
-    function cacheSessionType(session: Session): void {
+    function cacheSessionType(session: {
+        id: string;
+        isMutable: boolean;
+    }): void {
         sessionTypeCache.set(session.id, session.isMutable);
     }
 
@@ -122,22 +188,28 @@ export function createTrueFoundryChatServer(
         );
     }
 
-    const server: TrueFoundryChatServer = {
+    const server: TrueFoundryChatServer<TSpec> = {
         async createSession(req) {
             if (req.agentSpec != null) {
                 const draft = await privateClient.createDraftSession({
-                    agentSpec: req.agentSpec as never,
+                    agentSpec: req.agentSpec,
                     ...(req.agentName != null ? { agentName: req.agentName } : {}),
+                    ...(req.tfyMetadata != null
+                        ? { tfyMetadata: req.tfyMetadata }
+                        : {}),
                 });
-                const session = toSession(draft);
+                const session = toSession<TSpec>(draft);
                 cacheSessionType(session);
                 return session;
             }
             if (req.agentName != null) {
                 const named = await client.createSession({
                     agentName: req.agentName,
+                    ...(req.tfyMetadata != null
+                        ? { tfyMetadata: req.tfyMetadata }
+                        : {}),
                 });
-                const session = toSession(named);
+                const session = toSession<TSpec>(named);
                 cacheSessionType(session);
                 return session;
             }
@@ -150,9 +222,10 @@ export function createTrueFoundryChatServer(
                 order: req?.order,
                 pageToken: req?.pageToken,
                 startTimestamp: req?.startTimestamp,
+                endTimestamp: req?.endTimestamp,
                 ...(req?.agentName != null ? { agentName: req.agentName } : {}),
             });
-            const result = await toListResult(page, toSession);
+            const result = await toListResult(page, (s) => toSession<TSpec>(s));
             for (const session of result.data) {
                 cacheSessionType(session);
             }
@@ -161,7 +234,7 @@ export function createTrueFoundryChatServer(
 
         async getSession({ sessionId }) {
             const raw = await getSessionObj(sessionId);
-            const session = toSession(raw);
+            const session = toSession<TSpec>(raw);
             cacheSessionType(session);
             return session;
         },
@@ -174,9 +247,9 @@ export function createTrueFoundryChatServer(
                 );
             }
             if (req.agentSpec != null) {
-                await raw.update({ agentSpec: req.agentSpec as never });
+                await raw.update({ agentSpec: req.agentSpec });
             }
-            return toSession(raw);
+            return toSession<TSpec>(raw);
         },
 
         prepareAndExecuteTurn(req: {
@@ -217,12 +290,13 @@ export function createTrueFoundryChatServer(
             await opts.deleteSession({ sessionId });
         },
 
-        async listTurns({ sessionId, limit, pageToken, order }) {
+        // The runtime's signature offers `order`, but the gateway's listTurns
+        // takes no such param — forwarding it silently did nothing.
+        async listTurns({ sessionId, limit, pageToken }) {
             const raw = await getSessionObj(sessionId);
             const page = await raw.listTurns({
                 ...(limit != null ? { limit } : {}),
                 ...(pageToken != null ? { pageToken } : {}),
-                ...(order != null ? { order } : {}),
             });
             return toListResult(page, (turn) => toTurn(turn));
         },

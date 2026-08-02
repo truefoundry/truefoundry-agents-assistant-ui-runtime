@@ -106,3 +106,44 @@ export type {
     ToolResponseRequiredEvent,
 } from "./server/index.js";
 export { isEventDelta, mergeEventDelta } from "./server/index.js";
+
+// ---------------------------------------------------------------------------
+// Plugin: truefoundry-agent-server-adapter
+// ---------------------------------------------------------------------------
+
+export {
+    createTrueFoundryChatServer,
+    type CreateTrueFoundryChatServerOptions,
+    type TrueFoundryChatServer,
+    type TfyAgentSpec,
+    type TfySkillMount,
+    type TfyMcpServerMount,
+    type TfyModelParams,
+    type TfyRuntimeConfig,
+    type TfyResponseFormat,
+    type TfySubject,
+    type ToolsSelectorItem,
+    type ToolsSelectorTag,
+    type RequireApprovalToolSelectorItem,
+    type RequireApprovalToolsSelectorTag,
+    type TfyTurn,
+    type TfyTurnState,
+    type TfyTurnCancelledReason,
+    type TfyTurnStateDoneOutput,
+    type TfySession,
+    type TfyCreateSessionRequest,
+    type TfyListSessionsParams,
+    type TfyToolInfo,
+    type TfySystemToolInfo,
+    type TfyMcpToolInfo,
+    type TfyModelMessageUsage,
+    type TfyFinishReason,
+    type TfyThreadState,
+    type TfyMcpServerInitInfo,
+    isTfyToolInfo,
+    isTfySystemToolInfo,
+    isTfyMcpToolInfo,
+    getTfyUsage,
+    getTfyThreadState,
+    getTfyMcpInitServers,
+} from "./plugins/truefoundry-agent-server-adapter/index.js";

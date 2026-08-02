@@ -27,6 +27,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    },
     "./plugins/truefoundry-agent-server-adapter": {
       "types": "./dist/plugins/truefoundry-agent-server-adapter/index.d.ts",
       "import": "./dist/plugins/truefoundry-agent-server-adapter/index.js",

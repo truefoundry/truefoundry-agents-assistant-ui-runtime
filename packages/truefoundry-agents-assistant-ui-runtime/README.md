@@ -24,7 +24,117 @@ If using the built-in TrueFoundry gateway adapter plugin, also install the gatew
 npm install truefoundry-gateway-sdk
 ```
 
-## Quickstart
+## Full-stack TrueFoundry setup (gateway SDK + plugin + agent-ui-sdk)
+
+This is the recommended path for hosts building on the TrueFoundry platform. It gives you:
+
+- **`truefoundry-gateway-sdk`** — typed gateway client (sessions, turns, streaming)
+- **`@truefoundry/assistant-ui-runtime`** — headless runtime adapter (this package)
+- **`@truefoundry/agent-ui-sdk`** — drop-in chat UI (Atom/Container architecture, slot overrides)
+
+### 1. Install
+
+```bash
+npm install @truefoundry/assistant-ui-runtime @truefoundry/agent-ui-sdk @assistant-ui/react truefoundry-gateway-sdk
+```
+
+### 2. Create the server
+
+```tsx
+import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime";
+
+const server = createTrueFoundryChatServer({
+  apiKey: process.env.TFY_API_KEY!,
+  baseUrl: process.env.TFY_GATEWAY_URL!,
+});
+```
+
+> `createTrueFoundryChatServer` is also available from the subpath `@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter` if you prefer an isolated import that doesn't pull in React.
+
+### 3. Wire the runtime + UI
+
+```tsx
+"use client";
+
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import {
+  useTrueFoundryAgentRuntime,
+  trueFoundryAttachmentAdapter,
+} from "@truefoundry/assistant-ui-runtime";
+import { AgentChat } from "@truefoundry/agent-ui-sdk";
+
+export function MyAssistant() {
+  const runtime = useTrueFoundryAgentRuntime({
+    server,
+    agentName: "support-bot",
+    adapters: { attachments: trueFoundryAttachmentAdapter },
+  });
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <AgentChat />
+    </AssistantRuntimeProvider>
+  );
+}
+```
+
+`AgentChat` renders the full conversation UI (thread list, messages, composer, tool approvals, sub-agent nesting, MCP auth). Override individual atoms via `<SlotsProvider overrides={{...}}>` — see the [agent-ui-sdk README](https://www.npmjs.com/package/@truefoundry/agent-ui-sdk) for slot override examples.
+
+### 4. TrueFoundry-specific types
+
+The plugin surfaces concrete gateway types for hosts that need them:
+
+```tsx
+import type {
+  TfyAgentSpec,
+  TfySkillMount,
+  TfyMcpServerMount,
+  TfySession,
+  TfyTurn,
+  TfyTurnState,
+  TfyToolInfo,
+} from "@truefoundry/assistant-ui-runtime";
+
+// Type guards for narrowing event fields typed as `unknown` by the runtime
+import {
+  isTfyToolInfo,
+  isTfySystemToolInfo,
+  isTfyMcpToolInfo,
+  getTfyUsage,
+  getTfyThreadState,
+  getTfyMcpInitServers,
+} from "@truefoundry/assistant-ui-runtime";
+```
+
+### 5. Generic host extension
+
+Extend `TfyAgentSpec` to carry your own fields — they survive the round trip because the gateway SDK serializes with `unrecognizedObjectKeys: "passthrough"`:
+
+```tsx
+import {
+  createTrueFoundryChatServer,
+  type TfyAgentSpec,
+  type TrueFoundryChatServer,
+} from "@truefoundry/assistant-ui-runtime";
+
+interface MySpec extends TfyAgentSpec {
+  workspaceId: string;
+  deploymentId: string;
+}
+
+const server: TrueFoundryChatServer<MySpec> = createTrueFoundryChatServer<MySpec>({
+  apiKey,
+  baseUrl,
+});
+
+// Host fields are visible on session.agentSpec
+const session = await server.getSession({ sessionId: "ses_abc" });
+console.log(session.agentSpec?.workspaceId); // typed as string | undefined
+```
+
+---
+
+## Quickstart (generic / bring-your-own backend)
 
 ### 1. Create an `AgentChatServer`
 
@@ -33,7 +143,7 @@ The runtime accepts any object implementing the `AgentChatServer` interface — 
 Using the built-in TrueFoundry gateway plugin (requires `truefoundry-gateway-sdk`):
 
 ```tsx
-import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter";
+import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime";
 
 const server = createTrueFoundryChatServer({
   apiKey: process.env.TFY_API_KEY!,
