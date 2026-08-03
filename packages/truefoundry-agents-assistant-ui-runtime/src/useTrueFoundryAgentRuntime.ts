@@ -148,20 +148,16 @@ function useTrueFoundryAgentRuntimeImpl(
     const downloadSandboxFile = useCallback(
         async (path: string) => {
             if (server.downloadSandboxFile == null) {
-                const error = new Error(
+                throw new Error(
                     "Downloading a sandbox file requires AgentChatServer.downloadSandboxFile.",
                 );
-                onError?.(error);
-                throw error;
             }
             if (sandboxId == null) {
-                const error = new Error("No sandbox is available yet for this session.");
-                onError?.(error);
-                throw error;
+                throw new Error("No sandbox is available yet for this session.");
             }
             return await server.downloadSandboxFile(sandboxId, { path });
         },
-        [server, sandboxId, onError],
+        [server, sandboxId],
     );
 
     const draftExtras = useMemo(() => {

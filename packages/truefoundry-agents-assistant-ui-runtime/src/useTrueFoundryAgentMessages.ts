@@ -294,7 +294,12 @@ export function useTrueFoundryAgentMessages({
 }: UseTrueFoundryAgentMessagesOptions) {
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    // Existing sessions have history pending from the first render. Starting at
+    // false causes consumers to briefly render an empty thread before the load
+    // effect runs and flips this flag to true.
+    const [isLoading, setIsLoading] = useState(
+        sessionId != null && isMain !== false,
+    );
     const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
 
