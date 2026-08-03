@@ -489,6 +489,7 @@ export function useTrueFoundryAgentMessages({
 
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
+        setIsRunning(false);
         abortControllerRef.current?.abort();
         loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
