@@ -94,6 +94,15 @@ export type TrueFoundryChatServer<TSpec extends TfyAgentSpec = TfyAgentSpec> =
         };
     };
 
+/** Gateway SDK errors carry the HTTP status as `statusCode`. */
+function isNotFound(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        (error as { statusCode?: unknown }).statusCode === 404
+    );
+}
+
 function isDraft(session: GwSession): session is AgentDraftSession {
     return (session as AgentDraftSession).type === "session/draft";
 }
@@ -190,7 +199,13 @@ export function createTrueFoundryChatServer<
             try {
                 await privateClient.getDraftSession({ draftSessionId: sessionId });
                 return true;
-            } catch {
+            } catch (error) {
+                // Only a miss proves the id isn't a draft. Auth or transient
+                // failures would otherwise be retried as a conversation session
+                // and mislabel a real draft as named.
+                if (!isNotFound(error)) {
+                    throw error;
+                }
                 await client.getSession({ sessionId });
                 return false;
             }
