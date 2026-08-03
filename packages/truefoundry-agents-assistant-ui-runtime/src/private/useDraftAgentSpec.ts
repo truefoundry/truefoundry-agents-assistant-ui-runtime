@@ -128,6 +128,11 @@ export function useDraftAgentSpec({
 
         return () => {
             cancelled = true;
+            // The cancelled load can no longer clear the flag itself. Releasing it
+            // here keeps it from sticking when the next run early-returns on an
+            // already-loaded draft; a run that starts a fresh load re-raises it in
+            // the same commit.
+            setIsSpecLoading(false);
         };
     }, [defaultAgentSpec, draftBridge, draftSessionId, enabled, onError]);
 
