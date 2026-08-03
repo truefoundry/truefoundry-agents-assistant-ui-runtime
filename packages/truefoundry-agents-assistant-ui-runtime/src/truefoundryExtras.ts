@@ -11,6 +11,7 @@ export type { PendingApproval, PendingToolResponse };
 export type TrueFoundryDraftRuntimeExtras = {
     agentSpec: AgentSpec | null;
     draftSessionId: string | undefined;
+    isSpecLoading: boolean;
     isSpecSyncing: boolean;
     specError: unknown | null;
     updateAgentSpec: (update: AgentSpecUpdate) => void;
@@ -41,6 +42,7 @@ export const trueFoundryExtras = createRuntimeExtras<TrueFoundryRuntimeExtras>(
 export const EMPTY_DRAFT_EXTRAS: TrueFoundryDraftRuntimeExtras = {
     agentSpec: null,
     draftSessionId: undefined,
+    isSpecLoading: false,
     isSpecSyncing: false,
     specError: null,
     updateAgentSpec: () => {

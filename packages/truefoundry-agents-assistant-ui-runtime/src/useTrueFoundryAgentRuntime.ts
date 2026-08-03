@@ -167,6 +167,7 @@ function useTrueFoundryAgentRuntimeImpl(
         return {
             agentSpec: draftSpec.agentSpec,
             draftSessionId: draftSpec.draftSessionId,
+            isSpecLoading: draftSpec.isSpecLoading,
             isSpecSyncing: draftSpec.isSpecSyncing,
             specError: draftSpec.specError,
             updateAgentSpec: draftSpec.updateAgentSpec,
