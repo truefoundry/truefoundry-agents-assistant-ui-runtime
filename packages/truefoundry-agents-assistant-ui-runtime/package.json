@@ -1,11 +1,11 @@
 {
   "name": "@truefoundry/assistant-ui-runtime",
-  "version": "0.1.6-rc.1",
+  "version": "0.1.6",
   "description": "TrueFoundry Gateway agent runtime adapter for assistant-ui",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime"
+    "url": "git+https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime.git"
   },
   "homepage": "https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime#readme",
   "keywords": [
