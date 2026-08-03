@@ -2,14 +2,14 @@
 
 Standalone Vite + React example that wires `@truefoundry/assistant-ui-runtime` to
 [`@truefoundry/agent-ui-sdk`](https://www.npmjs.com/package/@truefoundry/agent-ui-sdk)
-for the chat UI.
+(`^0.1.2`) for the chat UI.
 
 ## Features
 
 - Gateway credentials from `.env` (Vite `import.meta.env`)
-- Session sidebar via `ThreadListContainer`
-- Full thread UI via `Thread` (composer, streaming, tool calls, approvals, ask-user, MCP auth)
-- Attachments enabled through `trueFoundryAttachmentAdapter`
+- `createTrueFoundryChatServer` + `createTrueFoundryServer` → `TrueFoundryAssistantUI`
+- Named-agent sidebar layout (`agentName` lock; no Agents Library / draft chrome)
+- Built-in history pagination via the SDK's `HistoryLoaderContainer`
 
 ## Prerequisites
 
@@ -52,13 +52,11 @@ pnpm --filter assistant-ui-vite preview
 ## Architecture
 
 ```
-.env → import.meta.env → AgentSessionClient
-  → useTrueFoundryAgentRuntime({ agentName })
-  → AssistantRuntimeProvider
-  → ErrorToasterProvider / TooltipProvider
-  → ThreadListContainer + Thread (@truefoundry/agent-ui-sdk)
+.env → import.meta.env
+  → createTrueFoundryChatServer (gateway adapter)
+  → createTrueFoundryServer (AgentUIServer)
+  → TrueFoundryAssistantUI (layout=sidebar, agentName lock)
 ```
 
 Design tokens live in `src/index.css` as CSS variables; the SDK stylesheet is
-imported with `@import "@truefoundry/agent-ui-sdk/openui.css"` so Tailwind scans
-the SDK components.
+imported with `@import "@truefoundry/agent-ui-sdk/styles.css"`.

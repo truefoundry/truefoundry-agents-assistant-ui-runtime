@@ -1,0 +1,43 @@
+---
+description: FE-owned AgentUIServer types — FE-only fields, host widens via generics
+globs: packages/truefoundry-agents-assistant-ui-runtime/src/server/types.ts,packages/truefoundry-agents-assistant-ui-runtime/src/plugins/truefoundry-agent-server-adapter/types.ts
+alwaysApply: false
+---
+
+# AgentUIServer type contract (`server/types.ts`)
+
+Only declare types/fields the runtime or UI actually reads or writes.
+Everything else belongs on the host via `T extends Base` generics.
+
+**All types in this surface should be generic** (or parameterize the ports that carry them) so hosts can widen DTOs, mounts, catalog rows, session/request shapes, and turn types without forking the FE contract.
+
+## Rules
+
+- Base interfaces are FE-minimal (`AgentSpec`, `Session`, selector entries, turn DTOs, catalog settings rows).
+- Prefer generics on every extensible type / server port (`TSpec`, `TSession`, `TModel`, …) — do not hardcode host shapes.
+- Host-specific fields (`fqn`, `tfyMetadata`, `config`, pricing, `modelId`, `properties`, etc.) go on host types — never on the SDK base.
+- Opaque mounts stay `object` (`SkillMount` / `McpServerMount`); hosts intersect concrete shapes.
+- Chat (`AgentChatServer`), builder (`AgentBuilderServer`), and catalog (`CatalogServer` / `ModelCatalogServer` / `ConnectorCatalogServer`) share this principle.
+- Compose via `AgentUIServerPort` (`chat & builder & { catalog? }`); settings use the nested `catalog` field.
+- Catalog FE bases encode UI display + CRUD ids only (`ModelEntry`, `ModelProviderBase`, `ToolBase`, `ConnectorBase`).
+- Harness / backend wire shapes are scratch-only in `src/harness.temp.ts` (not published); hosts own the adapter outside this repo.
+- No dependency on `truefoundry-gateway-sdk` in `server/types.ts`.
+- Catalog DTO keys are camelCase (FE surface); host adapters map snake_case wire payloads.
+
+## Host pattern (reference)
+
+```typescript
+// ✅ host widens model/skills/mcp via AgentSpec type params + extra fields
+export interface TfyAgentSpec
+  extends AgentSpec<GatewayModel, TfySkillMount, TfyMcpServerMount> {
+  config?: TruefoundryGatewayApi.RuntimeConfig;
+  messages?: TruefoundryGatewayApi.AgentSpecUserMessage[];
+}
+
+// ✅ catalog: FE base + host fields; map from host/harness wire types outside this package
+export interface HostModelEntry extends ModelEntry {
+  modelId: string;
+}
+
+// ❌ don't put gateway-only / harness wire fields on CatalogServer bases in server/types.ts
+```

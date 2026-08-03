@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeAgentSpec, type AgentSpec } from "./private/agentSpec.js";
+import { mergeAgentSpec } from "./draft/agentSpec.js";
+import type { AgentSpec } from "./server/types.js";
 import {
     resolveTrueFoundryAgentConfig,
     resolveTrueFoundryAgentRuntimeOptions,

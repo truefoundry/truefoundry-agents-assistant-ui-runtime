@@ -14,7 +14,7 @@ import { useAui, useAuiState } from "@assistant-ui/store";
 import type { MutableRefObject } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import type { AgentSpec } from "./private/agentSpec.js";
+import type { AgentSpec } from "./server/types.js";
 import {
     collectPendingApprovals,
     collectPendingToolResponses,
@@ -29,14 +29,14 @@ import {
 import {
     createDraftSessionBridge,
     DRAFT_SESSION_LAST_UPDATED_AT_HEADER,
-} from "./private/draftSessionBridge.js";
+} from "./draft/draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
-import { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
+import { createTrueFoundryDraftThreadListAdapter } from "./draft/truefoundryDraftThreadListAdapter.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
 import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { resolveTrueFoundryAgentRuntimeOptions } from "./types.js";
-import { useDraftAgentSpec } from "./private/useDraftAgentSpec.js";
+import { useDraftAgentSpec } from "./draft/useDraftAgentSpec.js";
 import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
 
 function useTrueFoundryAgentRuntimeImpl(

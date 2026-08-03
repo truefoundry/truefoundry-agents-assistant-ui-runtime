@@ -1,5 +1,4 @@
-import type { AgentChatServer } from "../server/types.js";
-import type { AgentSpec } from "./agentSpec.js";
+import type { AgentChatServer, AgentSpec } from "../server/types.js";
 
 export const DRAFT_SESSION_LAST_UPDATED_AT_HEADER = "x-tfy-session-last-updated-at";
 

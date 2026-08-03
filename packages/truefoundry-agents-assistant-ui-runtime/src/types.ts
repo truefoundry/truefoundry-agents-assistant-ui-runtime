@@ -7,8 +7,7 @@ import type {
     SpeechSynthesisAdapter,
 } from "@assistant-ui/core";
 
-import type { AgentSpec } from "./private/agentSpec.js";
-import type { AgentChatServer } from "./server/types.js";
+import type { AgentChatServer, AgentSpec } from "./server/types.js";
 
 export type NamedAgentConfig = {
     mode: "named";

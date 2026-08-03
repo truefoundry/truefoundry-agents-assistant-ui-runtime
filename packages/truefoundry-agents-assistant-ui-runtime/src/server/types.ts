@@ -72,7 +72,7 @@ export type SkillMount = object;
 export type McpServerMount = object;
 
 // ---------------------------------------------------------------------------
-// AgentSpec — model + skills + mcpServers on base; host widens the rest
+// AgentSpec — model / skills / mcpServers are type params; host widens the rest
 // ---------------------------------------------------------------------------
 
 export interface ModelParams {
@@ -87,17 +87,19 @@ export interface Model {
 
 /**
  * SDK-owned agent definition — fields the FE reads/writes.
- * Host adds additional fields via `TSpec extends AgentSpec`.
+ * Host widens `model` / `skills` / `mcpServers` via type params, and adds
+ * extra fields via `TSpec extends AgentSpec<...>`.
  */
-export interface AgentSpec {
-    model: Model;
-    skills?: SkillMount[];
-    mcpServers?: McpServerMount[];
+export interface AgentSpec<
+    TModel extends Model = Model,
+    TSkill extends SkillMount = SkillMount,
+    TMcp extends McpServerMount = McpServerMount,
+> {
+    model: TModel;
+    skills?: TSkill[];
+    mcpServers?: TMcp[];
     instructions?: string;
-    messages?: unknown[];
     variables?: Record<string, string>;
-    responseFormat?: unknown;
-    config?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -317,3 +319,123 @@ export interface AgentBuilderServer<
     }): Promise<TSave>;
     deleteAgent?(req: { agentName: string }): Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// Catalog management — FE-minimal settings DTOs (host extends via generics)
+// ---------------------------------------------------------------------------
+
+/**
+ * Provider type id. Reserved literal: `"custom"` for user-defined providers;
+ * any other string is a builtin (e.g. `"openai"`, `"anthropic"`).
+ *
+ * Note: `string | "custom"` is useless in TypeScript (`"custom"` ⊆ `string`),
+ * so this stays `string` and `"custom"` is a documented convention.
+ */
+export type ProviderType = string;
+
+/** Model row shown in settings/models. Host extends for modelId, properties, etc. */
+export interface ModelEntry {
+    id: string;
+    name: string;
+}
+
+/** Configured provider card. Host extends for auth, timestamps, etc. */
+export interface ModelProviderBase<TModel extends ModelEntry = ModelEntry> {
+    id: string;
+    type: ProviderType;
+    name: string;
+    /** Present iff `type === "custom"`. */
+    baseUrl?: string;
+    models: TModel[];
+}
+
+/**
+ * Discovery-only catalog provider.
+ * `type` must not be `"custom"` — custom providers are added outside the catalog.
+ * Host extends for richer model rows.
+ */
+export interface ModelProviderCatalogEntry<TModel extends ModelEntry = ModelEntry> {
+    type: ProviderType;
+    name: string;
+    models: TModel[];
+}
+
+export type UpdateModelProviderRequest<TModel extends ModelEntry = ModelEntry> =
+    ModelProviderBase<TModel>;
+
+export interface ModelCatalogServer<
+    TModel extends ModelEntry = ModelEntry,
+    TProvider extends ModelProviderBase<TModel> = ModelProviderBase<TModel>,
+    TCatalogProvider extends ModelProviderCatalogEntry<TModel> = ModelProviderCatalogEntry<TModel>,
+    TUpdate extends UpdateModelProviderRequest<TModel> = UpdateModelProviderRequest<TModel>,
+> {
+    getModelProviderCatalog(): Promise<TCatalogProvider[]>;
+    listModelProviders(): Promise<TProvider[]>;
+    /** Full replace create-or-update keyed by provider `id` / `name`. */
+    updateModelProvider(req: TUpdate): Promise<TProvider>;
+    deleteModelProvider?(req: { id: string }): Promise<void>;
+}
+
+/** Tool row on a connector detail. Host extends for schemas, etc. */
+export interface ToolBase {
+    id: string;
+    name: string;
+}
+
+/** Connected connector row (settings/connectors). Host extends for url, auth, etc. */
+export interface ConnectorBase<TTool extends ToolBase = ToolBase> {
+    id: string;
+    name: string;
+    description: string;
+    authenticated: boolean;
+    tools: TTool[];
+}
+
+/** Discovery catalog entry for "+ Add MCP server". Host extends. */
+export interface ConnectorCatalogEntry {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+export type UpdateConnectorRequest<TTool extends ToolBase = ToolBase> =
+    ConnectorBase<TTool>;
+
+export interface ConnectorCatalogServer<
+    TTool extends ToolBase = ToolBase,
+    TConnector extends ConnectorBase<TTool> = ConnectorBase<TTool>,
+    TCatalogEntry extends ConnectorCatalogEntry = ConnectorCatalogEntry,
+    TUpdate extends UpdateConnectorRequest<TTool> = UpdateConnectorRequest<TTool>,
+> {
+    getConnectorCatalog(): Promise<TCatalogEntry[]>;
+    listConnectors(req?: { query?: string }): Promise<TConnector[]>;
+    /** Full replace create-or-update keyed by connector `id`. */
+    updateConnector(req: TUpdate): Promise<TConnector>;
+    deleteConnector?(req: { id: string }): Promise<void>;
+}
+
+/**
+ * Settings management aggregate — models + connectors.
+ * Hosts may pass the whole object to an app shell, or a focused sub-port to a page.
+ */
+export interface CatalogServer<
+    TModels extends ModelCatalogServer = ModelCatalogServer,
+    TConnectors extends ConnectorCatalogServer = ConnectorCatalogServer,
+> {
+    models: TModels;
+    connectors: TConnectors;
+}
+
+/**
+ * Composed host port: chat + builder + optional settings catalog.
+ * Agent-ui's `AgentUIServer` mirrors this shape; named differently here to
+ * avoid colliding with that package's local type name.
+ *
+ * `catalog` is optional — if the host passes it, settings UI can call
+ * `useCatalogServer()` / show models & connectors; if omitted, those surfaces stay hidden.
+ */
+export type AgentUIServerPort<
+    TChat extends AgentChatServer = AgentChatServer,
+    TBuilder extends AgentBuilderServer = AgentBuilderServer,
+    TCatalog extends CatalogServer = CatalogServer,
+> = TChat & TBuilder & { catalog?: TCatalog };

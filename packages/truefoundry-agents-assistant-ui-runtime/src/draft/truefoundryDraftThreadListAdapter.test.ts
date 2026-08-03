@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentChatServer, Session } from "../server/index.js";
 
 import { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
-import type { AgentSpec } from "./agentSpec.js";
+import type { AgentSpec } from "../server/types.js";
 
 const defaultAgentSpec: AgentSpec = {
     model: { name: "anthropic/claude-sonnet-4-6" },

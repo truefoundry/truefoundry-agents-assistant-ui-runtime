@@ -63,10 +63,12 @@ export type TfyMcpServerMount = RuntimeMcpServerMount & TruefoundryGatewayApi.Mc
 // AgentSpec — the concrete TrueFoundry agent definition
 // ---------------------------------------------------------------------------
 
-export interface TfyAgentSpec extends AgentSpec {
-    model: TruefoundryGatewayApi.Model;
-    skills?: TfySkillMount[];
-    mcpServers?: TfyMcpServerMount[];
+export interface TfyAgentSpec
+    extends AgentSpec<
+        TruefoundryGatewayApi.Model,
+        TfySkillMount,
+        TfyMcpServerMount
+    > {
     config?: TruefoundryGatewayApi.RuntimeConfig;
     responseFormat?: TruefoundryGatewayApi.ResponseFormat;
     messages?: TruefoundryGatewayApi.AgentSpecUserMessage[];

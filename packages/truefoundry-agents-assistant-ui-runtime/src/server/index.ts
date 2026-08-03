@@ -31,6 +31,19 @@ export type {
     Turn,
     AgentChatServer,
     AgentBuilderServer,
+    ProviderType,
+    ModelEntry,
+    ModelProviderBase,
+    ModelProviderCatalogEntry,
+    UpdateModelProviderRequest,
+    ModelCatalogServer,
+    ToolBase,
+    ConnectorBase,
+    ConnectorCatalogEntry,
+    UpdateConnectorRequest,
+    ConnectorCatalogServer,
+    CatalogServer,
+    AgentUIServerPort,
 } from "./types.js";
 
 export type {
