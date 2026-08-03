@@ -1,5 +1,5 @@
 import type { ThreadAssistantMessagePart, ThreadMessage } from "@assistant-ui/core";
-import type { McpAuthRequiredEvent } from "truefoundry-gateway-sdk/agents";
+import type { McpAuthRequiredEvent } from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";

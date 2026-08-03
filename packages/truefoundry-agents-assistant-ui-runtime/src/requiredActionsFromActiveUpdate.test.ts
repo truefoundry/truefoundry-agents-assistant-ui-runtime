@@ -64,7 +64,7 @@ describe("requiredActionsFromActiveUpdate", () => {
         };
 
         const actions = requiredActionsFromActiveUpdate(update);
-        expect(actions.map((action) => action.type)).toEqual([
+        expect(actions?.map((action) => action.type)).toEqual([
             "tool.approval_required",
             "tool.response_required",
         ]);

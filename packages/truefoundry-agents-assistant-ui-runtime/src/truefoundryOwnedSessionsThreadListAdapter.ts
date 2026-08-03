@@ -1,34 +1,33 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/core";
-import type { AgentSession } from "truefoundry-gateway-sdk/agents";
-import type {
-    AgentDraftSession,
-    PrivateAgentSessionClient,
-} from "truefoundry-gateway-sdk/agents/private";
 
+import type { AgentChatServer, Session } from "./server/types.js";
 import { draftSessionTitle } from "./private/agentSpec.js";
 import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
-function ownedSessionTitle(session: AgentSession | AgentDraftSession): string {
-    if (session.type === "session/draft") {
-        return draftSessionTitle(session);
+function ownedSessionTitle(session: Session): string {
+    if (session.isMutable && session.agentSpec != null) {
+        return draftSessionTitle({
+            title: session.title,
+            agentSpec: session.agentSpec,
+        });
     }
-    return session.title ?? session.agentName;
+    return session.title ?? session.agentName ?? session.id;
 }
 
 /**
- * Read-only thread-list adapter backed by `PrivateAgentSessionClient.listOwnedSessions`.
- * Returns every session the caller owns (named + draft), newest first.
+ * Read-only thread-list adapter backed by `AgentChatServer.listSessions`.
+ * Hosts that previously used listOwnedSessions should filter in their server impl.
  */
 export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
-    privateClient: PrivateAgentSessionClient;
+    server: AgentChatServer;
 }): RemoteThreadListAdapter {
-    const { privateClient } = options;
+    const { server } = options;
 
     return {
         async list({ after } = {}) {
-            const page = await privateClient.listOwnedSessions({
+            const page = await server.listSessions({
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),
@@ -41,7 +40,7 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
             }));
             return {
                 threads,
-                nextCursor: page.response.pagination.nextPageToken ?? undefined,
+                nextCursor: page.nextPageToken ?? undefined,
             };
         },
 
@@ -52,16 +51,12 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
         },
 
         async fetch(remoteId) {
-            // PrivateAgentSessionClient only exposes get for drafts. Named sessions
-            // surface through listOwnedSessions; fetch falls back to draft get.
-            const draft = await privateClient.getDraftSession({
-                draftSessionId: remoteId,
-            });
+            const session = await server.getSession({ sessionId: remoteId });
             return {
                 status: "regular" as const,
-                remoteId: draft.id,
-                title: draftSessionTitle(draft),
-                lastMessageAt: new Date(draft.updatedAt),
+                remoteId: session.id,
+                title: ownedSessionTitle(session),
+                lastMessageAt: new Date(session.updatedAt),
             };
         },
 

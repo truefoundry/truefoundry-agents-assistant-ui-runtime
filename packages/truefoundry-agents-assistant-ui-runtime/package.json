@@ -1,11 +1,11 @@
 {
   "name": "@truefoundry/assistant-ui-runtime",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "TrueFoundry Gateway agent runtime adapter for assistant-ui",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime"
+    "url": "git+https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime.git"
   },
   "homepage": "https://github.com/truefoundry/truefoundry-agents-assistant-ui-runtime#readme",
   "keywords": [
@@ -26,6 +26,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    },
+    "./plugins/truefoundry-agent-server-adapter": {
+      "types": "./dist/plugins/truefoundry-agent-server-adapter/index.d.ts",
+      "import": "./dist/plugins/truefoundry-agent-server-adapter/index.js",
+      "default": "./dist/plugins/truefoundry-agent-server-adapter/index.js"
     }
   },
   "main": "./dist/index.js",
@@ -50,10 +60,13 @@
   "peerDependencies": {
     "@types/react": "*",
     "react": "^18 || ^19",
-    "truefoundry-gateway-sdk": "^0.4.0-rc.1"
+    "truefoundry-gateway-sdk": "^0.4.0-rc.6"
   },
   "peerDependenciesMeta": {
     "@types/react": {
+      "optional": true
+    },
+    "truefoundry-gateway-sdk": {
       "optional": true
     }
   },
@@ -63,9 +76,9 @@
     "@types/react": "^19.2.17",
     "jsdom": "^29.1.1",
     "react": "^19.2.4",
-    "truefoundry-gateway-sdk": "0.4.0-rc.1",
+    "truefoundry-gateway-sdk": "0.4.0-rc.6",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.9"
+    "vitest": "4.1.9"
   }
 }

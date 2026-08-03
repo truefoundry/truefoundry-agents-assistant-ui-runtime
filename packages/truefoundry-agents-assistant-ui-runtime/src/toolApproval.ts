@@ -8,7 +8,7 @@ import type {
     ToolApprovalRequiredEvent,
     Turn,
     UserToolApprovalEvent,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import type { ToolApprovalMessageCustomMetadata } from "./messageCustomMetadata.js";
@@ -148,10 +148,10 @@ export function findApprovalRequiredInTurn(
     if (turn.state.status !== "done") {
         return undefined;
     }
-    return turn.state.requiredActions?.find(
-        (action): action is ToolApprovalRequiredEvent =>
-            action.type === "tool.approval_required",
+    const found = turn.state.requiredActions?.find(
+        (action) => action.type === "tool.approval_required",
     );
+    return found?.type === "tool.approval_required" ? found : undefined;
 }
 
 function toolCallPartHasPendingApproval(part: ToolCallPart): boolean {

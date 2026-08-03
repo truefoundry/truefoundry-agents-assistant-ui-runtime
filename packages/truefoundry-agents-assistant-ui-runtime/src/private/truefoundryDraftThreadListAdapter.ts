@@ -1,52 +1,58 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/core";
-import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
 
+import type { AgentChatServer } from "../server/types.js";
 import { draftSessionTitle, type AgentSpec } from "./agentSpec.js";
 import { sessionListStartTimestamp } from "../sessionListStartTimestamp.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
 export function createTrueFoundryDraftThreadListAdapter(options: {
-    privateClient: PrivateAgentSessionClient;
+    server: AgentChatServer;
     defaultAgentSpec: AgentSpec;
     getAgentSpec?: () => AgentSpec;
 }): RemoteThreadListAdapter {
-    const { privateClient, defaultAgentSpec, getAgentSpec } = options;
+    const { server, defaultAgentSpec, getAgentSpec } = options;
 
     return {
         async list({ after } = {}) {
-            const page = await privateClient.listDraftSessions({
+            const page = await server.listSessions({
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),
             });
-            const threads = page.data.map((draft) => ({
-                status: "regular" as const,
-                remoteId: draft.id,
-                title: draftSessionTitle(draft),
-                lastMessageAt: new Date(draft.updatedAt),
-            }));
+            const threads = page.data
+                .filter((session) => session.isMutable)
+                .map((draft) => ({
+                    status: "regular" as const,
+                    remoteId: draft.id,
+                    title: draftSessionTitle({
+                        title: draft.title,
+                        agentSpec: draft.agentSpec ?? defaultAgentSpec,
+                    }),
+                    lastMessageAt: new Date(draft.updatedAt),
+                }));
             return {
                 threads,
-                nextCursor: page.response.pagination.nextPageToken ?? undefined,
+                nextCursor: page.nextPageToken ?? undefined,
             };
         },
 
         async initialize(_threadId: string) {
-            const draft = await privateClient.createDraftSession({
+            const draft = await server.createSession({
                 agentSpec: getAgentSpec?.() ?? defaultAgentSpec,
             });
             return { remoteId: draft.id, externalId: undefined };
         },
 
         async fetch(remoteId) {
-            const draft = await privateClient.getDraftSession({
-                draftSessionId: remoteId,
-            });
+            const draft = await server.getSession({ sessionId: remoteId });
             return {
                 status: "regular" as const,
                 remoteId: draft.id,
-                title: draftSessionTitle(draft),
+                title: draftSessionTitle({
+                    title: draft.title,
+                    agentSpec: draft.agentSpec ?? defaultAgentSpec,
+                }),
                 lastMessageAt: new Date(draft.updatedAt),
             };
         },

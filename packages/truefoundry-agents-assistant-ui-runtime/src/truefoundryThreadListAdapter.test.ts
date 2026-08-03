@@ -1,30 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import type { AgentChatServer, Session } from "./server/index.js";
 
 import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 
-function mockSession(id: string, title: string, updatedAt: string) {
+function mockSession(id: string, title: string, updatedAt: string): Session {
     return {
         id,
         title,
         updatedAt,
+        createdAt: updatedAt,
+        isMutable: false,
     };
 }
 
-function mockListSessionsPage(
-    sessions: ReturnType<typeof mockSession>[],
-    nextPageToken?: string,
-) {
+function mockListSessionsPage(sessions: Session[], nextPageToken?: string) {
     return {
         data: sessions,
-        response: {
-            pagination: {
-                nextPageToken,
-                limit: 20,
-            },
-        },
+        ...(nextPageToken != null ? { nextPageToken } : {}),
     };
+}
+
+function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
+    return partial as AgentChatServer;
 }
 
 describe("createTrueFoundryThreadListAdapter", () => {
@@ -35,9 +33,9 @@ describe("createTrueFoundryThreadListAdapter", () => {
                 "page-2",
             ),
         );
-        const client = { listSessions } as unknown as AgentSessionClient;
+        const server = mockServer({ listSessions });
         const adapter = createTrueFoundryThreadListAdapter({
-            client,
+            server,
             agentName: "my-agent",
         });
 
@@ -68,9 +66,9 @@ describe("createTrueFoundryThreadListAdapter", () => {
                 [mockSession("s2", "Second", "2026-06-29T10:00:00.000Z")],
             ),
         );
-        const client = { listSessions } as unknown as AgentSessionClient;
+        const server = mockServer({ listSessions });
         const adapter = createTrueFoundryThreadListAdapter({
-            client,
+            server,
             agentName: "my-agent",
         });
 
@@ -90,9 +88,9 @@ describe("createTrueFoundryThreadListAdapter", () => {
         const listSessions = vi.fn().mockResolvedValue(
             mockListSessionsPage([mockSession("s1", "Only", "2026-06-30T10:00:00.000Z")]),
         );
-        const client = { listSessions } as unknown as AgentSessionClient;
+        const server = mockServer({ listSessions });
         const adapter = createTrueFoundryThreadListAdapter({
-            client,
+            server,
             agentName: "my-agent",
         });
 

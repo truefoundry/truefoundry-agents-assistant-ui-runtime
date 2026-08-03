@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Box, Text } from "ink";
 import { AssistantRuntimeProvider, StatusBarPrimitive } from "@assistant-ui/react-ink";
 import { useAuiState } from "@assistant-ui/store";
-import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime";
 import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
 import { Thread } from "./components/thread.js";
 
@@ -19,7 +19,10 @@ const apiKey = requireEnv("TFY_API_KEY");
 const gatewayUrl = requireEnv("TFY_GATEWAY_URL");
 const agentName = process.env["TFY_AGENT_NAME"] ?? "my-agent";
 
-const client = new AgentSessionClient({ apiKey, baseUrl: gatewayUrl });
+const server = createTrueFoundryChatServer({
+    apiKey,
+    baseUrl: gatewayUrl,
+});
 
 const StatusBar = () => {
     const sessionId = useAuiState((s) => s.threadListItem.remoteId);
@@ -38,7 +41,7 @@ const StatusBar = () => {
 
 export const App = () => {
     const agentRuntime = useTrueFoundryAgentRuntime(
-        useMemo(() => ({ client, agentName }), []),
+        useMemo(() => ({ server, agentName }), []),
     );
 
     return (
@@ -48,12 +51,9 @@ export const App = () => {
                     <Text bold color="cyan">
                         {agentName}
                     </Text>
-                    <Text dimColor>TrueFoundry Agent</Text>
+                    <StatusBar />
                 </Box>
-                <StatusBar />
-                <Box marginTop={1}>
-                    <Thread />
-                </Box>
+                <Thread />
             </Box>
         </AssistantRuntimeProvider>
     );

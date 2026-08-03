@@ -7,7 +7,6 @@ import type {
     ThreadUserMessagePart,
 } from "@assistant-ui/core";
 import type {
-    AgentSession,
     McpAuthRequiredEvent,
     Turn,
     TurnCreatedEvent,
@@ -15,9 +14,11 @@ import type {
     TurnEvent,
     TurnInputItem,
     TurnStreamData,
-} from "truefoundry-gateway-sdk/agents";
+} from "./server/index.js";
+import type { AgentChatServer } from "./server/types.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
+import { drainListPages } from "./listPages.js";
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import {
     buildRootAssistantContent,
@@ -260,22 +261,18 @@ function oldestCompleteTurnGroupState(
 }
 
 async function fetchSessionEventsPage(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     options?: FetchSessionEventsOptions & { pageToken?: string },
 ): Promise<SessionEventsPageResult> {
-    const page = await session.listEvents({
+    const page = await server.listEvents({
+        sessionId,
         limit: SESSION_EVENTS_PAGE_SIZE,
         ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
         ...(options?.pageToken != null ? { pageToken: options.pageToken } : {}),
     });
-    const response = page.response as {
-        pagination?: { nextPageToken?: string };
-    };
-    const olderPageToken = response.pagination?.nextPageToken;
-    const hasOlder =
-        typeof page.hasNextPage === "function"
-            ? page.hasNextPage()
-            : olderPageToken != null && olderPageToken !== "";
+    const olderPageToken = page.nextPageToken;
+    const hasOlder = olderPageToken != null && olderPageToken !== "";
     return {
         itemsNewestFirst: page.data as GatewaySessionEventItem[],
         ...(olderPageToken != null && olderPageToken !== ""
@@ -290,7 +287,8 @@ async function fetchSessionEventsPage(
  * turn group (or history is exhausted).
  */
 async function fetchSessionEventsWindow(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     options?: FetchSessionEventsOptions & { pageToken?: string },
 ): Promise<{
     itemsAsc: GatewaySessionEventItem[];
@@ -303,7 +301,7 @@ async function fetchSessionEventsWindow(
     let hasOlder = false;
 
     for (let pageCount = 0; pageCount < MAX_HISTORY_BOUNDARY_PAGES; pageCount++) {
-        const page = await fetchSessionEventsPage(session, {
+        const page = await fetchSessionEventsPage(server, sessionId, {
             ...options,
             ...(pageToken != null ? { pageToken } : {}),
         });
@@ -336,25 +334,27 @@ async function fetchSessionEventsWindow(
 }
 
 /**
- * Fetches session-level events via `session.listEvents()`. The API returns pages
+ * Fetches session-level events via `server.listEvents()`. The API returns pages
  * in desc order (newest first); the collected array is reversed before returning
  * so callers receive events in chronological (asc) order.
  *
  * Used by rewind/edit paths that need the full ancestor window.
  */
 async function fetchAllSessionEvents(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     options?: FetchSessionEventsOptions,
 ): Promise<GatewaySessionEventItem[]> {
-    const items: GatewaySessionEventItem[] = [];
-    for await (const item of await session.listEvents({
-        limit: SESSION_EVENTS_PAGE_SIZE,
-        ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
-    })) {
-        items.push(item as GatewaySessionEventItem);
-    }
+    const items = await drainListPages((pageToken) =>
+        server.listEvents({
+            sessionId,
+            limit: SESSION_EVENTS_PAGE_SIZE,
+            ...(options?.lastTurnId != null ? { lastTurnId: options.lastTurnId } : {}),
+            ...(pageToken != null ? { pageToken } : {}),
+        }),
+    );
     items.reverse();
-    return items;
+    return items as GatewaySessionEventItem[];
 }
 
 function cloneThreadBucket(bucket: ThreadBucket): ThreadBucket {
@@ -545,16 +545,17 @@ function attachRunningTurn(
  * update the UI progressively while the processing loop runs.
  */
 export async function buildSnapshotFromSessionEvents(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     onProgress?: (snap: SessionSnapshot) => void,
 ): Promise<SessionSnapshot> {
     // Detect a running turn with a single listTurns page — do not drain pagination.
-    const turnsPage = await session.listTurns({ limit: 1 });
+    const turnsPage = await server.listTurns({ sessionId, limit: 1 });
     const newestTurn = turnsPage.data[0] as Turn | undefined;
     const runningTurn =
         newestTurn?.state?.status === "running" ? newestTurn : undefined;
 
-    const window = await fetchSessionEventsWindow(session);
+    const window = await fetchSessionEventsWindow(server, sessionId);
     const historyPagination: SessionHistoryPagination = {
         hasOlder: window.hasOlder,
         ...(window.olderPageToken != null
@@ -578,7 +579,8 @@ export async function buildSnapshotFromSessionEvents(
  * without tearing down live stream / pending UI state.
  */
 export async function prependOlderSessionHistory(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     snapshot: SessionSnapshot,
 ): Promise<SessionSnapshot> {
     const pagination = snapshot.historyPagination;
@@ -586,7 +588,7 @@ export async function prependOlderSessionHistory(
         return snapshot;
     }
 
-    const window = await fetchSessionEventsWindow(session, {
+    const window = await fetchSessionEventsWindow(server, sessionId, {
         pageToken: pagination.olderPageToken,
     });
     if (window.itemsAsc.length === 0) {
@@ -782,28 +784,46 @@ function buildAssistantMessage(
 }
 
 async function ingestTurnEventsIntoFold(
+    server: AgentChatServer,
+    sessionId: string,
+    turnId: string,
     foldState: PeerThreadFoldState,
-    turn: Pick<Turn, "listEvents">,
 ): Promise<void> {
-    for await (const event of await turn.listEvents({
-        order: "asc",
-        limit: TURN_EVENTS_PAGE_SIZE,
-    })) {
-        ingestTurnEvent(foldState, event);
+    if (server.listTurnEvents == null) {
+        return;
+    }
+    const events = await drainListPages((pageToken) =>
+        server.listTurnEvents!({
+            sessionId,
+            turnId,
+            order: "asc",
+            limit: TURN_EVENTS_PAGE_SIZE,
+            ...(pageToken != null ? { pageToken } : {}),
+        }),
+    );
+    for (const event of events) {
+        ingestTurnEvent(foldState, event as TurnEvent);
     }
 }
 
 async function fetchTurnEvents(
-    turn: Pick<Turn, "listEvents">,
+    server: AgentChatServer,
+    sessionId: string,
+    turnId: string,
 ): Promise<TurnEvent[]> {
-    const events: TurnEvent[] = [];
-    for await (const event of await turn.listEvents({
-        order: "asc",
-        limit: TURN_EVENTS_PAGE_SIZE,
-    })) {
-        events.push(event);
+    if (server.listTurnEvents == null) {
+        return [];
     }
-    return events;
+    const events = await drainListPages((pageToken) =>
+        server.listTurnEvents!({
+            sessionId,
+            turnId,
+            order: "asc",
+            limit: TURN_EVENTS_PAGE_SIZE,
+            ...(pageToken != null ? { pageToken } : {}),
+        }),
+    );
+    return events as TurnEvent[];
 }
 
 function ingestCollectedEventsIntoFold(
@@ -816,6 +836,8 @@ function ingestCollectedEventsIntoFold(
 }
 
 async function fetchAllTurnEventsWithConcurrency(
+    server: AgentChatServer,
+    sessionId: string,
     turns: Turn[],
     concurrency: number,
 ): Promise<TurnEvent[][]> {
@@ -824,10 +846,12 @@ async function fetchAllTurnEventsWithConcurrency(
     for (let i = 0; i < turns.length; i++) {
         const idx = i;
         const turn = turns[idx]!;
-        const p: Promise<void> = fetchTurnEvents(turn).then((events) => {
-            results[idx] = events;
-            pool.delete(p);
-        });
+        const p: Promise<void> = fetchTurnEvents(server, sessionId, turn.id).then(
+            (events) => {
+                results[idx] = events;
+                pool.delete(p);
+            },
+        );
         pool.add(p);
         if (pool.size >= concurrency) await Promise.race(pool);
     }
@@ -1209,19 +1233,25 @@ function ingestTurnsIntoSnapshot(
 }
 
 export async function buildSnapshotFromSession(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
 ): Promise<SessionSnapshot> {
     // Completed history comes from session-level listEvents. The session API
-    // excludes the running turn — hydrate that turn via turn.listEvents so
+    // excludes the running turn — hydrate that turn via listTurnEvents so
     // convertTurnsToThreadMessages still surfaces in-flight content.
-    const snapshot = await buildSnapshotFromSessionEvents(session);
+    const snapshot = await buildSnapshotFromSessionEvents(server, sessionId);
     if (snapshot.runningTurn == null) {
         return snapshot;
     }
 
     const turn = snapshot.runningTurn;
-    const eventArrays = await fetchAllTurnEventsWithConcurrency([turn], concurrency);
+    const eventArrays = await fetchAllTurnEventsWithConcurrency(
+        server,
+        sessionId,
+        [turn],
+        concurrency,
+    );
     ingestTurnsIntoSnapshot(snapshot, [turn], eventArrays);
 
     // Hydrated in-flight content lives in `turns` / `fold` now — drop the
@@ -1236,23 +1266,31 @@ export async function buildSnapshotFromSession(
 
 /** Rebuilds session state from turns strictly before `beforeTurnId` (excludes that turn). */
 export async function buildSnapshotBeforeTurn(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     beforeTurnId: string,
     concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
 ): Promise<SessionSnapshot> {
-    const turns = await listSessionTurnsOrdered(session);
+    const turns = await listSessionTurnsOrdered(server, sessionId);
 
     const beforeIndex = turns.findIndex((turn) => turn.id === beforeTurnId);
     if (beforeIndex === -1) {
         throw new Error(`Turn ${beforeTurnId} not found in session`);
     }
 
-    return buildSnapshotBeforeTurnIndex(session, beforeIndex, concurrency, turns);
+    return buildSnapshotBeforeTurnIndex(
+        server,
+        sessionId,
+        beforeIndex,
+        concurrency,
+        turns,
+    );
 }
 
-/** Rebuilds session state from the first `turnIndex` gateway turns (excludes that turn). */
+/** Rebuilds session state from the first `turnIndex` turns (excludes that turn). */
 export async function buildSnapshotBeforeTurnIndex(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     turnIndex: number,
     _concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
     orderedTurns?: Turn[],
@@ -1261,7 +1299,7 @@ export async function buildSnapshotBeforeTurnIndex(
         return createEmptySessionSnapshot();
     }
 
-    const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
+    const turns = orderedTurns ?? (await listSessionTurnsOrdered(server, sessionId));
     const turnsToInclude = turns.slice(0, turnIndex);
     const lastTurnId = turnsToInclude.at(-1)?.id;
     if (lastTurnId == null) {
@@ -1270,61 +1308,71 @@ export async function buildSnapshotBeforeTurnIndex(
 
     // Anchor the session events window at the newest included turn so the
     // ancestor chain matches `[turns[0], …, turns[turnIndex - 1]]`.
-    const items = await fetchAllSessionEvents(session, { lastTurnId });
+    const items = await fetchAllSessionEvents(server, sessionId, { lastTurnId });
     const snapshot = createEmptySessionSnapshot();
     ingestSessionEventsIntoSnapshot(snapshot, items);
     return snapshot;
 }
 
-/** Gateway turn id to branch from when resubmitting at `turnIndex` (null for first turn). */
+/** Turn id to branch from when resubmitting at `turnIndex` (`"none"` for first turn). */
 export async function resolveGatewayBranchPreviousTurnId(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     turnIndex: number,
     orderedTurns?: Turn[],
-): Promise<string | null> {
+): Promise<string> {
     if (turnIndex <= 0) {
-        return null;
+        return "none";
     }
-    const turns = orderedTurns ?? (await listSessionTurnsOrdered(session));
-    return turns[turnIndex - 1]?.id ?? null;
+    const turns = orderedTurns ?? (await listSessionTurnsOrdered(server, sessionId));
+    return turns[turnIndex - 1]?.id ?? "none";
 }
 
 /** Resolves `previousTurnId` by turn id so partial history windows stay correct. */
 export async function resolveGatewayBranchPreviousTurnIdForTurn(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
     turnId: string,
-): Promise<string | null> {
-    const turns = await listSessionTurnsOrdered(session);
+): Promise<string> {
+    const turns = await listSessionTurnsOrdered(server, sessionId);
     const turnIndex = turns.findIndex((turn) => turn.id === turnId);
-    return resolveGatewayBranchPreviousTurnId(session, turnIndex, turns);
+    return resolveGatewayBranchPreviousTurnId(server, sessionId, turnIndex, turns);
 }
 
-async function listSessionTurnsOrdered(session: AgentSession): Promise<Turn[]> {
-    const turns: Turn[] = [];
-    for await (const turn of await session.listTurns()) {
-        turns.push(turn);
-    }
+async function listSessionTurnsOrdered(
+    server: AgentChatServer,
+    sessionId: string,
+): Promise<Turn[]> {
+    const turns = await drainListPages((pageToken) =>
+        server.listTurns({
+            sessionId,
+            ...(pageToken != null ? { pageToken } : {}),
+        }),
+    );
     turns.reverse();
     return turns;
 }
 
 export async function buildTurnAssistantContent(
-    turn: Pick<Turn, "listEvents" | "state">,
+    server: AgentChatServer,
+    sessionId: string,
+    turn: Pick<Turn, "id" | "state">,
     foldState?: PeerThreadFoldState,
 ): Promise<AssistantContentPart[]> {
     const state = foldState ?? new PeerThreadFoldState();
     const beforeCount =
         state.threads.get(ROOT_THREAD_ID)?.modelMessageIds.length ?? 0;
-    await ingestTurnEventsIntoFold(state, turn);
+    await ingestTurnEventsIntoFold(server, sessionId, turn.id, state);
     const afterIds = state.threads.get(ROOT_THREAD_ID)?.modelMessageIds ?? [];
     const rootModelMessageIds = afterIds.slice(beforeCount);
     return buildTurnUpdateFromFold(state, turn, rootModelMessageIds).content;
 }
 
 export async function convertTurnsToThreadMessages(
-    session: AgentSession,
+    server: AgentChatServer,
+    sessionId: string,
 ): Promise<ConvertTurnsResult> {
-    const snapshot = await buildSnapshotFromSession(session);
+    const snapshot = await buildSnapshotFromSession(server, sessionId);
     const messages = projectSessionMessages(snapshot);
 
     return {
@@ -1544,6 +1592,7 @@ export async function* streamTurnEvents(
     stream: AsyncIterable<TurnStreamData>,
     foldState: PeerThreadFoldState,
     groupRootBaseline?: readonly string[],
+    onTurnIdAvailable?: (turnId: string) => void,
 ): AsyncGenerator<TurnStreamUpdate> {
     let pendingMcpAuth: McpAuthRequiredEvent | undefined;
     let sandboxId: string | undefined;
@@ -1571,6 +1620,11 @@ export async function* streamTurnEvents(
 
     for await (const data of stream) {
         const event = data.event;
+
+        if (event.type === "turn.created") {
+            onTurnIdAvailable?.(event.turnId);
+            continue;
+        }
 
         if (event.type === "sandbox.created") {
             sandboxId = event.sandboxId;

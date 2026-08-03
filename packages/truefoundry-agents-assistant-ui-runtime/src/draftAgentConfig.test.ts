@@ -5,8 +5,7 @@ import {
     resolveTrueFoundryAgentConfig,
     resolveTrueFoundryAgentRuntimeOptions,
 } from "./types.js";
-import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
-import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
+import type { AgentChatServer } from "./server/index.js";
 
 describe("resolveTrueFoundryAgentConfig", () => {
     it("supports legacy agentName", () => {
@@ -42,26 +41,24 @@ describe("resolveTrueFoundryAgentConfig", () => {
 });
 
 describe("resolveTrueFoundryAgentRuntimeOptions", () => {
-    const client = {} as AgentSessionClient;
+    const server = {} as AgentChatServer;
 
-    it("requires privateClient for draft mode", () => {
-        expect(() =>
-            resolveTrueFoundryAgentRuntimeOptions({
-                client,
-                agent: { mode: "draft", defaultAgentSpec: { model: { name: "x" } } },
-            }),
-        ).toThrow(/privateClient/);
-    });
-
-    it("accepts privateClient for draft mode", () => {
-        const privateClient = {} as PrivateAgentSessionClient;
+    it("accepts draft mode without a private client", () => {
         const resolved = resolveTrueFoundryAgentRuntimeOptions({
-            client,
-            privateClient,
+            server,
             agent: { mode: "draft", defaultAgentSpec: { model: { name: "x" } } },
         });
-        expect(resolved.privateClient).toBe(privateClient);
+        expect(resolved.server).toBe(server);
         expect(resolved.agent.mode).toBe("draft");
+    });
+
+    it("resolves named mode with server", () => {
+        const resolved = resolveTrueFoundryAgentRuntimeOptions({
+            server,
+            agent: { mode: "named", agentName: "my-agent" },
+        });
+        expect(resolved.server).toBe(server);
+        expect(resolved.agent).toEqual({ mode: "named", agentName: "my-agent" });
     });
 });
 
@@ -70,42 +67,42 @@ describe("mergeAgentSpec", () => {
         const base = {
             model: {
                 name: "anthropic/claude-sonnet-4-6",
-                params: { maxTokens: 1024, temperature: 0.5 },
+                params: { maxTokens: 1024, reasoningEffort: "medium" },
             },
         };
         const next = mergeAgentSpec(base, {
-            model: { params: { temperature: 1.0 } },
+            model: { params: { reasoningEffort: "high" } },
         });
-        expect(next.model.params).toEqual({ maxTokens: 1024, temperature: 1.0 });
+        expect(next.model.params).toEqual({ maxTokens: 1024, reasoningEffort: "high" });
     });
 
     it("replaces mcpServers array wholesale", () => {
         const base: AgentSpec = {
             model: { name: "openai/gpt-4o" },
-            mcpServers: [{ type: "truefoundry-mcp-registry", name: "github", enableTools: ["@all"] }],
+            mcpServers: [{ id: "github", name: "github" }],
         };
         const next = mergeAgentSpec(base, {
-            mcpServers: [{ type: "truefoundry-mcp-registry", name: "slack", enableTools: ["@all"] }],
+            mcpServers: [{ id: "slack", name: "slack" }],
         });
-        expect(next.mcpServers).toEqual([{ type: "truefoundry-mcp-registry", name: "slack", enableTools: ["@all"] }]);
+        expect(next.mcpServers).toEqual([{ id: "slack", name: "slack" }]);
     });
 
     it("replaces skills array wholesale", () => {
-        const base = {
+        const base: AgentSpec = {
             model: { name: "openai/gpt-4o" },
-            skills: [{ fqn: "acme/skill-a:1", preload: false }],
+            skills: [{ id: "skill-a", name: "skill-a" }],
         };
         const next = mergeAgentSpec(base, {
-            skills: [{ fqn: "acme/skill-b:2", preload: true }],
+            skills: [{ id: "skill-b", name: "skill-b" }],
         });
-        expect(next.skills).toEqual([{ fqn: "acme/skill-b:2", preload: true }]);
+        expect(next.skills).toEqual([{ id: "skill-b", name: "skill-b" }]);
     });
 
     it("model partial update does not clear mcpServers or skills", () => {
         const base: AgentSpec = {
             model: { name: "openai/gpt-4o", params: { maxTokens: 1024 } },
-            mcpServers: [{ type: "truefoundry-mcp-registry", name: "github", enableTools: ["@all"] }],
-            skills: [{ fqn: "acme/skill-a:1", preload: false }],
+            mcpServers: [{ id: "github", name: "github" }],
+            skills: [{ id: "skill-a", name: "skill-a" }],
         };
         const next = mergeAgentSpec(base, {
             model: { name: "anthropic/claude-sonnet-4-6" },

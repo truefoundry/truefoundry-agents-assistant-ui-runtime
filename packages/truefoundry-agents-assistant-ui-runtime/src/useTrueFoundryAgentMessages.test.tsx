@@ -2,8 +2,7 @@
 import type { ThreadMessage } from "@assistant-ui/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionClient, Turn } from "truefoundry-gateway-sdk/agents";
-import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
+import type { AgentChatServer, Turn } from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
@@ -18,7 +17,6 @@ import {
     replaceSessionSnapshot,
     type SessionSnapshot,
 } from "./sessionSnapshot.js";
-import { getSession } from "./sessions.js";
 import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
 import {
     messageHasPendingApprovals,
@@ -31,10 +29,6 @@ import {
     toolResponseStatus,
 } from "./toolResponse.js";
 import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
-
-vi.mock("./sessions.js", () => ({
-    getSession: vi.fn(),
-}));
 
 vi.mock("./loadSessionSnapshot.js", () => ({
     loadSessionSnapshot: vi.fn(),
@@ -50,7 +44,9 @@ vi.mock("./convertTurnMessages.js", async (importOriginal) => {
     return actual;
 });
 
-const mockClient = {} as AgentSessionClient;
+const mockServer = {
+    cancelSession: vi.fn().mockResolvedValue(undefined),
+} as unknown as AgentChatServer;
 
 function snapshotWithAssistantMessage(
     message: Extract<ThreadMessage, { role: "assistant" }>,
@@ -282,7 +278,7 @@ async function* singleUpdateStream() {
 describe("useTrueFoundryAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getSession).mockResolvedValue({} as never);
+        vi.mocked(mockServer.cancelSession).mockResolvedValue(undefined);
         vi.mocked(loadSessionSnapshot).mockResolvedValue(createEmptySessionSnapshot());
         vi.mocked(streamTurnContent).mockReturnValue(singleUpdateStream());
         vi.mocked(resumeTurnStream).mockReturnValue(singleUpdateStream());
@@ -294,12 +290,11 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("clears messages when sessionId is undefined", async () => {
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: undefined }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: undefined }),
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
         expect(result.current.messages).toEqual([]);
-        expect(getSession).not.toHaveBeenCalled();
         expect(loadSessionSnapshot).not.toHaveBeenCalled();
     });
 
@@ -311,7 +306,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
         const { result } = renderHook(() =>
             useTrueFoundryAgentMessages({
-                client: mockClient,
+                server: mockServer,
                 sessionId: undefined,
                 initializeSession,
             }),
@@ -324,7 +319,6 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         expect(initializeSession).toHaveBeenCalledOnce();
-        expect(getSession).toHaveBeenCalledWith(mockClient, "session-new");
         expect(streamTurnContent).toHaveBeenCalled();
         expect(loadSessionSnapshot).not.toHaveBeenCalled();
     });
@@ -339,7 +333,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
         const { result } = renderHook(() =>
             useTrueFoundryAgentMessages({
-                client: mockClient,
+                server: mockServer,
                 sessionId: "session-1",
                 getTurnHeaders,
             }),
@@ -353,7 +347,8 @@ describe("useTrueFoundryAgentMessages", () => {
 
         expect(getTurnHeaders).toHaveBeenCalledTimes(1);
         expect(streamTurnContent).toHaveBeenCalledWith(
-            expect.anything(),
+            mockServer,
+            "session-1",
             expect.any(PeerThreadFoldState),
             {
                 userMessage: "first",
@@ -371,7 +366,8 @@ describe("useTrueFoundryAgentMessages", () => {
 
         expect(getTurnHeaders).toHaveBeenCalledTimes(2);
         expect(streamTurnContent).toHaveBeenLastCalledWith(
-            expect.anything(),
+            mockServer,
+            "session-1",
             expect.any(PeerThreadFoldState),
             { userMessage: "second" },
             expect.any(AbortSignal),
@@ -385,11 +381,11 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
-        expect(loadSessionSnapshot).toHaveBeenCalledWith(mockClient, "session-1");
+        expect(loadSessionSnapshot).toHaveBeenCalledWith(mockServer, "session-1");
         expect(result.current.messages).toHaveLength(1);
         expect(result.current.messages[0]?.role).toBe("user");
     });
@@ -412,7 +408,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
 
         await waitFor(() => expect(result.current.isRunning).toBe(false));
@@ -455,7 +451,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -474,7 +470,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("sendTurn appends a user message and streams the assistant reply", async () => {
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -526,12 +522,6 @@ describe("useTrueFoundryAgentMessages", () => {
             }),
             fold,
         });
-        vi.mocked(getSession).mockResolvedValue({
-            cancel: vi.fn().mockResolvedValue(undefined),
-            listTurns: vi.fn(async function* () {}),
-            listEvents: vi.fn(async function* () {}),
-        } as never);
-
         let releaseStream: (() => void) | undefined;
         vi.mocked(streamTurnContent).mockReturnValue(
             (async function* () {
@@ -545,7 +535,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
         expect(result.current.messages.map((m) => m.role)).toEqual([
@@ -635,7 +625,7 @@ describe("useTrueFoundryAgentMessages", () => {
             );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -680,7 +670,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -700,7 +690,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -718,7 +708,8 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         expect(streamTurnContent).toHaveBeenCalledWith(
-            expect.anything(),
+            mockServer,
+            "session-1",
             expect.any(PeerThreadFoldState),
             {
                 inputs: [
@@ -743,7 +734,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -777,7 +768,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -799,7 +790,8 @@ describe("useTrueFoundryAgentMessages", () => {
 
         await waitFor(() => expect(streamTurnContent).toHaveBeenCalled());
         expect(streamTurnContent).toHaveBeenCalledWith(
-            expect.anything(),
+            mockServer,
+            "session-1",
             expect.any(PeerThreadFoldState),
             {
                 inputs: [
@@ -836,7 +828,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(2));
         expect(collectPendingToolResponses(result.current.messages)).toHaveLength(1);
@@ -858,13 +850,13 @@ describe("useTrueFoundryAgentMessages", () => {
     });
 
     describe("batched resume invariant", () => {
-        it("issues exactly one prepareTurn input batch across root and sub-agent threads", async () => {
+        it("issues exactly one prepareAndExecuteTurn input batch across root and sub-agent threads", async () => {
             vi.mocked(loadSessionSnapshot).mockResolvedValue(
                 snapshotWithAssistantMessage(assistantMessageWithMultiThreadPendingActions()),
             );
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+                useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
             );
             await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -885,7 +877,8 @@ describe("useTrueFoundryAgentMessages", () => {
 
             await waitFor(() => expect(streamTurnContent).toHaveBeenCalledTimes(1));
             expect(streamTurnContent).toHaveBeenCalledWith(
-                expect.anything(),
+                mockServer,
+                "session-1",
                 expect.any(PeerThreadFoldState),
                 {
                     inputs: [
@@ -914,7 +907,7 @@ describe("useTrueFoundryAgentMessages", () => {
             );
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+                useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
             );
             await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -931,7 +924,7 @@ describe("useTrueFoundryAgentMessages", () => {
         });
     });
 
-    it("cancel drains the stream gracefully and calls session.cancel", async () => {
+    it("cancel drains the stream gracefully and calls cancelSession", async () => {
         let resolveStream: (() => void) | undefined;
         vi.mocked(streamTurnContent).mockReturnValue(
             (async function* () {
@@ -941,15 +934,14 @@ describe("useTrueFoundryAgentMessages", () => {
                 });
             })(),
         );
-        // session.cancel() makes the backend close the SSE stream gracefully,
+        // cancelSession makes the backend close the SSE stream gracefully,
         // which ends the active iterator on its own.
-        const cancel = vi.fn().mockImplementation(async () => {
+        vi.mocked(mockServer.cancelSession).mockImplementation(async () => {
             resolveStream?.();
         });
-        vi.mocked(getSession).mockResolvedValue({ cancel } as never);
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ client: mockClient, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -964,34 +956,10 @@ describe("useTrueFoundryAgentMessages", () => {
             await sendPromise;
         });
 
-        expect(cancel).toHaveBeenCalled();
+        expect(mockServer.cancelSession).toHaveBeenCalledWith({ sessionId: "session-1" });
         expect(result.current.isRunning).toBe(false);
         // No reconcile is triggered by cancel; the session was only loaded once
         // on mount and reconciles against the event log on the next page load.
         expect(loadSessionSnapshot).toHaveBeenCalledTimes(1);
-    });
-
-    it("cancel resolves the session through the private client in draft mode", async () => {
-        const cancel = vi.fn().mockResolvedValue(undefined);
-        vi.mocked(getSession).mockResolvedValue({ cancel } as never);
-        const privateClient = {} as PrivateAgentSessionClient;
-
-        const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({
-                client: mockClient,
-                sessionId: "draft-session-1",
-                privateClient,
-            }),
-        );
-        await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-        await act(async () => {
-            await result.current.cancel();
-        });
-
-        expect(cancel).toHaveBeenCalled();
-        expect(getSession).toHaveBeenCalledWith(mockClient, "draft-session-1", {
-            privateClient,
-        });
     });
 });

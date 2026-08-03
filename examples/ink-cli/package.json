@@ -13,7 +13,7 @@
     "@assistant-ui/react-ink-markdown": "^0.0.29",
     "@assistant-ui/store": "^0.2.19",
     "@truefoundry/assistant-ui-runtime": "workspace:*",
-    "truefoundry-gateway-sdk": "^0.1.0",
+    "truefoundry-gateway-sdk": "^0.4.0-rc.6",
     "ink": "^7.1.0",
     "react": "19.2.4"
   },

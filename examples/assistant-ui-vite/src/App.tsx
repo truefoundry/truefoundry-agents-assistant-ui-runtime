@@ -1,19 +1,7 @@
-import { useMemo } from "react";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import {
-  ErrorToasterProvider,
-  SlotsProvider,
-  Thread,
-  ThreadListContainer,
-  TooltipProvider,
-} from "@truefoundry/agent-ui-sdk";
-import {
-  trueFoundryAttachmentAdapter,
-  useTrueFoundryAgentRuntime,
-} from "@truefoundry/assistant-ui-runtime";
+import { useMemo, type ComponentProps } from "react";
+import { TrueFoundryAssistantUI } from "@truefoundry/agent-ui-sdk";
 
-import { HistoryViewportShell } from "./HistoryViewportShell";
-import { getAgentSessionClient } from "./lib/agentClient";
+import { getAgentChatServer } from "./lib/agentClient";
 import { loadCredentials, type GatewayCredentials } from "./lib/credentials";
 
 function MissingConfig() {
@@ -47,35 +35,27 @@ function MissingConfig() {
 }
 
 function AppContent({ credentials }: { credentials: GatewayCredentials }) {
-  const client = useMemo(
-    () => getAgentSessionClient(credentials),
+  const server = useMemo(
+    () => getAgentChatServer(credentials),
     [credentials],
   );
 
-  const runtime = useTrueFoundryAgentRuntime({
-    client,
-    agentName: credentials.agentName,
-    adapters: { attachments: trueFoundryAttachmentAdapter },
-    onError: console.error,
-  });
-
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ErrorToasterProvider>
-        <TooltipProvider>
-          <SlotsProvider overrides={{ ThreadViewportShell: HistoryViewportShell }}>
-            <div className="flex h-dvh overflow-hidden">
-              <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-border">
-                <ThreadListContainer />
-              </aside>
-              <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-                <Thread />
-              </div>
-            </div>
-          </SlotsProvider>
-        </TooltipProvider>
-      </ErrorToasterProvider>
-    </AssistantRuntimeProvider>
+    <div className="h-dvh">
+      {/*
+        agent-ui-sdk@0.1.0 still types `client`. Pass `server` via cast until
+        that package is updated to UseTrueFoundryAgentRuntimeOptions.server.
+      */}
+      <TrueFoundryAssistantUI
+        {...({
+          server,
+          agentName: credentials.agentName,
+          layout: "sidebar",
+          className: "h-full",
+          onError: console.error,
+        } as unknown as ComponentProps<typeof TrueFoundryAssistantUI>)}
+      />
+    </div>
   );
 }
 

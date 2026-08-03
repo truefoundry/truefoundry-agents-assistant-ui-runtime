@@ -1,7 +1,7 @@
-import type { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+import type { AgentChatServer } from "./server/types.js";
 
 import { buildSnapshotFromSessionEvents } from "./convertTurnMessages.js";
-import { getSession, type GetSessionOptions } from "./sessions.js";
+import { getSession } from "./sessions.js";
 import type { SessionSnapshot } from "./sessionSnapshot.js";
 
 const inflightBySessionId = new Map<string, Promise<SessionSnapshot>>();
@@ -15,25 +15,20 @@ const inflightBySessionId = new Map<string, Promise<SessionSnapshot>>();
  * can update the UI progressively while history is being processed.
  */
 export function loadSessionSnapshot(
-    client: AgentSessionClient,
+    server: AgentChatServer,
     sessionId: string,
-    sessionOptions?: GetSessionOptions,
     onProgress?: (snap: SessionSnapshot) => void,
 ): Promise<SessionSnapshot> {
-    const cacheKey =
-        sessionOptions?.privateClient != null ? `draft:${sessionId}` : sessionId;
-    let inflight = inflightBySessionId.get(cacheKey);
+    let inflight = inflightBySessionId.get(sessionId);
     if (inflight == null) {
-        inflight = getSession(client, sessionId, sessionOptions)
-            .then((session) =>
-                buildSnapshotFromSessionEvents(session, onProgress),
-            )
+        inflight = getSession(server, sessionId)
+            .then(() => buildSnapshotFromSessionEvents(server, sessionId, onProgress))
             .finally(() => {
-                if (inflightBySessionId.get(cacheKey) === inflight) {
-                    inflightBySessionId.delete(cacheKey);
+                if (inflightBySessionId.get(sessionId) === inflight) {
+                    inflightBySessionId.delete(sessionId);
                 }
             });
-        inflightBySessionId.set(cacheKey, inflight);
+        inflightBySessionId.set(sessionId, inflight);
     }
     return inflight;
 }

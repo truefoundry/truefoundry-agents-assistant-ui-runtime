@@ -1,5 +1,5 @@
 import { createRuntimeExtras } from "@assistant-ui/core/internal";
-import type { McpAuthRequiredEvent } from "truefoundry-gateway-sdk/agents";
+import type { McpAuthRequiredEvent } from "./server/index.js";
 
 import type { AgentSpec, AgentSpecUpdate } from "./private/agentSpec.js";
 import type { PendingApproval, PendingToolResponse } from "./collectPending.js";

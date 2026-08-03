@@ -12,15 +12,18 @@ export {
 } from "./convertTurnMessages.js";
 export type { ConvertTurnsResult, UserMessageContent } from "./convertTurnMessages.js";
 export { ROOT_THREAD_ID } from "./constants.js";
-export type { UseTrueFoundryAgentRuntimeOptions, NamedAgentConfig, DraftAgentConfig, TrueFoundryAgentConfig } from "./types.js";
+export type {
+    UseTrueFoundryAgentRuntimeOptions,
+    NamedAgentConfig,
+    DraftAgentConfig,
+    TrueFoundryAgentConfig,
+} from "./types.js";
 export type { AgentSpec, AgentSpecUpdate, DraftSession } from "./private/agentSpec.js";
 export { mergeAgentSpec, draftSessionTitle } from "./private/agentSpec.js";
 export { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
 export { createTrueFoundryOwnedSessionsThreadListAdapter } from "./truefoundryOwnedSessionsThreadListAdapter.js";
 export { createDraftSessionBridge } from "./private/draftSessionBridge.js";
 export type { DraftSessionBridge } from "./private/draftSessionBridge.js";
-export { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
-export type { AgentDraftSession } from "truefoundry-gateway-sdk/agents/private";
 export {
     useTrueFoundryAgentSpec,
     useTrueFoundryUpdateAgentSpec,
@@ -35,7 +38,6 @@ export type {
     ToolApprovalMessageCustomMetadata,
     ToolResponseMessageCustomMetadata,
 } from "./messageCustomMetadata.js";
-export type { SandboxCreatedEvent } from "truefoundry-gateway-sdk/agents";
 export type { PendingApproval, PendingToolResponse } from "./collectPending.js";
 export type { TrueFoundryRuntimeExtras } from "./truefoundryExtras.js";
 export { trueFoundryExtras } from "./truefoundryExtras.js";
@@ -71,3 +73,77 @@ export {
 export { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 export { getSession } from "./sessions.js";
 export { trueFoundryAttachmentAdapter } from "./attachmentAdapter.js";
+
+export type {
+    AgentChatServer,
+    AgentBuilderServer,
+    Session,
+    Turn,
+    TurnState,
+    TurnStateDone,
+    TurnInputItem,
+    AgentSpec as ServerAgentSpec,
+    ListResult,
+    CreateSessionRequest,
+    UpdateSessionRequest,
+    ListSessionsParams,
+    UserMessage,
+    UserToolApprovalEvent,
+    UserToolResponseEvent,
+    PreviousTurnIdInput,
+} from "./server/index.js";
+export type {
+    SandboxCreatedEvent,
+    McpAuthRequiredEvent,
+    ModelMessageEvent,
+    TurnEvent,
+    TurnStreamingEvent,
+    TurnStreamData,
+    SessionEventItem,
+    ToolCall,
+    ThreadCreatedEvent,
+    ToolApprovalRequiredEvent,
+    ToolResponseRequiredEvent,
+} from "./server/index.js";
+export { isEventDelta, mergeEventDelta } from "./server/index.js";
+
+// ---------------------------------------------------------------------------
+// Plugin: truefoundry-agent-server-adapter
+// ---------------------------------------------------------------------------
+
+export {
+    createTrueFoundryChatServer,
+    type CreateTrueFoundryChatServerOptions,
+    type TrueFoundryChatServer,
+    type TfyAgentSpec,
+    type TfySkillMount,
+    type TfyMcpServerMount,
+    type TfyModelParams,
+    type TfyRuntimeConfig,
+    type TfyResponseFormat,
+    type TfySubject,
+    type ToolsSelectorItem,
+    type ToolsSelectorTag,
+    type RequireApprovalToolSelectorItem,
+    type RequireApprovalToolsSelectorTag,
+    type TfyTurn,
+    type TfyTurnState,
+    type TfyTurnCancelledReason,
+    type TfyTurnStateDoneOutput,
+    type TfySession,
+    type TfyCreateSessionRequest,
+    type TfyListSessionsParams,
+    type TfyToolInfo,
+    type TfySystemToolInfo,
+    type TfyMcpToolInfo,
+    type TfyModelMessageUsage,
+    type TfyFinishReason,
+    type TfyThreadState,
+    type TfyMcpServerInitInfo,
+    isTfyToolInfo,
+    isTfySystemToolInfo,
+    isTfyMcpToolInfo,
+    getTfyUsage,
+    getTfyThreadState,
+    getTfyMcpInitServers,
+} from "./plugins/truefoundry-agent-server-adapter/index.js";

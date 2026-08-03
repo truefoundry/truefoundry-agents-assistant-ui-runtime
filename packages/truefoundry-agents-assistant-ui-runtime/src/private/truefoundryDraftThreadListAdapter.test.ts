@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { PrivateAgentSessionClient } from "truefoundry-gateway-sdk/agents/private";
+import type { AgentChatServer, Session } from "../server/index.js";
 
 import { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
 import type { AgentSpec } from "./agentSpec.js";
@@ -10,62 +10,57 @@ const defaultAgentSpec: AgentSpec = {
     instructions: "You are helpful.",
 };
 
-function mockDraft(id: string, title: string | undefined, updatedAt: string) {
+function mockDraft(id: string, title: string | undefined, updatedAt: string): Session {
     return {
-        type: "session/draft" as const,
         id,
         agentSpec: defaultAgentSpec,
         title,
-        createdBySubject: { type: "user" as const, id: "u1" },
         createdAt: updatedAt,
         updatedAt,
+        isMutable: true,
     };
 }
 
-function mockDraftListPage(
-    drafts: ReturnType<typeof mockDraft>[],
-    nextPageToken?: string,
-) {
+function mockDraftListPage(drafts: Session[], nextPageToken?: string) {
     return {
         data: drafts,
-        response: {
-            pagination: {
-                nextPageToken,
-                limit: 20,
-            },
-        },
+        ...(nextPageToken != null ? { nextPageToken } : {}),
     };
+}
+
+function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
+    return partial as AgentChatServer;
 }
 
 describe("createTrueFoundryDraftThreadListAdapter", () => {
     it("lists draft sessions with pagination cursor", async () => {
-        const listDraftSessions = vi.fn().mockResolvedValue(
+        const listSessions = vi.fn().mockResolvedValue(
             mockDraftListPage(
                 [mockDraft("d1", "My draft", "2026-06-30T10:00:00.000Z")],
                 "page-2",
             ),
         );
-        const privateClient = {
-            listDraftSessions,
-            createDraftSession: vi.fn(),
-            getDraftSession: vi.fn(),
-        } as unknown as PrivateAgentSessionClient;
+        const server = mockServer({
+            listSessions,
+            createSession: vi.fn(),
+            getSession: vi.fn(),
+        });
 
         const adapter = createTrueFoundryDraftThreadListAdapter({
-            privateClient,
+            server,
             defaultAgentSpec,
         });
 
         const result = await adapter.list();
 
-        expect(listDraftSessions).toHaveBeenCalledWith(
+        expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
                 limit: 20,
                 pageToken: undefined,
                 startTimestamp: expect.any(String),
             }),
         );
-        expect(listDraftSessions).toHaveBeenCalledWith(
+        expect(listSessions).toHaveBeenCalledWith(
             expect.not.objectContaining({ agentName: expect.anything() }),
         );
         expect(result.threads).toEqual([
@@ -80,23 +75,23 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
     });
 
     it("creates a draft session on initialize", async () => {
-        const createDraftSession = vi.fn().mockResolvedValue(
+        const createSession = vi.fn().mockResolvedValue(
             mockDraft("d-new", undefined, "2026-06-30T12:00:00.000Z"),
         );
-        const privateClient = {
-            listDraftSessions: vi.fn(),
-            createDraftSession,
-            getDraftSession: vi.fn(),
-        } as unknown as PrivateAgentSessionClient;
+        const server = mockServer({
+            listSessions: vi.fn(),
+            createSession,
+            getSession: vi.fn(),
+        });
 
         const adapter = createTrueFoundryDraftThreadListAdapter({
-            privateClient,
+            server,
             defaultAgentSpec,
         });
 
         const result = await adapter.initialize("local-thread-id");
 
-        expect(createDraftSession).toHaveBeenCalledWith({ agentSpec: defaultAgentSpec });
+        expect(createSession).toHaveBeenCalledWith({ agentSpec: defaultAgentSpec });
         expect(result).toEqual({ remoteId: "d-new", externalId: undefined });
     });
 
@@ -104,47 +99,47 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
         const liveAgentSpec: AgentSpec = {
             model: { name: "anthropic/claude-opus-4-8" },
             instructions: "You are helpful.",
-            mcpServers: [{ type: "truefoundry-mcp-registry", name: "github", enableTools: ["@all"] }],
-            skills: [{ fqn: "acme/skill-a:1", preload: false }],
+            mcpServers: [{ id: "github", name: "github" }],
+            skills: [{ id: "skill-a", name: "skill-a" }],
         };
-        const createDraftSession = vi.fn().mockResolvedValue(
+        const createSession = vi.fn().mockResolvedValue(
             mockDraft("d-new", undefined, "2026-06-30T12:00:00.000Z"),
         );
-        const privateClient = {
-            listDraftSessions: vi.fn(),
-            createDraftSession,
-            getDraftSession: vi.fn(),
-        } as unknown as PrivateAgentSessionClient;
+        const server = mockServer({
+            listSessions: vi.fn(),
+            createSession,
+            getSession: vi.fn(),
+        });
 
         const adapter = createTrueFoundryDraftThreadListAdapter({
-            privateClient,
+            server,
             defaultAgentSpec,
             getAgentSpec: () => liveAgentSpec,
         });
 
         await adapter.initialize("local-thread-id");
 
-        expect(createDraftSession).toHaveBeenCalledWith({ agentSpec: liveAgentSpec });
+        expect(createSession).toHaveBeenCalledWith({ agentSpec: liveAgentSpec });
     });
 
     it("falls back to model name for title when draft has no title", async () => {
-        const getDraftSession = vi.fn().mockResolvedValue(
+        const getSession = vi.fn().mockResolvedValue(
             mockDraft("d1", undefined, "2026-06-30T10:00:00.000Z"),
         );
-        const privateClient = {
-            listDraftSessions: vi.fn(),
-            createDraftSession: vi.fn(),
-            getDraftSession,
-        } as unknown as PrivateAgentSessionClient;
+        const server = mockServer({
+            listSessions: vi.fn(),
+            createSession: vi.fn(),
+            getSession,
+        });
 
         const adapter = createTrueFoundryDraftThreadListAdapter({
-            privateClient,
+            server,
             defaultAgentSpec,
         });
 
         const result = await adapter.fetch("d1");
 
-        expect(getDraftSession).toHaveBeenCalledWith({ draftSessionId: "d1" });
+        expect(getSession).toHaveBeenCalledWith({ sessionId: "d1" });
         expect(result.title).toBe("anthropic/claude-sonnet-4-6");
     });
 });

@@ -44,9 +44,8 @@ function useTrueFoundryAgentRuntimeImpl(
     pendingAgentSpecRef: MutableRefObject<AgentSpec | undefined>,
 ) {
     const {
-        client,
+        server,
         agent,
-        privateClient,
         adapters,
         onError,
         listEventsConcurrency,
@@ -54,9 +53,7 @@ function useTrueFoundryAgentRuntimeImpl(
     } = options;
 
     const draftBridgeRef = useRef(
-        agent.mode === "draft" && privateClient != null
-            ? createDraftSessionBridge(privateClient)
-            : null,
+        agent.mode === "draft" ? createDraftSessionBridge(server) : null,
     );
 
     const draftSessionId = useAuiState(
@@ -119,13 +116,12 @@ function useTrueFoundryAgentRuntimeImpl(
         resetFromTurn,
         retryLoad,
     } = useTrueFoundryAgentMessages({
-        client,
+        server,
         sessionId,
         isMain,
         listEventsConcurrency,
         onError,
         initializeSession,
-        privateClient: agent.mode === "draft" ? privateClient : undefined,
         getTurnHeaders: agent.mode === "draft" ? getTurnHeaders : undefined,
     });
 
@@ -151,9 +147,9 @@ function useTrueFoundryAgentRuntimeImpl(
 
     const downloadSandboxFile = useCallback(
         async (path: string) => {
-            if (privateClient == null) {
+            if (server.downloadSandboxFile == null) {
                 const error = new Error(
-                    "Downloading a sandbox file requires a `privateClient` PrivateAgentSessionClient.",
+                    "Downloading a sandbox file requires AgentChatServer.downloadSandboxFile.",
                 );
                 onError?.(error);
                 throw error;
@@ -163,10 +159,9 @@ function useTrueFoundryAgentRuntimeImpl(
                 onError?.(error);
                 throw error;
             }
-            const response = await privateClient.downloadSandboxFile(sandboxId, { path });
-            return await response.blob();
+            return await server.downloadSandboxFile(sandboxId, { path });
         },
-        [privateClient, sandboxId, onError],
+        [server, sandboxId, onError],
     );
 
     const draftExtras = useMemo(() => {
@@ -258,42 +253,30 @@ function useTrueFoundryAgentRuntimeImpl(
 }
 
 export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOptions) {
-    // resolveTrueFoundryAgentRuntimeOptions is a cheap pure function; memoizing on the
-    // whole `options` object (which callers typically pass as an inline literal) means
-    // `resolved` — and everything derived from it — would be recreated on every render,
-    // causing `threadListAdapter` to be a new object each render.  We compute `resolved`
-    // unconditionally and stabilize individual downstream values with primitives/refs.
     const resolved = resolveTrueFoundryAgentRuntimeOptions(options);
-    const { client, agent, privateClient } = resolved;
+    const { server, agent } = resolved;
 
     const pendingAgentSpecRef = useRef<AgentSpec | undefined>(
         agent.mode === "draft" ? agent.defaultAgentSpec : undefined,
     );
 
-    // Use stable primitive deps so that threadListAdapter is not recreated every render
-    // when options is an inline object literal (new reference on every parent render).
     const agentMode = agent.mode;
     const namedAgentName = agent.mode === "named" ? agent.agentName : undefined;
     const threadListAdapter = useMemo(() => {
         if (agentMode === "draft") {
-            if (privateClient == null) {
-                throw new Error(
-                    "Draft agent mode requires a `privateClient` PrivateAgentSessionClient.",
-                );
-            }
             const draftAgent = agent as Extract<typeof agent, { mode: "draft" }>;
             return createTrueFoundryDraftThreadListAdapter({
-                privateClient,
+                server,
                 defaultAgentSpec: draftAgent.defaultAgentSpec,
                 getAgentSpec: () => pendingAgentSpecRef.current ?? draftAgent.defaultAgentSpec,
             });
         }
         return createTrueFoundryThreadListAdapter({
-            client,
+            server,
             agentName: namedAgentName!,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agentMode, namedAgentName, client, privateClient]);
+    }, [agentMode, namedAgentName, server]);
 
     return useRemoteThreadListRuntime({
         allowNesting: true,

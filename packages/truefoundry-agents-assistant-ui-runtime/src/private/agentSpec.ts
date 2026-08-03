@@ -1,7 +1,12 @@
-import type { TruefoundryGatewayApi } from "truefoundry-gateway-sdk";
+import type { AgentSpec } from "../server/types.js";
 
-export type AgentSpec = TruefoundryGatewayApi.AgentSpec;
-export type DraftSession = TruefoundryGatewayApi.DraftSession;
+export type { AgentSpec } from "../server/types.js";
+
+/** @deprecated Use Session with isMutable: true instead. Kept for title helper. */
+export type DraftSession = {
+    title?: string | null;
+    agentSpec: AgentSpec;
+};
 
 export type AgentSpecUpdate = {
     instructions?: string;
