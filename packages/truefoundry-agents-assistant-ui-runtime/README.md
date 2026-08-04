@@ -290,7 +290,7 @@ For contributors working inside this package. Source lives in `src/`; the publis
 
 | File | Responsibility |
 | ---- | -------------- |
-| `server/types.ts` | `AgentChatServer` + `AgentBuilderServer` + `CatalogServer` (models/connectors, optional via `AgentUIServerPort.catalog`), `AgentSpec`, session/turn/pagination types |
+| `server/types.ts` | `AgentChatServer` + `AgentBuilderServer` + `CatalogServer` (modelCatalog/connectorCatalog/skillCatalog, optional via `AgentUIServerPort.catalog`), `AgentSpec`, session/turn/pagination types |
 | `server/events.ts` | Concrete turn/stream event types |
 | `draft/` | Draft-mode helpers (`mergeAgentSpec`, session bridge, draft thread-list, `useDraftAgentSpec`) |
 | `useTrueFoundryAgentRuntime.ts` | Public hook — external-store + thread-list + extras |

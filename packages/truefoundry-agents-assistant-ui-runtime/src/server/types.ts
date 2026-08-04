@@ -414,16 +414,45 @@ export interface ConnectorCatalogServer<
     deleteConnector?(req: { id: string }): Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// Skills catalog — FE-minimal settings DTOs (host extends via generics)
+// ---------------------------------------------------------------------------
+
+/** Skill row shown in settings/skills (list + delete). Host extends for fqn, etc. */
+export interface SkillBase {
+    id: string;
+    name: string;
+    description: string;
+}
+
+/** Create-skill request. Host extends for branch, auth, etc. */
+export interface CreateSkillRequest {
+    repo: string;
+    directory: string;
+}
+
+export interface SkillCatalogServer<
+    TSkill extends SkillBase = SkillBase,
+    TCreate extends CreateSkillRequest = CreateSkillRequest,
+> {
+    listSkills(req?: { query?: string }): Promise<TSkill[]>;
+    createSkill(req: TCreate): Promise<TSkill>;
+    deleteSkill?(req: { id: string }): Promise<void>;
+}
+
 /**
- * Settings management aggregate — models + connectors.
+ * Settings management aggregate — modelCatalog + connectorCatalog + optional skillCatalog.
  * Hosts may pass the whole object to an app shell, or a focused sub-port to a page.
  */
 export interface CatalogServer<
-    TModels extends ModelCatalogServer = ModelCatalogServer,
-    TConnectors extends ConnectorCatalogServer = ConnectorCatalogServer,
+    TModelCatalog extends ModelCatalogServer = ModelCatalogServer,
+    TConnectorCatalog extends ConnectorCatalogServer = ConnectorCatalogServer,
+    TSkillCatalog extends SkillCatalogServer = SkillCatalogServer,
 > {
-    models: TModels;
-    connectors: TConnectors;
+    modelCatalog: TModelCatalog;
+    connectorCatalog: TConnectorCatalog;
+    /** Optional — omit when the host has no skills settings surface. */
+    skillCatalog?: TSkillCatalog;
 }
 
 /**
@@ -432,7 +461,8 @@ export interface CatalogServer<
  * avoid colliding with that package's local type name.
  *
  * `catalog` is optional — if the host passes it, settings UI can call
- * `useCatalogServer()` / show models & connectors; if omitted, those surfaces stay hidden.
+ * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
+ * if omitted, those surfaces stay hidden.
  */
 export type AgentUIServerPort<
     TChat extends AgentChatServer = AgentChatServer,

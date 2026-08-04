@@ -42,6 +42,9 @@ export type {
     ConnectorCatalogEntry,
     UpdateConnectorRequest,
     ConnectorCatalogServer,
+    SkillBase,
+    CreateSkillRequest,
+    SkillCatalogServer,
     CatalogServer,
     AgentUIServerPort,
 } from "./types.js";
