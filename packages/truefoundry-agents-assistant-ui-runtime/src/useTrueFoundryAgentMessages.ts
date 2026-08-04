@@ -58,6 +58,8 @@ export type UseTrueFoundryAgentMessagesOptions = {
     sessionId: string | undefined;
     /** When true the thread is the currently selected (main) thread. */
     isMain?: boolean | undefined;
+    /** URL-selected session may load before the thread list marks it as main. */
+    isInitialSession?: boolean | undefined;
     listEventsConcurrency?: number | undefined;
     onError?: ((error: unknown) => void) | undefined;
     initializeSession?: () => Promise<{
@@ -77,12 +79,16 @@ export type SendTurnOptions =
     | {
           userMessage: UserMessageContent;
           previousTurnId?: string | null;
+          /** Invoked only when the user turn fails before the gateway registers it. */
+          onPreTurnFailure?: () => void;
           /**
            * When branching (edit/reset), the already-rewound history to send from.
            * Applied atomically with `pendingUser` so a stale React snapshot cannot
            * keep pre-branch turns while the new user message is appended.
            */
           branchFromSnapshot?: SessionSnapshot;
+          /** Original history restored when a branch fails before turn.created. */
+          branchRollbackSnapshot?: SessionSnapshot;
       }
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
@@ -286,6 +292,7 @@ export function useTrueFoundryAgentMessages({
     server,
     sessionId,
     isMain,
+    isInitialSession,
     listEventsConcurrency,
     onError,
     initializeSession,
@@ -294,7 +301,12 @@ export function useTrueFoundryAgentMessages({
 }: UseTrueFoundryAgentMessagesOptions) {
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    // Existing sessions have history pending from the first render. Starting at
+    // false causes consumers to briefly render an empty thread before the load
+    // effect runs and flips this flag to true.
+    const [isLoading, setIsLoading] = useState(
+        sessionId != null && (isMain !== false || isInitialSession === true),
+    );
     const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
 
@@ -318,6 +330,8 @@ export function useTrueFoundryAgentMessages({
     const loadGenerationRef = useRef(0);
     const streamGenerationRef = useRef(0);
     const lazilyCreatedSessionIdRef = useRef<string | undefined>(undefined);
+    const initialLoadStartedForRef = useRef<string | undefined>(undefined);
+    const skipInitialPromotionLoadForRef = useRef<string | undefined>(undefined);
 
     const projectOptions = useMemo(
         () => ({
@@ -459,17 +473,34 @@ export function useTrueFoundryAgentMessages({
     );
 
     const load = useCallback(async () => {
+        // Reading the retry counter intentionally makes retryLoad recreate this callback.
+        void loadRetryTrigger;
         if (sessionId == null) {
             createdAtByMessageIdRef.current = new Map();
             setSnapshot(createEmptySessionSnapshot());
             return;
         }
 
-        // Thread components are never unmounted on navigation — isMain going
-        // false→true is the only reliable signal that the user has clicked on
-        // this thread.  Skip the load when this thread is not the active one
-        // so that isMain being a dep triggers a fresh load on every selection.
-        if (isMain === false) return;
+        // Allow the URL-selected session one early load before assistant-ui marks
+        // it main. Suppress only that first promotion; later selections still reload.
+        const isEarlyInitialLoad =
+            isMain === false &&
+            isInitialSession === true &&
+            initialLoadStartedForRef.current !== sessionId;
+        if (isMain === false) {
+            if (!isEarlyInitialLoad) return;
+            initialLoadStartedForRef.current = sessionId;
+            skipInitialPromotionLoadForRef.current = sessionId;
+        } else if (
+            isMain === true &&
+            skipInitialPromotionLoadForRef.current === sessionId
+        ) {
+            skipInitialPromotionLoadForRef.current = undefined;
+            return;
+        }
+        if (isInitialSession === true) {
+            initialLoadStartedForRef.current = sessionId;
+        }
 
         // When we are loading a *different* session the user has navigated away
         // from the lazily-created one — clear the guard so navigating back to it
@@ -484,6 +515,7 @@ export function useTrueFoundryAgentMessages({
 
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
+        setIsRunning(false);
         abortControllerRef.current?.abort();
         loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
@@ -544,6 +576,11 @@ export function useTrueFoundryAgentMessages({
             }
         } catch (error) {
             if (generation === loadGenerationRef.current) {
+                if (isEarlyInitialLoad) {
+                    // Allow retryLoad while still backgrounded (before isMain promotion).
+                    initialLoadStartedForRef.current = undefined;
+                    skipInitialPromotionLoadForRef.current = undefined;
+                }
                 onErrorRef.current?.(error);
             }
             throw error;
@@ -552,7 +589,14 @@ export function useTrueFoundryAgentMessages({
                 setIsLoading(false);
             }
         }
-    }, [server, runStream, sessionId, loadRetryTrigger, isMain]);
+    }, [
+        server,
+        runStream,
+        sessionId,
+        loadRetryTrigger,
+        isMain,
+        isInitialSession,
+    ]);
 
     useEffect(() => {
         void load().catch(() => undefined);
@@ -560,163 +604,211 @@ export function useTrueFoundryAgentMessages({
 
     const sendTurn = useCallback(
         async (options: SendTurnOptions) => {
-            let activeSessionId = sessionId;
-            if (activeSessionId == null) {
-                if (initializeSessionRef.current == null) {
-                    throw new Error("Cannot send a turn without an active session.");
-                }
-                const { remoteId } = await initializeSessionRef.current();
-                activeSessionId = remoteId;
-                lazilyCreatedSessionIdRef.current = remoteId;
-            }
+            // A turn.created event means the gateway registered the user message.
+            // Errors after that point must keep the message in chat.
+            let gatewayTurnAccepted = false;
+            let pendingUserWasSet = false;
+            let runStreamStarted = false;
+            let pendingUserTurnId: string | undefined;
 
-            const conversationSessionId = await resolveActiveSessionId(
-                activeSessionId,
-                resolveConversationSessionIdRef.current,
-            );
-            const turnHeaders = await getTurnHeadersRef.current?.();
-            const streamHeaders =
-                turnHeaders != null ? { headers: turnHeaders } : {};
-            const isContinuation =
-                "inputs" in options ||
-                ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
-            const continuationTurnId = snapshotRef.current.activeStream?.turnId;
-            const turnId =
-                isContinuation && continuationTurnId != null
-                    ? continuationTurnId
-                    : generateId();
-            // First turns must send previousTurnId: "none".
-            const isFirstTurnInSession =
-                "userMessage" in options &&
-                options.previousTurnId === undefined &&
-                snapshotRef.current.turns.length === 0 &&
-                snapshotRef.current.pendingUser == null &&
-                snapshotRef.current.activeStream == null;
-
-            // Mutable ref so runStream always reads the latest ID. For new
-            // user-message turns the local `generateId()` value is replaced
-            // with the gateway-assigned ID once the first SSE event arrives.
-            const turnIdRef = { current: turnId };
-
-            if ("inputs" in options) {
-                applyUserToolResponsesToFold(
-                    snapshotRef.current.fold,
-                    options.inputs,
-                );
-            }
-
-            const branchBase =
-                "userMessage" in options ? options.branchFromSnapshot : undefined;
-
-            let groupRootBaseline: readonly string[] | undefined;
-
-            if (branchBase != null && "userMessage" in options) {
-                // Atomic apply: never merge pendingUser onto a stale React `prev`
-                // that still holds pre-branch turns (edit would show old + new).
-                const rootBucket = branchBase.fold.threads.get(ROOT_THREAD_ID);
-                groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
-                const nextSnapshot = replaceSessionSnapshot(branchBase, {
-                    pendingUser: {
-                        turnId,
-                        content: options.userMessage,
-                        createdAt: new Date(),
-                    },
-                    activeStream: undefined,
-                    groupRootBaseline,
-                });
-                snapshotRef.current = nextSnapshot;
-                setSnapshot(nextSnapshot);
-            } else {
-                setSnapshot((prev) =>
-                    commitActiveStream(
-                        prev,
-                        "inputs" in options ? options.inputs : undefined,
-                    ),
-                );
-
-                if ("userMessage" in options) {
-                    const rootBucket =
-                        snapshotRef.current.fold.threads.get(ROOT_THREAD_ID);
-                    groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
-                    setSnapshot((prev) => {
-                        const next = replaceSessionSnapshot(prev, {
-                            pendingUser: {
-                                turnId,
-                                content: options.userMessage,
-                                createdAt: new Date(),
-                            },
-                            activeStream: undefined,
-                            groupRootBaseline,
-                        });
-                        snapshotRef.current = next;
-                        return next;
-                    });
-                } else {
-                    groupRootBaseline =
-                        snapshotRef.current.groupRootBaseline ??
-                        computeGroupRootBaseline(snapshotRef.current.turns);
-                }
-            }
-
-            await runStream(
-                (signal) => {
-                    if ("inputs" in options) {
-                        return streamTurnContent(
-                            server,
-                            conversationSessionId,
-                            snapshotRef.current.fold,
-                            { inputs: options.inputs, ...streamHeaders },
-                            signal,
-                            groupRootBaseline,
-                        );
+            try {
+                let activeSessionId = sessionId;
+                if (activeSessionId == null) {
+                    if (initializeSessionRef.current == null) {
+                        throw new Error("Cannot send a turn without an active session.");
                     }
-                    if ("resumeMcpAuth" in options) {
-                        return streamTurnContent(
-                            server,
-                            conversationSessionId,
-                            snapshotRef.current.fold,
-                            { resumeMcpAuth: true, ...streamHeaders },
-                            signal,
-                            groupRootBaseline,
-                        );
-                    }
-                    return streamTurnContent(
-                        server,
-                        conversationSessionId,
+                    const { remoteId } = await initializeSessionRef.current();
+                    activeSessionId = remoteId;
+                    lazilyCreatedSessionIdRef.current = remoteId;
+                }
+
+                const conversationSessionId = await resolveActiveSessionId(
+                    activeSessionId,
+                    resolveConversationSessionIdRef.current,
+                );
+                const turnHeaders = await getTurnHeadersRef.current?.();
+                const streamHeaders =
+                    turnHeaders != null ? { headers: turnHeaders } : {};
+                const isContinuation =
+                    "inputs" in options ||
+                    ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
+                const continuationTurnId = snapshotRef.current.activeStream?.turnId;
+                const turnId =
+                    isContinuation && continuationTurnId != null
+                        ? continuationTurnId
+                        : generateId();
+                // First turns must send previousTurnId: "none".
+                const isFirstTurnInSession =
+                    "userMessage" in options &&
+                    options.previousTurnId === undefined &&
+                    snapshotRef.current.turns.length === 0 &&
+                    snapshotRef.current.pendingUser == null &&
+                    snapshotRef.current.activeStream == null;
+
+                // Mutable ref so runStream always reads the latest ID. For new
+                // user-message turns the local `generateId()` value is replaced
+                // with the gateway-assigned ID once the first SSE event arrives.
+                const turnIdRef = { current: turnId };
+
+                if ("inputs" in options) {
+                    applyUserToolResponsesToFold(
                         snapshotRef.current.fold,
-                        {
-                            userMessage: options.userMessage,
-                            ...(options.previousTurnId !== undefined
-                                ? { previousTurnId: options.previousTurnId ?? "none" }
-                                : isFirstTurnInSession
-                                  ? { previousTurnId: "none" }
-                                  : {}),
-                            ...streamHeaders,
-                        },
-                        signal,
-                        groupRootBaseline,
-                        // Rename the optimistic local ID to the gateway turn ID
-                        // so that edit/retry can resolve the turn via the gateway.
-                        (gatewayTurnId) => {
-                            const oldId = turnIdRef.current;
-                            if (gatewayTurnId === oldId) return;
-                            turnIdRef.current = gatewayTurnId;
-                            // Rename in the ref immediately so any synchronous read
-                            // (e.g. commitActiveStream) sees the correct ID.
-                            const renamePendingUser = (prev: SessionSnapshot): SessionSnapshot => {
-                                if (prev.pendingUser?.turnId !== oldId) return prev;
-                                return replaceSessionSnapshot(prev, {
-                                    pendingUser: { ...prev.pendingUser, turnId: gatewayTurnId },
-                                });
-                            };
-                            snapshotRef.current = renamePendingUser(snapshotRef.current);
-                            setSnapshot(renamePendingUser);
-                        },
+                        options.inputs,
                     );
-                },
-                turnIdRef,
-                isContinuation,
-            );
+                }
+
+                const branchBase =
+                    "userMessage" in options ? options.branchFromSnapshot : undefined;
+
+                let groupRootBaseline: readonly string[] | undefined;
+
+                if (branchBase != null && "userMessage" in options) {
+                    // Atomic apply: never merge pendingUser onto a stale React `prev`
+                    // that still holds pre-branch turns (edit would show old + new).
+                    const rootBucket = branchBase.fold.threads.get(ROOT_THREAD_ID);
+                    groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
+                    const nextSnapshot = replaceSessionSnapshot(branchBase, {
+                        pendingUser: {
+                            turnId,
+                            content: options.userMessage,
+                            createdAt: new Date(),
+                        },
+                        activeStream: undefined,
+                        groupRootBaseline,
+                    });
+                    snapshotRef.current = nextSnapshot;
+                    setSnapshot(nextSnapshot);
+                    pendingUserWasSet = true;
+                    pendingUserTurnId = turnId;
+                } else {
+                    setSnapshot((prev) =>
+                        commitActiveStream(
+                            prev,
+                            "inputs" in options ? options.inputs : undefined,
+                        ),
+                    );
+
+                    if ("userMessage" in options) {
+                        const rootBucket =
+                            snapshotRef.current.fold.threads.get(ROOT_THREAD_ID);
+                        groupRootBaseline = [...(rootBucket?.modelMessageIds ?? [])];
+                        setSnapshot((prev) => {
+                            const next = replaceSessionSnapshot(prev, {
+                                pendingUser: {
+                                    turnId,
+                                    content: options.userMessage,
+                                    createdAt: new Date(),
+                                },
+                                activeStream: undefined,
+                                groupRootBaseline,
+                            });
+                            snapshotRef.current = next;
+                            return next;
+                        });
+                        pendingUserWasSet = true;
+                        pendingUserTurnId = turnId;
+                    } else {
+                        groupRootBaseline =
+                            snapshotRef.current.groupRootBaseline ??
+                            computeGroupRootBaseline(snapshotRef.current.turns);
+                    }
+                }
+
+                runStreamStarted = true;
+                await runStream(
+                    (signal) => {
+                        if ("inputs" in options) {
+                            return streamTurnContent(
+                                server,
+                                conversationSessionId,
+                                snapshotRef.current.fold,
+                                { inputs: options.inputs, ...streamHeaders },
+                                signal,
+                                groupRootBaseline,
+                            );
+                        }
+                        if ("resumeMcpAuth" in options) {
+                            return streamTurnContent(
+                                server,
+                                conversationSessionId,
+                                snapshotRef.current.fold,
+                                { resumeMcpAuth: true, ...streamHeaders },
+                                signal,
+                                groupRootBaseline,
+                            );
+                        }
+                        return streamTurnContent(
+                            server,
+                            conversationSessionId,
+                            snapshotRef.current.fold,
+                            {
+                                userMessage: options.userMessage,
+                                ...(options.previousTurnId !== undefined
+                                    ? { previousTurnId: options.previousTurnId ?? "none" }
+                                    : isFirstTurnInSession
+                                      ? { previousTurnId: "none" }
+                                      : {}),
+                                ...streamHeaders,
+                            },
+                            signal,
+                            groupRootBaseline,
+                            // Rename the optimistic local ID to the gateway turn ID
+                            // so that edit/retry can resolve the turn via the gateway.
+                            (gatewayTurnId) => {
+                                const oldId = turnIdRef.current;
+                                // turn.created proves the gateway registered the message.
+                                gatewayTurnAccepted = true;
+                                if (gatewayTurnId === oldId) return;
+                                turnIdRef.current = gatewayTurnId;
+                                // Rename in the ref immediately so any synchronous read
+                                // (e.g. commitActiveStream) sees the correct ID.
+                                const renamePendingUser = (prev: SessionSnapshot): SessionSnapshot => {
+                                    if (prev.pendingUser?.turnId !== oldId) return prev;
+                                    return replaceSessionSnapshot(prev, {
+                                        pendingUser: { ...prev.pendingUser, turnId: gatewayTurnId },
+                                    });
+                                };
+                                snapshotRef.current = renamePendingUser(snapshotRef.current);
+                                setSnapshot(renamePendingUser);
+                            },
+                        );
+                    },
+                    turnIdRef,
+                    isContinuation,
+                );
+            } catch (error) {
+                if ("userMessage" in options && !gatewayTurnAccepted) {
+                    const branchRollbackSnapshot =
+                        options.branchRollbackSnapshot;
+                    const canRestoreBranch =
+                        branchRollbackSnapshot != null &&
+                        (snapshotRef.current === options.branchFromSnapshot ||
+                            snapshotRef.current.pendingUser?.turnId ===
+                                pendingUserTurnId);
+                    if (canRestoreBranch) {
+                        snapshotRef.current = branchRollbackSnapshot;
+                        setSnapshot(branchRollbackSnapshot);
+                    } else if (pendingUserWasSet) {
+                        const clearPendingUser = (
+                            previous: SessionSnapshot,
+                        ): SessionSnapshot => {
+                            if (previous.pendingUser?.turnId !== pendingUserTurnId) {
+                                return previous;
+                            }
+                            return replaceSessionSnapshot(previous, {
+                                pendingUser: undefined,
+                            });
+                        };
+                        snapshotRef.current = clearPendingUser(snapshotRef.current);
+                        setSnapshot(clearPendingUser);
+                    }
+                    options.onPreTurnFailure?.();
+                }
+                if (!runStreamStarted) {
+                    onErrorRef.current?.(error);
+                }
+                throw error;
+            }
         },
         [server, runStream, sessionId],
     );
@@ -756,7 +848,8 @@ export function useTrueFoundryAgentMessages({
             }
             const inputs = collectRequiredActionInputs(paused);
             if (inputs.length > 0) {
-                void sendTurn({ inputs }).catch((error) => onErrorRef.current?.(error));
+                // sendTurn/runStream already report via onError; swallow to avoid duplicates.
+                void sendTurn({ inputs }).catch(() => undefined);
             }
         },
         [projectOptions, sendTurn],
@@ -823,41 +916,52 @@ export function useTrueFoundryAgentMessages({
 
     const branchFromTurn = useCallback(
         async (turnId: string, userMessage: UserMessageContent) => {
-            let activeSessionId = sessionId;
-            if (activeSessionId == null) {
-                throw new Error("Cannot branch from a turn without an active session.");
+            let committed: SessionSnapshot;
+            let previousTurnId: string;
+            let rewound: SessionSnapshot;
+            try {
+                let activeSessionId = sessionId;
+                if (activeSessionId == null) {
+                    throw new Error("Cannot branch from a turn without an active session.");
+                }
+
+                committed = commitActiveStream(snapshotRef.current);
+                setSnapshot(committed);
+
+                await cancel();
+
+                const conversationSessionId = await resolveActiveSessionId(
+                    activeSessionId,
+                    resolveConversationSessionIdRef.current,
+                );
+                previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
+                    server,
+                    conversationSessionId,
+                    turnId,
+                );
+                rewound = await buildSnapshotBeforeTurn(
+                    server,
+                    conversationSessionId,
+                    turnId,
+                    listEventsConcurrency,
+                );
+                createdAtByMessageIdRef.current = new Map();
+                // Keep the ref aligned before awaiting sendTurn so any intermediate
+                // reads (and the atomic pendingUser apply) see the rewound history.
+                snapshotRef.current = rewound;
+                setSnapshot(rewound);
+            } catch (error) {
+                // Setup failures never reach sendTurn/runStream reporting.
+                onErrorRef.current?.(error);
+                throw error;
             }
 
-            const committed = commitActiveStream(snapshotRef.current);
-            setSnapshot(committed);
-
-            await cancel();
-
-            const conversationSessionId = await resolveActiveSessionId(
-                activeSessionId,
-                resolveConversationSessionIdRef.current,
-            );
-            const previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
-                server,
-                conversationSessionId,
-                turnId,
-            );
-            const rewound = await buildSnapshotBeforeTurn(
-                server,
-                conversationSessionId,
-                turnId,
-                listEventsConcurrency,
-            );
-            createdAtByMessageIdRef.current = new Map();
-            // Keep the ref aligned before awaiting sendTurn so any intermediate
-            // reads (and the atomic pendingUser apply) see the rewound history.
-            snapshotRef.current = rewound;
-            setSnapshot(rewound);
-
+            // sendTurn/runStream own error reporting for the turn itself.
             await sendTurn({
                 userMessage,
                 previousTurnId,
                 branchFromSnapshot: rewound,
+                branchRollbackSnapshot: committed,
             });
         },
         [
@@ -874,7 +978,9 @@ export function useTrueFoundryAgentMessages({
             const committed = commitActiveStream(snapshotRef.current);
             const originalInput = resolveTurnInput(committed, turnId);
             if (originalInput == null) {
-                throw new Error(`Turn ${turnId} not found in session snapshot`);
+                const error = new Error(`Turn ${turnId} not found in session snapshot`);
+                onErrorRef.current?.(error);
+                throw error;
             }
             const userMessage = extractTurnUserMessageContent(originalInput);
             await branchFromTurn(turnId, userMessage);
@@ -887,7 +993,9 @@ export function useTrueFoundryAgentMessages({
             const committed = commitActiveStream(snapshotRef.current);
             const originalInput = resolveTurnInput(committed, turnId);
             if (originalInput == null) {
-                throw new Error(`Turn ${turnId} not found in session snapshot`);
+                const error = new Error(`Turn ${turnId} not found in session snapshot`);
+                onErrorRef.current?.(error);
+                throw error;
             }
             const userMessage = buildEditedUserMessageContent(
                 editedText,

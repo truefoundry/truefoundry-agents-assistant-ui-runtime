@@ -25,6 +25,7 @@ import {
     buildUserMessageContent,
     extractEditedText,
     parseTurnIdFromMessageId,
+    userMessageContentToText,
 } from "./convertTurnMessages.js";
 import {
     createDraftSessionBridge,
@@ -66,6 +67,10 @@ function useTrueFoundryAgentRuntimeImpl(
     const isMain = useAuiState(
         (state) => state.threads.mainThreadId === state.threadListItem.id,
     );
+    // On a hard refresh, the URL session runtime mounts before assistant-ui
+    // promotes it to the main thread. Allow that one session to hydrate early.
+    const isInitialSession =
+        sessionId != null && sessionId === options.initialSessionId;
 
     const draftSpec = useDraftAgentSpec({
         draftSessionId,
@@ -119,6 +124,7 @@ function useTrueFoundryAgentRuntimeImpl(
         server,
         sessionId,
         isMain,
+        isInitialSession,
         listEventsConcurrency,
         onError,
         initializeSession,
@@ -148,20 +154,16 @@ function useTrueFoundryAgentRuntimeImpl(
     const downloadSandboxFile = useCallback(
         async (path: string) => {
             if (server.downloadSandboxFile == null) {
-                const error = new Error(
+                throw new Error(
                     "Downloading a sandbox file requires AgentChatServer.downloadSandboxFile.",
                 );
-                onError?.(error);
-                throw error;
             }
             if (sandboxId == null) {
-                const error = new Error("No sandbox is available yet for this session.");
-                onError?.(error);
-                throw error;
+                throw new Error("No sandbox is available yet for this session.");
             }
             return await server.downloadSandboxFile(sandboxId, { path });
         },
-        [server, sandboxId, onError],
+        [server, sandboxId],
     );
 
     const draftExtras = useMemo(() => {
@@ -171,6 +173,7 @@ function useTrueFoundryAgentRuntimeImpl(
         return {
             agentSpec: draftSpec.agentSpec,
             draftSessionId: draftSpec.draftSessionId,
+            isSpecLoading: draftSpec.isSpecLoading,
             isSpecSyncing: draftSpec.isSpecSyncing,
             specError: draftSpec.specError,
             updateAgentSpec: draftSpec.updateAgentSpec,
@@ -192,10 +195,9 @@ function useTrueFoundryAgentRuntimeImpl(
             resumeMcpAuth,
             downloadSandboxFile,
             cancel,
+            // resetFromTurn/branchFromTurn/sendTurn already report via onError.
             resetFromTurn: (turnId: string) =>
-                resetFromTurn(turnId).catch((error) => {
-                    onError?.(error);
-                }),
+                resetFromTurn(turnId).catch(() => undefined),
             reload: retryLoad,
             hasOlderHistory,
             isLoadingOlderHistory,
@@ -224,7 +226,19 @@ function useTrueFoundryAgentRuntimeImpl(
                 return;
             }
 
-            await sendTurn({ userMessage: buildUserMessageContent(message) });
+            const userMessage = buildUserMessageContent(message);
+            await sendTurn({
+                userMessage,
+                // The composer clears before onNew runs. Restore its text only when
+                // the turn failed before turn.created registered it in the backend.
+                onPreTurnFailure: () => {
+                    const text = userMessageContentToText(userMessage);
+                    const composer = aui.thread().composer();
+                    if (text && !composer.getState().text.trim()) {
+                        composer.setText(text);
+                    }
+                },
+            });
         },
         onCancel: async () => {
             await cancel();
@@ -242,12 +256,8 @@ function useTrueFoundryAgentRuntimeImpl(
             }
             const turnId = parseTurnIdFromMessageId(sourceId);
             const editedText = extractEditedText(message);
-            try {
-                await editFromTurn(turnId, editedText);
-            } catch (error) {
-                onError?.(error);
-                throw error;
-            }
+            // editFromTurn/branchFromTurn/sendTurn already report via onError.
+            await editFromTurn(turnId, editedText);
         },
     });
 }

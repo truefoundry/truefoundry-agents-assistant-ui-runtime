@@ -46,6 +46,7 @@ vi.mock("./convertTurnMessages.js", async (importOriginal) => {
 
 const mockServer = {
     cancelSession: vi.fn().mockResolvedValue(undefined),
+    listTurns: vi.fn(),
 } as unknown as AgentChatServer;
 
 function snapshotWithAssistantMessage(
@@ -279,6 +280,7 @@ describe("useTrueFoundryAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(mockServer.cancelSession).mockResolvedValue(undefined);
+        vi.mocked(mockServer.listTurns).mockResolvedValue({ data: [] });
         vi.mocked(loadSessionSnapshot).mockResolvedValue(createEmptySessionSnapshot());
         vi.mocked(streamTurnContent).mockReturnValue(singleUpdateStream());
         vi.mocked(resumeTurnStream).mockReturnValue(singleUpdateStream());
@@ -296,6 +298,79 @@ describe("useTrueFoundryAgentMessages", () => {
         await waitFor(() => expect(result.current.isLoading).toBe(false));
         expect(result.current.messages).toEqual([]);
         expect(loadSessionSnapshot).not.toHaveBeenCalled();
+    });
+
+    it("loads the initial URL session before it is marked as the main thread", async () => {
+        const { rerender } = renderHook(
+            ({ isMain }: { isMain: boolean }) =>
+                useTrueFoundryAgentMessages({
+                    server: mockServer,
+                    sessionId: "session-from-url",
+                    isMain,
+                    isInitialSession: true,
+                }),
+            { initialProps: { isMain: false } },
+        );
+
+        await waitFor(() =>
+            expect(loadSessionSnapshot).toHaveBeenCalledWith(
+                mockServer,
+                "session-from-url",
+                expect.any(Function),
+            ),
+        );
+
+        rerender({ isMain: true });
+        await act(async () => Promise.resolve());
+        expect(loadSessionSnapshot).toHaveBeenCalledTimes(1);
+
+        rerender({ isMain: false });
+        rerender({ isMain: true });
+        await waitFor(() => expect(loadSessionSnapshot).toHaveBeenCalledTimes(2));
+    });
+
+    it("does not load an inactive background thread", async () => {
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: mockServer,
+                sessionId: "background-session",
+                isMain: false,
+                isInitialSession: false,
+            }),
+        );
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        expect(loadSessionSnapshot).not.toHaveBeenCalled();
+    });
+
+    it("retries a failed URL early load before the thread is promoted to main", async () => {
+        vi.mocked(loadSessionSnapshot)
+            .mockRejectedValueOnce(new Error("load failed"))
+            .mockResolvedValueOnce(snapshotWithUserTurn("Hello"));
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: mockServer,
+                sessionId: "session-from-url",
+                isMain: false,
+                isInitialSession: true,
+            }),
+        );
+
+        await waitFor(() => expect(loadSessionSnapshot).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            result.current.retryLoad();
+        });
+
+        await waitFor(() => expect(loadSessionSnapshot).toHaveBeenCalledTimes(2));
+        await waitFor(() =>
+            expect(result.current.messages[0]).toMatchObject({
+                role: "user",
+                content: [{ type: "text", text: "Hello" }],
+            }),
+        );
     });
 
     it("sendTurn lazily initializes a session when sessionId is undefined", async () => {
@@ -358,6 +433,7 @@ describe("useTrueFoundryAgentMessages", () => {
             },
             expect.any(AbortSignal),
             expect.any(Array),
+            expect.any(Function),
         );
 
         await act(async () => {
@@ -372,6 +448,7 @@ describe("useTrueFoundryAgentMessages", () => {
             { userMessage: "second" },
             expect.any(AbortSignal),
             expect.any(Array),
+            expect.any(Function),
         );
     });
 
@@ -385,7 +462,11 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
-        expect(loadSessionSnapshot).toHaveBeenCalledWith(mockServer, "session-1");
+        expect(loadSessionSnapshot).toHaveBeenCalledWith(
+            mockServer,
+            "session-1",
+            expect.any(Function),
+        );
         expect(result.current.messages).toHaveLength(1);
         expect(result.current.messages[0]?.role).toBe("user");
     });
@@ -493,6 +574,21 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("editFromTurn drops prior turns before showing the edited user message", async () => {
         const createdAt = new Date().toISOString();
+        vi.mocked(mockServer.listTurns).mockResolvedValue({
+            data: [
+                {
+                    id: "turn-1",
+                    sessionId: "session-1",
+                    createdAt,
+                    state: {
+                        status: "done",
+                        requiredActions: [],
+                        completedAt: createdAt,
+                    },
+                    input: [{ type: "user.message", content: "Hello" }],
+                } as Turn,
+            ],
+        });
         const fold = new PeerThreadFoldState();
         ingestTurnEvent(fold, {
             type: "model.message",
@@ -587,6 +683,54 @@ describe("useTrueFoundryAgentMessages", () => {
             releaseStream?.();
             await editPromise!;
         });
+    });
+
+    it("restores history when edit fails before turn.created", async () => {
+        const createdAt = new Date().toISOString();
+        const onError = vi.fn();
+        const original = snapshotWithUserTurn("Hello");
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(original);
+        vi.mocked(mockServer.listTurns).mockResolvedValue({
+            data: [
+                {
+                    id: "turn-1",
+                    sessionId: "session-1",
+                    createdAt,
+                    state: {
+                        status: "done",
+                        requiredActions: [],
+                        completedAt: createdAt,
+                    },
+                    input: [{ type: "user.message", content: "Hello" }],
+                } as Turn,
+            ],
+        });
+        vi.mocked(streamTurnContent).mockImplementation(async function* () {
+            throw new Error("Turn preparation failed");
+        });
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: mockServer,
+                sessionId: "session-1",
+                onError,
+            }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            await expect(
+                result.current.editFromTurn("turn-1", "Edited"),
+            ).rejects.toThrow("Turn preparation failed");
+        });
+
+        expect(result.current.messages).toHaveLength(1);
+        expect(result.current.messages[0]).toMatchObject({
+            role: "user",
+            content: [{ type: "text", text: "Hello" }],
+        });
+        // runStream reports once; callers must not double-toast.
+        expect(onError).toHaveBeenCalledOnce();
     });
 
     it("does not let a superseded stream complete the current stream", async () => {
@@ -961,5 +1105,121 @@ describe("useTrueFoundryAgentMessages", () => {
         // No reconcile is triggered by cancel; the session was only loaded once
         // on mount and reconciles against the event log on the next page load.
         expect(loadSessionSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    describe("pre-turn failure rollback", () => {
+        it("reports and restores a user message when initializeSession fails", async () => {
+            const onError = vi.fn();
+            const onPreTurnFailure = vi.fn();
+            const initializeSession = vi
+                .fn()
+                .mockRejectedValue(new Error("Draft session creation failed"));
+
+            const { result } = renderHook(() =>
+                useTrueFoundryAgentMessages({
+                    server: mockServer,
+                    sessionId: undefined,
+                    initializeSession,
+                    onError,
+                }),
+            );
+
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
+            expect(result.current.messages).toEqual([]);
+
+            await act(async () => {
+                await expect(
+                    result.current.sendTurn({
+                        userMessage: "test message",
+                        onPreTurnFailure,
+                    }),
+                ).rejects.toThrow("Draft session creation failed");
+            });
+
+            expect(result.current.messages).toEqual([]);
+            expect(onPreTurnFailure).toHaveBeenCalledOnce();
+            expect(onError).toHaveBeenCalledWith(expect.any(Error));
+            expect(initializeSession).toHaveBeenCalledOnce();
+            expect(streamTurnContent).not.toHaveBeenCalled();
+        });
+
+        it("rolls back when the turns stream fails before turn.created", async () => {
+            const onError = vi.fn();
+            const onPreTurnFailure = vi.fn();
+            vi.mocked(streamTurnContent).mockImplementation(async function* () {
+                throw new Error("Turn preparation failed");
+            });
+
+            const { result } = renderHook(() =>
+                useTrueFoundryAgentMessages({
+                    server: mockServer,
+                    sessionId: "session-1",
+                    onError,
+                }),
+            );
+
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+            await act(async () => {
+                await expect(
+                    result.current.sendTurn({
+                        userMessage: "test message",
+                        onPreTurnFailure,
+                    }),
+                ).rejects.toThrow("Turn preparation failed");
+            });
+
+            expect(result.current.messages).toEqual([]);
+            expect(onPreTurnFailure).toHaveBeenCalledOnce();
+            expect(onError).toHaveBeenCalledWith(expect.any(Error));
+        });
+
+        it("does not roll back after turn.created registers the user message", async () => {
+            const onError = vi.fn();
+            const onPreTurnFailure = vi.fn();
+            vi.mocked(streamTurnContent).mockImplementation(
+                async function* (
+                    _server,
+                    _sessionId,
+                    _fold,
+                    _options,
+                    _signal,
+                    _baseline,
+                    onTurnIdAvailable,
+                ) {
+                    onTurnIdAvailable?.("gateway-turn-123");
+                    yield { content: [{ type: "text" as const, text: "partial" }] };
+                    throw new Error("Mid-stream error");
+                },
+            );
+
+            const { result } = renderHook(() =>
+                useTrueFoundryAgentMessages({
+                    server: mockServer,
+                    sessionId: "session-1",
+                    onError,
+                }),
+            );
+
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+            await act(async () => {
+                await expect(
+                    result.current.sendTurn({
+                        userMessage: "test message",
+                        onPreTurnFailure,
+                    }),
+                ).rejects.toThrow("Mid-stream error");
+            });
+
+            const userMessages = result.current.messages.filter((m) => m.role === "user");
+            expect(userMessages).toHaveLength(1);
+            expect(userMessages[0]?.content[0]).toMatchObject({
+                type: "text",
+                text: "test message",
+            });
+            expect(onPreTurnFailure).not.toHaveBeenCalled();
+            expect(onError).toHaveBeenCalledWith(expect.any(Error));
+        });
     });
 });

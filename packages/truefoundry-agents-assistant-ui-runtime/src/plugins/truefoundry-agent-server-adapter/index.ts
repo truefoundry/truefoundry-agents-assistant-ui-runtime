@@ -94,6 +94,15 @@ export type TrueFoundryChatServer<TSpec extends TfyAgentSpec = TfyAgentSpec> =
         };
     };
 
+/** Gateway SDK errors carry the HTTP status as `statusCode`. */
+function isNotFound(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        (error as { statusCode?: unknown }).statusCode === 404
+    );
+}
+
 function isDraft(session: GwSession): session is AgentDraftSession {
     return (session as AgentDraftSession).type === "session/draft";
 }
@@ -153,7 +162,7 @@ async function toListResult<TIn, TOut>(
  * Wraps TrueFoundry gateway clients into a flat `AgentChatServer`.
  * Named vs draft routing is fully internal — an in-memory session-type cache
  * (populated by createSession/listSessions) determines which gateway client
- * to call. No try/catch fallback, no double network calls.
+ * to call, falling back to a one-time probe for ids seen only in a URL.
  */
 export function createTrueFoundryChatServer<
     TSpec extends TfyAgentSpec = TfyAgentSpec,
@@ -166,6 +175,7 @@ export function createTrueFoundryChatServer<
         opts.privateClient ?? new PrivateAgentSessionClient(gatewayOpts);
 
     const sessionTypeCache = new Map<string, boolean>();
+    const sessionTypeProbes = new Map<string, Promise<boolean>>();
 
     function cacheSessionType(session: {
         id: string;
@@ -174,18 +184,48 @@ export function createTrueFoundryChatServer<
         sessionTypeCache.set(session.id, session.isMutable);
     }
 
-    function getSessionObj(sessionId: string): Promise<GwSession> {
-        const isMutable = sessionTypeCache.get(sessionId);
-        if (isMutable === true) {
-            return privateClient.getDraftSession({ draftSessionId: sessionId });
+    /**
+     * Resolving a session id straight from a URL (page reload / shared link)
+     * reaches the gateway before createSession or listSessions has cached the
+     * type, so discover it by probing the draft endpoint and falling back to
+     * the conversation endpoint. Concurrent callers share one probe.
+     */
+    async function probeSessionType(sessionId: string): Promise<boolean> {
+        const inflight = sessionTypeProbes.get(sessionId);
+        if (inflight != null) {
+            return inflight;
         }
-        if (isMutable === false) {
-            return client.getSession({ sessionId });
+        const probe = (async () => {
+            try {
+                await privateClient.getDraftSession({ draftSessionId: sessionId });
+                return true;
+            } catch (error) {
+                // Only a miss proves the id isn't a draft. Auth or transient
+                // failures would otherwise be retried as a conversation session
+                // and mislabel a real draft as named.
+                if (!isNotFound(error)) {
+                    throw error;
+                }
+                await client.getSession({ sessionId });
+                return false;
+            }
+        })();
+        sessionTypeProbes.set(sessionId, probe);
+        try {
+            const isMutable = await probe;
+            sessionTypeCache.set(sessionId, isMutable);
+            return isMutable;
+        } finally {
+            sessionTypeProbes.delete(sessionId);
         }
-        throw new Error(
-            `Cannot resolve session "${sessionId}": session type not cached. ` +
-                `Ensure createSession or listSessions was called first.`,
-        );
+    }
+
+    async function getSessionObj(sessionId: string): Promise<GwSession> {
+        const isMutable =
+            sessionTypeCache.get(sessionId) ?? (await probeSessionType(sessionId));
+        return isMutable
+            ? privateClient.getDraftSession({ draftSessionId: sessionId })
+            : client.getSession({ sessionId });
     }
 
     const server: TrueFoundryChatServer<TSpec> = {

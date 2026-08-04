@@ -19,6 +19,7 @@ export type UseDraftAgentSpecOptions = {
 export type UseDraftAgentSpecResult = {
     agentSpec: AgentSpec | null;
     draftSessionId: string | undefined;
+    isSpecLoading: boolean;
     isSpecSyncing: boolean;
     specError: unknown | null;
     updateAgentSpec: (update: AgentSpecUpdate) => void;
@@ -34,6 +35,7 @@ export function useDraftAgentSpec({
 }: UseDraftAgentSpecOptions): UseDraftAgentSpecResult {
     const enabled = draftBridge != null;
     const [agentSpec, setAgentSpec] = useState<AgentSpec>(defaultAgentSpec);
+    const [isSpecLoading, setIsSpecLoading] = useState(false);
     const [isSpecSyncing, setIsSpecSyncing] = useState(false);
     const [specError, setSpecError] = useState<unknown | null>(null);
 
@@ -83,6 +85,7 @@ export function useDraftAgentSpec({
             setAgentSpec(defaultAgentSpec);
             localDirtyRef.current = false;
             setSpecError(null);
+            setIsSpecLoading(false);
             return;
         }
 
@@ -91,6 +94,7 @@ export function useDraftAgentSpec({
         }
 
         let cancelled = false;
+        setIsSpecLoading(true);
         void (async () => {
             try {
                 const loaded = await draftBridge.getDraftAgentSpec(draftSessionId);
@@ -103,21 +107,29 @@ export function useDraftAgentSpec({
                     scheduleSpecSyncRef.current?.(draftSessionId, agentSpecRef.current);
                     localDirtyRef.current = false;
                     setSpecError(null);
+                    setIsSpecLoading(false);
                     return;
                 }
 
                 setAgentSpec(loaded);
                 setSpecError(null);
+                setIsSpecLoading(false);
             } catch (error) {
                 if (!cancelled) {
                     onError?.(error);
                     setSpecError(error);
+                    setIsSpecLoading(false);
                 }
             }
         })();
 
         return () => {
             cancelled = true;
+            // The cancelled load can no longer clear the flag itself. Releasing it
+            // here keeps it from sticking when the next run early-returns on an
+            // already-loaded draft; a run that starts a fresh load re-raises it in
+            // the same commit.
+            setIsSpecLoading(false);
         };
     }, [defaultAgentSpec, draftBridge, draftSessionId, enabled, onError]);
 
@@ -229,6 +241,7 @@ export function useDraftAgentSpec({
         () => ({
             agentSpec: enabled ? agentSpec : null,
             draftSessionId: enabled ? draftSessionId : undefined,
+            isSpecLoading: enabled ? isSpecLoading : false,
             isSpecSyncing: enabled ? isSpecSyncing : false,
             specError: enabled ? specError : null,
             updateAgentSpec,
@@ -238,6 +251,7 @@ export function useDraftAgentSpec({
             agentSpec,
             draftSessionId,
             enabled,
+            isSpecLoading,
             isSpecSyncing,
             specError,
             takeTurnHeaderTimestamp,
