@@ -10,8 +10,7 @@ import type {
     ActionRequiredEvent,
     SessionEventItem,
     TurnEvent,
-    TurnStreamData,
-    TurnStreamingEvent,
+    TurnStreamData
 } from "./events.js";
 
 // ---------------------------------------------------------------------------
@@ -333,13 +332,32 @@ export interface AgentBuilderServer<
  */
 export type ProviderType = string;
 
-/** Model row shown in settings/models. Host extends for modelId, properties, etc. */
+/**
+ * Model row — form "Model ID" + "Display name".
+ * Host extends for properties, etc.
+ */
 export interface ModelEntry {
     id: string;
     name: string;
 }
 
-/** Configured provider card. Host extends for auth, timestamps, etc. */
+/**
+ * Write config for create/update (custom form + catalog "Save key").
+ * Host extends. `baseUrl` present iff `type === "custom"`.
+ */
+export interface ModelProviderConfigBase<TModel extends ModelEntry = ModelEntry> {
+    type: ProviderType;
+    name: string;
+    /** Present iff `type === "custom"`. */
+    baseUrl?: string;
+    apiKey: string;
+    models: TModel[];
+}
+
+/**
+ * Configured provider card (list/read). No raw `apiKey`.
+ * Host extends for apiKeySet, timestamps, etc.
+ */
 export interface ModelProviderBase<TModel extends ModelEntry = ModelEntry> {
     id: string;
     type: ProviderType;
@@ -350,8 +368,8 @@ export interface ModelProviderBase<TModel extends ModelEntry = ModelEntry> {
 }
 
 /**
- * Discovery-only catalog provider.
- * `type` must not be `"custom"` — custom providers are added outside the catalog.
+ * Discovery-only catalog provider (AVAILABLE list).
+ * `type` must not be `"custom"` — custom providers use the custom form.
  * Host extends for richer model rows.
  */
 export interface ModelProviderCatalogEntry<TModel extends ModelEntry = ModelEntry> {
@@ -360,18 +378,25 @@ export interface ModelProviderCatalogEntry<TModel extends ModelEntry = ModelEntr
     models: TModel[];
 }
 
+/** Create — no `id`; server assigns it. Catalog path = entry + apiKey. */
+export type CreateModelProviderRequest<TModel extends ModelEntry = ModelEntry> =
+    ModelProviderConfigBase<TModel>;
+
+/** Update — `id` required. */
 export type UpdateModelProviderRequest<TModel extends ModelEntry = ModelEntry> =
-    ModelProviderBase<TModel>;
+    ModelProviderConfigBase<TModel> & { id: string };
 
 export interface ModelCatalogServer<
     TModel extends ModelEntry = ModelEntry,
     TProvider extends ModelProviderBase<TModel> = ModelProviderBase<TModel>,
     TCatalogProvider extends ModelProviderCatalogEntry<TModel> = ModelProviderCatalogEntry<TModel>,
+    TCreate extends CreateModelProviderRequest<TModel> = CreateModelProviderRequest<TModel>,
     TUpdate extends UpdateModelProviderRequest<TModel> = UpdateModelProviderRequest<TModel>,
 > {
     getModelProviderCatalog(): Promise<TCatalogProvider[]>;
     listModelProviders(): Promise<TProvider[]>;
-    /** Full replace create-or-update keyed by provider `id` / `name`. */
+    createModelProvider(req: TCreate): Promise<TProvider>;
+    /** Full replace update keyed by provider `id`. */
     updateModelProvider(req: TUpdate): Promise<TProvider>;
     deleteModelProvider?(req: { id: string }): Promise<void>;
 }
@@ -382,35 +407,103 @@ export interface ToolBase {
     name: string;
 }
 
-/** Connected connector row (settings/connectors). Host extends for url, auth, etc. */
-export interface ConnectorBase<TTool extends ToolBase = ToolBase> {
+/**
+ * Auth type id. Reserved literals: `"None"`, `"OAuth"`, `"API Key"`.
+ * Stays `string` so hosts can widen (same pattern as `ProviderType`).
+ */
+export type ConnectorAuthType = string;
+
+/**
+ * Write-time connector auth. Host extends / narrows via `TType`.
+ * For `"API Key"`, pass `apiKey` (and optional `headerName`).
+ */
+export interface ConnectorAuth<TType extends ConnectorAuthType = ConnectorAuthType> {
+    type: TType;
+    apiKey?: string;
+    headerName?: string;
+}
+
+/**
+ * Catalog / list auth — no secrets. Host extends / narrows via `TType`.
+ */
+export interface ConnectorAuthPublic<
+    TType extends ConnectorAuthType = ConnectorAuthType,
+> {
+    type: TType;
+    headerName?: string;
+}
+
+/**
+ * MCP / connector create-edit config. Host extends for extra fields, etc.
+ */
+export interface ConnectorConfigBase<
+    TAuth extends ConnectorAuth = ConnectorAuth,
+> {
+    name: string;
+    url: string;
+    auth: TAuth;
+}
+
+/**
+ * Connected connector row (settings/connectors). No raw `apiKey`.
+ * Host extends.
+ */
+export interface ConnectorBase<
+    TTool extends ToolBase = ToolBase,
+    TAuth extends ConnectorAuthPublic = ConnectorAuthPublic,
+> {
     id: string;
     name: string;
     description: string;
+    url: string;
+    auth: TAuth;
     authenticated: boolean;
     tools: TTool[];
 }
 
 /** Discovery catalog entry for "+ Add MCP server". Host extends. */
-export interface ConnectorCatalogEntry {
+export interface ConnectorCatalogEntry<
+    TAuth extends ConnectorAuthPublic = ConnectorAuthPublic,
+> {
     id: string;
     name: string;
     description?: string;
+    url: string;
+    auth: TAuth;
 }
 
-export type UpdateConnectorRequest<TTool extends ToolBase = ToolBase> =
-    ConnectorBase<TTool>;
+/** Create connector — no `id`; server assigns it. Host extends. */
+export type CreateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
+    ConnectorConfigBase<TAuth>;
+
+/** Update connector — `id` required. Host extends. */
+export type UpdateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
+    ConnectorConfigBase<TAuth> & { id: string };
 
 export interface ConnectorCatalogServer<
     TTool extends ToolBase = ToolBase,
-    TConnector extends ConnectorBase<TTool> = ConnectorBase<TTool>,
-    TCatalogEntry extends ConnectorCatalogEntry = ConnectorCatalogEntry,
-    TUpdate extends UpdateConnectorRequest<TTool> = UpdateConnectorRequest<TTool>,
+    TAuthWrite extends ConnectorAuth = ConnectorAuth,
+    TAuthPublic extends ConnectorAuthPublic = ConnectorAuthPublic,
+    TConnector extends ConnectorBase<TTool, TAuthPublic> = ConnectorBase<
+        TTool,
+        TAuthPublic
+    >,
+    TCatalogEntry extends ConnectorCatalogEntry<TAuthPublic> =
+        ConnectorCatalogEntry<TAuthPublic>,
+    TCreate extends CreateConnectorRequest<TAuthWrite> =
+        CreateConnectorRequest<TAuthWrite>,
+    TUpdate extends UpdateConnectorRequest<TAuthWrite> =
+        UpdateConnectorRequest<TAuthWrite>,
 > {
     getConnectorCatalog(): Promise<TCatalogEntry[]>;
     listConnectors(req?: { query?: string }): Promise<TConnector[]>;
-    /** Full replace create-or-update keyed by connector `id`. */
+    createConnector(req: TCreate): Promise<TConnector>;
+    /** Full replace update keyed by connector `id`. */
     updateConnector(req: TUpdate): Promise<TConnector>;
+    /** Start connector auth (e.g. OAuth). Host may widen return with `authUrl`. */
+    authenticateConnector(req: { id: string }): Promise<TConnector>;
+    /** Clear connector auth. */
+    disconnectConnector(req: { id: string }): Promise<TConnector>;
     deleteConnector?(req: { id: string }): Promise<void>;
 }
 
