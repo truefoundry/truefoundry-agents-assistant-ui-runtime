@@ -577,6 +577,8 @@ export function useTrueFoundryAgentMessages({
         } catch (error) {
             if (generation === loadGenerationRef.current) {
                 if (isEarlyInitialLoad) {
+                    // Allow retryLoad while still backgrounded (before isMain promotion).
+                    initialLoadStartedForRef.current = undefined;
                     skipInitialPromotionLoadForRef.current = undefined;
                 }
                 onErrorRef.current?.(error);
@@ -846,7 +848,8 @@ export function useTrueFoundryAgentMessages({
             }
             const inputs = collectRequiredActionInputs(paused);
             if (inputs.length > 0) {
-                void sendTurn({ inputs }).catch((error) => onErrorRef.current?.(error));
+                // sendTurn/runStream already report via onError; swallow to avoid duplicates.
+                void sendTurn({ inputs }).catch(() => undefined);
             }
         },
         [projectOptions, sendTurn],
@@ -913,37 +916,47 @@ export function useTrueFoundryAgentMessages({
 
     const branchFromTurn = useCallback(
         async (turnId: string, userMessage: UserMessageContent) => {
-            let activeSessionId = sessionId;
-            if (activeSessionId == null) {
-                throw new Error("Cannot branch from a turn without an active session.");
+            let committed: SessionSnapshot;
+            let previousTurnId: string;
+            let rewound: SessionSnapshot;
+            try {
+                let activeSessionId = sessionId;
+                if (activeSessionId == null) {
+                    throw new Error("Cannot branch from a turn without an active session.");
+                }
+
+                committed = commitActiveStream(snapshotRef.current);
+                setSnapshot(committed);
+
+                await cancel();
+
+                const conversationSessionId = await resolveActiveSessionId(
+                    activeSessionId,
+                    resolveConversationSessionIdRef.current,
+                );
+                previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
+                    server,
+                    conversationSessionId,
+                    turnId,
+                );
+                rewound = await buildSnapshotBeforeTurn(
+                    server,
+                    conversationSessionId,
+                    turnId,
+                    listEventsConcurrency,
+                );
+                createdAtByMessageIdRef.current = new Map();
+                // Keep the ref aligned before awaiting sendTurn so any intermediate
+                // reads (and the atomic pendingUser apply) see the rewound history.
+                snapshotRef.current = rewound;
+                setSnapshot(rewound);
+            } catch (error) {
+                // Setup failures never reach sendTurn/runStream reporting.
+                onErrorRef.current?.(error);
+                throw error;
             }
 
-            const committed = commitActiveStream(snapshotRef.current);
-            setSnapshot(committed);
-
-            await cancel();
-
-            const conversationSessionId = await resolveActiveSessionId(
-                activeSessionId,
-                resolveConversationSessionIdRef.current,
-            );
-            const previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
-                server,
-                conversationSessionId,
-                turnId,
-            );
-            const rewound = await buildSnapshotBeforeTurn(
-                server,
-                conversationSessionId,
-                turnId,
-                listEventsConcurrency,
-            );
-            createdAtByMessageIdRef.current = new Map();
-            // Keep the ref aligned before awaiting sendTurn so any intermediate
-            // reads (and the atomic pendingUser apply) see the rewound history.
-            snapshotRef.current = rewound;
-            setSnapshot(rewound);
-
+            // sendTurn/runStream own error reporting for the turn itself.
             await sendTurn({
                 userMessage,
                 previousTurnId,
@@ -965,7 +978,9 @@ export function useTrueFoundryAgentMessages({
             const committed = commitActiveStream(snapshotRef.current);
             const originalInput = resolveTurnInput(committed, turnId);
             if (originalInput == null) {
-                throw new Error(`Turn ${turnId} not found in session snapshot`);
+                const error = new Error(`Turn ${turnId} not found in session snapshot`);
+                onErrorRef.current?.(error);
+                throw error;
             }
             const userMessage = extractTurnUserMessageContent(originalInput);
             await branchFromTurn(turnId, userMessage);
@@ -978,7 +993,9 @@ export function useTrueFoundryAgentMessages({
             const committed = commitActiveStream(snapshotRef.current);
             const originalInput = resolveTurnInput(committed, turnId);
             if (originalInput == null) {
-                throw new Error(`Turn ${turnId} not found in session snapshot`);
+                const error = new Error(`Turn ${turnId} not found in session snapshot`);
+                onErrorRef.current?.(error);
+                throw error;
             }
             const userMessage = buildEditedUserMessageContent(
                 editedText,

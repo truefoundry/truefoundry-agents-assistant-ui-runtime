@@ -195,10 +195,9 @@ function useTrueFoundryAgentRuntimeImpl(
             resumeMcpAuth,
             downloadSandboxFile,
             cancel,
+            // resetFromTurn/branchFromTurn/sendTurn already report via onError.
             resetFromTurn: (turnId: string) =>
-                resetFromTurn(turnId).catch((error) => {
-                    onError?.(error);
-                }),
+                resetFromTurn(turnId).catch(() => undefined),
             reload: retryLoad,
             hasOlderHistory,
             isLoadingOlderHistory,
@@ -257,12 +256,8 @@ function useTrueFoundryAgentRuntimeImpl(
             }
             const turnId = parseTurnIdFromMessageId(sourceId);
             const editedText = extractEditedText(message);
-            try {
-                await editFromTurn(turnId, editedText);
-            } catch (error) {
-                onError?.(error);
-                throw error;
-            }
+            // editFromTurn/branchFromTurn/sendTurn already report via onError.
+            await editFromTurn(turnId, editedText);
         },
     });
 }

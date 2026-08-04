@@ -343,6 +343,36 @@ describe("useTrueFoundryAgentMessages", () => {
         expect(loadSessionSnapshot).not.toHaveBeenCalled();
     });
 
+    it("retries a failed URL early load before the thread is promoted to main", async () => {
+        vi.mocked(loadSessionSnapshot)
+            .mockRejectedValueOnce(new Error("load failed"))
+            .mockResolvedValueOnce(snapshotWithUserTurn("Hello"));
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: mockServer,
+                sessionId: "session-from-url",
+                isMain: false,
+                isInitialSession: true,
+            }),
+        );
+
+        await waitFor(() => expect(loadSessionSnapshot).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            result.current.retryLoad();
+        });
+
+        await waitFor(() => expect(loadSessionSnapshot).toHaveBeenCalledTimes(2));
+        await waitFor(() =>
+            expect(result.current.messages[0]).toMatchObject({
+                role: "user",
+                content: [{ type: "text", text: "Hello" }],
+            }),
+        );
+    });
+
     it("sendTurn lazily initializes a session when sessionId is undefined", async () => {
         const initializeSession = vi.fn().mockResolvedValue({
             remoteId: "session-new",
@@ -657,6 +687,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("restores history when edit fails before turn.created", async () => {
         const createdAt = new Date().toISOString();
+        const onError = vi.fn();
         const original = snapshotWithUserTurn("Hello");
         vi.mocked(loadSessionSnapshot).mockResolvedValue(original);
         vi.mocked(mockServer.listTurns).mockResolvedValue({
@@ -679,7 +710,11 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useTrueFoundryAgentMessages({
+                server: mockServer,
+                sessionId: "session-1",
+                onError,
+            }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -694,6 +729,8 @@ describe("useTrueFoundryAgentMessages", () => {
             role: "user",
             content: [{ type: "text", text: "Hello" }],
         });
+        // runStream reports once; callers must not double-toast.
+        expect(onError).toHaveBeenCalledOnce();
     });
 
     it("does not let a superseded stream complete the current stream", async () => {
