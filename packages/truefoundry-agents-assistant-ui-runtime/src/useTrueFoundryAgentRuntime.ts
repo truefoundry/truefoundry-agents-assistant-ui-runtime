@@ -25,6 +25,7 @@ import {
     buildUserMessageContent,
     extractEditedText,
     parseTurnIdFromMessageId,
+    userMessageContentToText,
 } from "./convertTurnMessages.js";
 import {
     createDraftSessionBridge,
@@ -66,6 +67,10 @@ function useTrueFoundryAgentRuntimeImpl(
     const isMain = useAuiState(
         (state) => state.threads.mainThreadId === state.threadListItem.id,
     );
+    // On a hard refresh, the URL session runtime mounts before assistant-ui
+    // promotes it to the main thread. Allow that one session to hydrate early.
+    const isInitialSession =
+        sessionId != null && sessionId === options.initialSessionId;
 
     const draftSpec = useDraftAgentSpec({
         draftSessionId,
@@ -119,6 +124,7 @@ function useTrueFoundryAgentRuntimeImpl(
         server,
         sessionId,
         isMain,
+        isInitialSession,
         listEventsConcurrency,
         onError,
         initializeSession,
@@ -221,7 +227,19 @@ function useTrueFoundryAgentRuntimeImpl(
                 return;
             }
 
-            await sendTurn({ userMessage: buildUserMessageContent(message) });
+            const userMessage = buildUserMessageContent(message);
+            await sendTurn({
+                userMessage,
+                // The composer clears before onNew runs. Restore its text only when
+                // the turn failed before turn.created registered it in the backend.
+                onPreTurnFailure: () => {
+                    const text = userMessageContentToText(userMessage);
+                    const composer = aui.thread().composer();
+                    if (text && !composer.getState().text.trim()) {
+                        composer.setText(text);
+                    }
+                },
+            });
         },
         onCancel: async () => {
             await cancel();
