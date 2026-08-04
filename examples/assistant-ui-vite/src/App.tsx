@@ -1,7 +1,7 @@
-import { useMemo, type ComponentProps } from "react";
+import { useMemo } from "react";
 import { TrueFoundryAssistantUI } from "@truefoundry/agent-ui-sdk";
 
-import { getAgentChatServer } from "./lib/agentClient";
+import { getAgentUIServer } from "./lib/agentClient";
 import { loadCredentials, type GatewayCredentials } from "./lib/credentials";
 
 function MissingConfig() {
@@ -36,24 +36,18 @@ function MissingConfig() {
 
 function AppContent({ credentials }: { credentials: GatewayCredentials }) {
   const server = useMemo(
-    () => getAgentChatServer(credentials),
+    () => getAgentUIServer(credentials),
     [credentials],
   );
 
   return (
     <div className="h-dvh">
-      {/*
-        agent-ui-sdk@0.1.0 still types `client`. Pass `server` via cast until
-        that package is updated to UseTrueFoundryAgentRuntimeOptions.server.
-      */}
       <TrueFoundryAssistantUI
-        {...({
-          server,
-          agentName: credentials.agentName,
-          layout: "sidebar",
-          className: "h-full",
-          onError: console.error,
-        } as unknown as ComponentProps<typeof TrueFoundryAssistantUI>)}
+        server={server}
+        agentName={credentials.agentName}
+        layout="sidebar"
+        className="h-full"
+        onError={console.error}
       />
     </div>
   );

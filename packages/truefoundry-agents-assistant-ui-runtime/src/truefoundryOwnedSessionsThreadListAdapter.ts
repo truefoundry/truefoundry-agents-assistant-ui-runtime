@@ -1,7 +1,7 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 
 import type { AgentChatServer, Session } from "./server/types.js";
-import { draftSessionTitle } from "./private/agentSpec.js";
+import { draftSessionTitle } from "./draft/agentSpec.js";
 import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;

@@ -2,11 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-    mergeAgentSpec,
-    type AgentSpec,
-    type AgentSpecUpdate,
-} from "./agentSpec.js";
+import type { AgentSpec } from "../server/types.js";
+import { mergeAgentSpec, type AgentSpecUpdate } from "./agentSpec.js";
 import type { DraftSessionBridge } from "./draftSessionBridge.js";
 
 const SPEC_SYNC_DEBOUNCE_MS = 400;

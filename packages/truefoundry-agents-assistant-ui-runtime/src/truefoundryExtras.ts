@@ -1,7 +1,8 @@
 import { createRuntimeExtras } from "@assistant-ui/core/internal";
 import type { McpAuthRequiredEvent } from "./server/index.js";
 
-import type { AgentSpec, AgentSpecUpdate } from "./private/agentSpec.js";
+import type { AgentSpec } from "./server/types.js";
+import type { AgentSpecUpdate } from "./draft/agentSpec.js";
 import type { PendingApproval, PendingToolResponse } from "./collectPending.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";

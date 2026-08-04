@@ -13,17 +13,17 @@ export {
 export type { ConvertTurnsResult, UserMessageContent } from "./convertTurnMessages.js";
 export { ROOT_THREAD_ID } from "./constants.js";
 export type {
-    UseTrueFoundryAgentRuntimeOptions,
     NamedAgentConfig,
     DraftAgentConfig,
     TrueFoundryAgentConfig,
+    UseTrueFoundryAgentRuntimeOptions,
 } from "./types.js";
-export type { AgentSpec, AgentSpecUpdate, DraftSession } from "./private/agentSpec.js";
-export { mergeAgentSpec, draftSessionTitle } from "./private/agentSpec.js";
-export { createTrueFoundryDraftThreadListAdapter } from "./private/truefoundryDraftThreadListAdapter.js";
+export type { AgentSpecUpdate, DraftSession } from "./draft/agentSpec.js";
+export { mergeAgentSpec, draftSessionTitle } from "./draft/agentSpec.js";
+export { createTrueFoundryDraftThreadListAdapter } from "./draft/truefoundryDraftThreadListAdapter.js";
 export { createTrueFoundryOwnedSessionsThreadListAdapter } from "./truefoundryOwnedSessionsThreadListAdapter.js";
-export { createDraftSessionBridge } from "./private/draftSessionBridge.js";
-export type { DraftSessionBridge } from "./private/draftSessionBridge.js";
+export { createDraftSessionBridge } from "./draft/draftSessionBridge.js";
+export type { DraftSessionBridge } from "./draft/draftSessionBridge.js";
 export {
     useTrueFoundryAgentSpec,
     useTrueFoundryUpdateAgentSpec,
@@ -82,7 +82,7 @@ export type {
     TurnState,
     TurnStateDone,
     TurnInputItem,
-    AgentSpec as ServerAgentSpec,
+    AgentSpec,
     ListResult,
     CreateSessionRequest,
     UpdateSessionRequest,
@@ -91,6 +91,29 @@ export type {
     UserToolApprovalEvent,
     UserToolResponseEvent,
     PreviousTurnIdInput,
+    ProviderType,
+    ModelEntry,
+    ModelProviderConfigBase,
+    ModelProviderBase,
+    ModelProviderCatalogEntry,
+    CreateModelProviderRequest,
+    UpdateModelProviderRequest,
+    ModelCatalogServer,
+    ToolBase,
+    ConnectorAuthType,
+    ConnectorAuth,
+    ConnectorAuthPublic,
+    ConnectorConfigBase,
+    ConnectorBase,
+    ConnectorCatalogEntry,
+    CreateConnectorRequest,
+    UpdateConnectorRequest,
+    ConnectorCatalogServer,
+    SkillBase,
+    CreateSkillRequest,
+    SkillCatalogServer,
+    CatalogServer,
+    AgentUIServerPort,
 } from "./server/index.js";
 export type {
     SandboxCreatedEvent,

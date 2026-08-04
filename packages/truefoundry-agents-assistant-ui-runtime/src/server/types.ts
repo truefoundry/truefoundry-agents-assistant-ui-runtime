@@ -10,8 +10,7 @@ import type {
     ActionRequiredEvent,
     SessionEventItem,
     TurnEvent,
-    TurnStreamData,
-    TurnStreamingEvent,
+    TurnStreamData
 } from "./events.js";
 
 // ---------------------------------------------------------------------------
@@ -72,7 +71,7 @@ export type SkillMount = object;
 export type McpServerMount = object;
 
 // ---------------------------------------------------------------------------
-// AgentSpec — model + skills + mcpServers on base; host widens the rest
+// AgentSpec — model / skills / mcpServers are type params; host widens the rest
 // ---------------------------------------------------------------------------
 
 export interface ModelParams {
@@ -87,17 +86,19 @@ export interface Model {
 
 /**
  * SDK-owned agent definition — fields the FE reads/writes.
- * Host adds additional fields via `TSpec extends AgentSpec`.
+ * Host widens `model` / `skills` / `mcpServers` via type params, and adds
+ * extra fields via `TSpec extends AgentSpec<...>`.
  */
-export interface AgentSpec {
-    model: Model;
-    skills?: SkillMount[];
-    mcpServers?: McpServerMount[];
+export interface AgentSpec<
+    TModel extends Model = Model,
+    TSkill extends SkillMount = SkillMount,
+    TMcp extends McpServerMount = McpServerMount,
+> {
+    model: TModel;
+    skills?: TSkill[];
+    mcpServers?: TMcp[];
     instructions?: string;
-    messages?: unknown[];
     variables?: Record<string, string>;
-    responseFormat?: unknown;
-    config?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -317,3 +318,247 @@ export interface AgentBuilderServer<
     }): Promise<TSave>;
     deleteAgent?(req: { agentName: string }): Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// Catalog management — FE-minimal settings DTOs (host extends via generics)
+// ---------------------------------------------------------------------------
+
+/**
+ * Provider type id. Reserved literal: `"custom"` for user-defined providers;
+ * any other string is a builtin (e.g. `"openai"`, `"anthropic"`).
+ *
+ * Note: `string | "custom"` is useless in TypeScript (`"custom"` ⊆ `string`),
+ * so this stays `string` and `"custom"` is a documented convention.
+ */
+export type ProviderType = string;
+
+/**
+ * Model row — form "Model ID" + "Display name".
+ * Host extends for properties, etc.
+ */
+export interface ModelEntry {
+    id: string;
+    name: string;
+}
+
+/**
+ * Write config for create/update (custom form + catalog "Save key").
+ * Host extends. `baseUrl` present iff `type === "custom"`.
+ */
+export interface ModelProviderConfigBase<TModel extends ModelEntry = ModelEntry> {
+    type: ProviderType;
+    name: string;
+    /** Present iff `type === "custom"`. */
+    baseUrl?: string;
+    apiKey: string;
+    models: TModel[];
+}
+
+/**
+ * Configured provider card (list/read). No raw `apiKey`.
+ * Host extends for apiKeySet, timestamps, etc.
+ */
+export interface ModelProviderBase<TModel extends ModelEntry = ModelEntry> {
+    id: string;
+    type: ProviderType;
+    name: string;
+    /** Present iff `type === "custom"`. */
+    baseUrl?: string;
+    models: TModel[];
+}
+
+/**
+ * Discovery-only catalog provider (AVAILABLE list).
+ * `type` must not be `"custom"` — custom providers use the custom form.
+ * Host extends for richer model rows.
+ */
+export interface ModelProviderCatalogEntry<TModel extends ModelEntry = ModelEntry> {
+    type: ProviderType;
+    name: string;
+    models: TModel[];
+}
+
+/** Create — no `id`; server assigns it. Catalog path = entry + apiKey. */
+export type CreateModelProviderRequest<TModel extends ModelEntry = ModelEntry> =
+    ModelProviderConfigBase<TModel>;
+
+/** Update — `id` required. */
+export type UpdateModelProviderRequest<TModel extends ModelEntry = ModelEntry> =
+    ModelProviderConfigBase<TModel> & { id: string };
+
+export interface ModelCatalogServer<
+    TModel extends ModelEntry = ModelEntry,
+    TProvider extends ModelProviderBase<TModel> = ModelProviderBase<TModel>,
+    TCatalogProvider extends ModelProviderCatalogEntry<TModel> = ModelProviderCatalogEntry<TModel>,
+    TCreate extends CreateModelProviderRequest<TModel> = CreateModelProviderRequest<TModel>,
+    TUpdate extends UpdateModelProviderRequest<TModel> = UpdateModelProviderRequest<TModel>,
+> {
+    getModelProviderCatalog(): Promise<TCatalogProvider[]>;
+    listModelProviders(): Promise<TProvider[]>;
+    createModelProvider(req: TCreate): Promise<TProvider>;
+    /** Full replace update keyed by provider `id`. */
+    updateModelProvider(req: TUpdate): Promise<TProvider>;
+    deleteModelProvider?(req: { id: string }): Promise<void>;
+}
+
+/** Tool row on a connector detail. Host extends for schemas, etc. */
+export interface ToolBase {
+    id: string;
+    name: string;
+}
+
+/**
+ * Auth type id. Reserved literals: `"None"`, `"OAuth"`, `"API Key"`.
+ * Stays `string` so hosts can widen (same pattern as `ProviderType`).
+ */
+export type ConnectorAuthType = string;
+
+/**
+ * Write-time connector auth. Host extends / narrows via `TType`.
+ * For `"API Key"`, pass `apiKey` (and optional `headerName`).
+ */
+export interface ConnectorAuth<TType extends ConnectorAuthType = ConnectorAuthType> {
+    type: TType;
+    apiKey?: string;
+    headerName?: string;
+}
+
+/**
+ * Catalog / list auth — no secrets. Host extends / narrows via `TType`.
+ */
+export interface ConnectorAuthPublic<
+    TType extends ConnectorAuthType = ConnectorAuthType,
+> {
+    type: TType;
+    headerName?: string;
+}
+
+/**
+ * MCP / connector create-edit config. Host extends for extra fields, etc.
+ */
+export interface ConnectorConfigBase<
+    TAuth extends ConnectorAuth = ConnectorAuth,
+> {
+    name: string;
+    url: string;
+    auth: TAuth;
+}
+
+/**
+ * Connected connector row (settings/connectors). No raw `apiKey`.
+ * Host extends.
+ */
+export interface ConnectorBase<
+    TTool extends ToolBase = ToolBase,
+    TAuth extends ConnectorAuthPublic = ConnectorAuthPublic,
+> {
+    id: string;
+    name: string;
+    description: string;
+    url: string;
+    auth: TAuth;
+    authenticated: boolean;
+    tools: TTool[];
+}
+
+/** Discovery catalog entry for "+ Add MCP server". Host extends. */
+export interface ConnectorCatalogEntry<
+    TAuth extends ConnectorAuthPublic = ConnectorAuthPublic,
+> {
+    id: string;
+    name: string;
+    description?: string;
+    url: string;
+    auth: TAuth;
+}
+
+/** Create connector — no `id`; server assigns it. Host extends. */
+export type CreateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
+    ConnectorConfigBase<TAuth>;
+
+/** Update connector — `id` required. Host extends. */
+export type UpdateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
+    ConnectorConfigBase<TAuth> & { id: string };
+
+export interface ConnectorCatalogServer<
+    TTool extends ToolBase = ToolBase,
+    TAuthWrite extends ConnectorAuth = ConnectorAuth,
+    TAuthPublic extends ConnectorAuthPublic = ConnectorAuthPublic,
+    TConnector extends ConnectorBase<TTool, TAuthPublic> = ConnectorBase<
+        TTool,
+        TAuthPublic
+    >,
+    TCatalogEntry extends ConnectorCatalogEntry<TAuthPublic> =
+        ConnectorCatalogEntry<TAuthPublic>,
+    TCreate extends CreateConnectorRequest<TAuthWrite> =
+        CreateConnectorRequest<TAuthWrite>,
+    TUpdate extends UpdateConnectorRequest<TAuthWrite> =
+        UpdateConnectorRequest<TAuthWrite>,
+> {
+    getConnectorCatalog(): Promise<TCatalogEntry[]>;
+    listConnectors(req?: { query?: string }): Promise<TConnector[]>;
+    createConnector(req: TCreate): Promise<TConnector>;
+    /** Full replace update keyed by connector `id`. */
+    updateConnector(req: TUpdate): Promise<TConnector>;
+    /** Start connector auth (e.g. OAuth). Host may widen return with `authUrl`. */
+    authenticateConnector(req: { id: string }): Promise<TConnector>;
+    /** Clear connector auth. */
+    disconnectConnector(req: { id: string }): Promise<TConnector>;
+    deleteConnector?(req: { id: string }): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// Skills catalog — FE-minimal settings DTOs (host extends via generics)
+// ---------------------------------------------------------------------------
+
+/** Skill row shown in settings/skills (list + delete). Host extends for fqn, etc. */
+export interface SkillBase {
+    id: string;
+    name: string;
+    description: string;
+}
+
+/** Create-skill request. Host extends for branch, auth, etc. */
+export interface CreateSkillRequest {
+    repo: string;
+    directory: string;
+}
+
+export interface SkillCatalogServer<
+    TSkill extends SkillBase = SkillBase,
+    TCreate extends CreateSkillRequest = CreateSkillRequest,
+> {
+    listSkills(req?: { query?: string }): Promise<TSkill[]>;
+    createSkill(req: TCreate): Promise<TSkill>;
+    deleteSkill?(req: { id: string }): Promise<void>;
+}
+
+/**
+ * Settings management aggregate — modelCatalog + connectorCatalog + optional skillCatalog.
+ * Hosts may pass the whole object to an app shell, or a focused sub-port to a page.
+ */
+export interface CatalogServer<
+    TModelCatalog extends ModelCatalogServer = ModelCatalogServer,
+    TConnectorCatalog extends ConnectorCatalogServer = ConnectorCatalogServer,
+    TSkillCatalog extends SkillCatalogServer = SkillCatalogServer,
+> {
+    modelCatalog: TModelCatalog;
+    connectorCatalog: TConnectorCatalog;
+    /** Optional — omit when the host has no skills settings surface. */
+    skillCatalog?: TSkillCatalog;
+}
+
+/**
+ * Composed host port: chat + builder + optional settings catalog.
+ * Agent-ui's `AgentUIServer` mirrors this shape; named differently here to
+ * avoid colliding with that package's local type name.
+ *
+ * `catalog` is optional — if the host passes it, settings UI can call
+ * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
+ * if omitted, those surfaces stay hidden.
+ */
+export type AgentUIServerPort<
+    TChat extends AgentChatServer = AgentChatServer,
+    TBuilder extends AgentBuilderServer = AgentBuilderServer,
+    TCatalog extends CatalogServer = CatalogServer,
+> = TChat & TBuilder & { catalog?: TCatalog };

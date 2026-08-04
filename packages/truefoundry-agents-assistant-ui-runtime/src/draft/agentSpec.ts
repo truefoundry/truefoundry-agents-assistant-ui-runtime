@@ -1,33 +1,30 @@
 import type { AgentSpec } from "../server/types.js";
 
-export type { AgentSpec } from "../server/types.js";
-
 /** @deprecated Use Session with isMutable: true instead. Kept for title helper. */
 export type DraftSession = {
     title?: string | null;
     agentSpec: AgentSpec;
 };
 
-export type AgentSpecUpdate = {
-    instructions?: string;
-    model?: Partial<AgentSpec["model"]> & {
-        params?: Partial<NonNullable<AgentSpec["model"]["params"]>>;
-    };
-    mcpServers?: AgentSpec["mcpServers"];
-    skills?: AgentSpec["skills"];
-    messages?: AgentSpec["messages"];
-    variables?: AgentSpec["variables"];
-    responseFormat?: AgentSpec["responseFormat"];
-    config?: AgentSpec["config"];
+/** Partial update — host fields flow through when `TSpec` is widened. */
+export type AgentSpecUpdate<TSpec extends AgentSpec = AgentSpec> = {
+    [K in keyof TSpec]?: K extends "model"
+        ? Omit<Partial<TSpec["model"]>, "params"> & {
+              params?: Partial<NonNullable<TSpec["model"]["params"]>>;
+          }
+        : TSpec[K];
 };
 
-export function mergeAgentSpec(base: AgentSpec, update: AgentSpecUpdate): AgentSpec {
+export function mergeAgentSpec<TSpec extends AgentSpec>(
+    base: TSpec,
+    update: AgentSpecUpdate<TSpec>,
+): TSpec {
     const { model: modelUpdate, ...rest } = update;
 
-    const next: AgentSpec = {
+    const next = {
         ...base,
         ...rest,
-    };
+    } as TSpec;
 
     if (modelUpdate != null) {
         next.model = {
@@ -38,7 +35,7 @@ export function mergeAgentSpec(base: AgentSpec, update: AgentSpecUpdate): AgentS
                 modelUpdate.params != null
                     ? { ...base.model.params, ...modelUpdate.params }
                     : base.model.params,
-        };
+        } as TSpec["model"];
     }
 
     return next;
