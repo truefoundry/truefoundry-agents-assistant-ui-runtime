@@ -10,6 +10,7 @@ Standalone Vite + React example that wires `@truefoundry/assistant-ui-runtime` t
 - `createTrueFoundryAgentUIServer` → full pack (gateway chat + CP builder)
 - Optional `agentName` — omit to unlock Agents Library / draft builder
 - Vite dev proxy for Control Plane paths (avoids browser CORS)
+- Built-in history pagination via the SDK's `HistoryLoaderContainer`
 
 ## Prerequisites
 

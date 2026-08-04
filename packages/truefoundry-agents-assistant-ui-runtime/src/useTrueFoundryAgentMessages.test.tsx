@@ -994,7 +994,7 @@ describe("useTrueFoundryAgentMessages", () => {
     });
 
     describe("batched resume invariant", () => {
-        it("issues exactly one prepareAndExecuteTurn input batch across root and sub-agent threads", async () => {
+        it("issues exactly one createTurn input batch across root and sub-agent threads", async () => {
             vi.mocked(loadSessionSnapshot).mockResolvedValue(
                 snapshotWithAssistantMessage(assistantMessageWithMultiThreadPendingActions()),
             );

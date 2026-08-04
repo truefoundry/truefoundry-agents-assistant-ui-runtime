@@ -33,7 +33,7 @@ describe("streamTurn", () => {
     describe("streamTurnContent", () => {
         it("prepares a user turn and yields folded stream updates", async () => {
             const foldState = new PeerThreadFoldState();
-            const prepareAndExecuteTurn = vi.fn(async function* () {
+            const createTurn = vi.fn(async function* () {
                 yield streamData(1, {
                     type: "model.message",
                     createdAt,
@@ -43,7 +43,7 @@ describe("streamTurn", () => {
                 });
             });
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
 
@@ -57,7 +57,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(prepareAndExecuteTurn).toHaveBeenCalledWith({
+            expect(createTurn).toHaveBeenCalledWith({
                 sessionId: SESSION_ID,
                 input: [{ type: "user.message", content: "hello" }],
                 previousTurnId: "auto",
@@ -68,7 +68,7 @@ describe("streamTurn", () => {
             ]);
         });
 
-        it("passes required-action inputs through prepareAndExecuteTurn", async () => {
+        it("passes required-action inputs through createTurn", async () => {
             const inputs = [
                 {
                     type: "user.tool_approval" as const,
@@ -83,9 +83,9 @@ describe("streamTurn", () => {
                     content: "A",
                 },
             ];
-            const prepareAndExecuteTurn = vi.fn(async function* () {});
+            const createTurn = vi.fn(async function* () {});
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
 
@@ -99,7 +99,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(prepareAndExecuteTurn).toHaveBeenCalledWith({
+            expect(createTurn).toHaveBeenCalledWith({
                 sessionId: SESSION_ID,
                 input: inputs,
                 previousTurnId: "auto",
@@ -108,9 +108,9 @@ describe("streamTurn", () => {
         });
 
         it("uses empty input when resuming after MCP auth", async () => {
-            const prepareAndExecuteTurn = vi.fn(async function* () {});
+            const createTurn = vi.fn(async function* () {});
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
 
@@ -124,7 +124,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(prepareAndExecuteTurn).toHaveBeenCalledWith({
+            expect(createTurn).toHaveBeenCalledWith({
                 sessionId: SESSION_ID,
                 input: [],
                 previousTurnId: "auto",
@@ -133,9 +133,9 @@ describe("streamTurn", () => {
         });
 
         it("forwards an explicit previousTurnId when branching", async () => {
-            const prepareAndExecuteTurn = vi.fn(async function* () {});
+            const createTurn = vi.fn(async function* () {});
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
 
@@ -149,7 +149,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(prepareAndExecuteTurn).toHaveBeenCalledWith({
+            expect(createTurn).toHaveBeenCalledWith({
                 sessionId: SESSION_ID,
                 input: [{ type: "user.message", content: "edited" }],
                 previousTurnId: "turn-a",
@@ -158,9 +158,9 @@ describe("streamTurn", () => {
         });
 
         it("forwards previousTurnId \"none\" when branching from root", async () => {
-            const prepareAndExecuteTurn = vi.fn(async function* () {});
+            const createTurn = vi.fn(async function* () {});
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
 
@@ -174,7 +174,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(prepareAndExecuteTurn).toHaveBeenCalledWith({
+            expect(createTurn).toHaveBeenCalledWith({
                 sessionId: SESSION_ID,
                 input: [{ type: "user.message", content: "first" }],
                 previousTurnId: "none",
@@ -183,9 +183,9 @@ describe("streamTurn", () => {
         });
 
         it("returns early and cancels the session when already aborted", async () => {
-            const prepareAndExecuteTurn = vi.fn(async function* () {});
+            const createTurn = vi.fn(async function* () {});
             const cancelSession = vi.fn().mockResolvedValue(undefined);
-            const server = mockServer({ prepareAndExecuteTurn, cancelSession });
+            const server = mockServer({ createTurn, cancelSession });
             const abortController = new AbortController();
             abortController.abort();
 
@@ -200,14 +200,14 @@ describe("streamTurn", () => {
             );
 
             expect(cancelSession).toHaveBeenCalledWith({ sessionId: SESSION_ID });
-            expect(prepareAndExecuteTurn).not.toHaveBeenCalled();
+            expect(createTurn).not.toHaveBeenCalled();
             expect(updates).toEqual([]);
         });
 
-        it("forwards headers to prepareAndExecuteTurn", async () => {
-            const prepareAndExecuteTurn = vi.fn(async function* () {});
+        it("forwards headers to createTurn", async () => {
+            const createTurn = vi.fn(async function* () {});
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
             const abortSignal = new AbortController().signal;
@@ -227,7 +227,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(prepareAndExecuteTurn).toHaveBeenCalledWith({
+            expect(createTurn).toHaveBeenCalledWith({
                 sessionId: SESSION_ID,
                 input: [{ type: "user.message", content: "hello" }],
                 previousTurnId: "auto",
@@ -240,7 +240,7 @@ describe("streamTurn", () => {
 
         it("notifies gateway turn id when turn.done errors with no content yields", async () => {
             const gatewayTurnId = "01ky6mqzmczwt6ssyd5r02gjjc";
-            const prepareAndExecuteTurn = vi.fn(async function* () {
+            const createTurn = vi.fn(async function* () {
                 yield streamData(1, {
                     type: "turn.created",
                     createdAt,
@@ -261,7 +261,7 @@ describe("streamTurn", () => {
                 });
             });
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
             const onTurnIdAvailable = vi.fn();
@@ -285,7 +285,7 @@ describe("streamTurn", () => {
         });
 
         it("does not notify when an error stream never emits turn.created", async () => {
-            const prepareAndExecuteTurn = vi.fn(async function* () {
+            const createTurn = vi.fn(async function* () {
                 yield streamData(1, {
                     type: "turn.done",
                     createdAt,
@@ -298,7 +298,7 @@ describe("streamTurn", () => {
                 });
             });
             const server = mockServer({
-                prepareAndExecuteTurn,
+                createTurn,
                 cancelSession: vi.fn().mockResolvedValue(undefined),
             });
             const onTurnIdAvailable = vi.fn();

@@ -249,7 +249,7 @@ export interface AgentChatServer<
     getSession(req: { sessionId: string }): Promise<TSession>;
     updateSession(req: TUpdate): Promise<TSession>;
 
-    prepareAndExecuteTurn(req: {
+    createTurn(req: {
         sessionId: string;
         input?: TurnInputItem[];
         previousTurnId?: PreviousTurnIdInput;
@@ -407,31 +407,33 @@ export interface ToolBase {
     name: string;
 }
 
-/**
- * Auth type id. Reserved literals: `"None"`, `"OAuth"`, `"API Key"`.
- * Stays `string` so hosts can widen (same pattern as `ProviderType`).
- */
-export type ConnectorAuthType = string;
+/** Strict auth type id. Hosts widen branches via intersection + re-union. */
+export type ConnectorAuthType = "oauth" | "apiKey" | "none";
 
-/**
- * Write-time connector auth. Host extends / narrows via `TType`.
- * For `"API Key"`, pass `apiKey` (and optional `headerName`).
- */
-export interface ConnectorAuth<TType extends ConnectorAuthType = ConnectorAuthType> {
-    type: TType;
+// Write (create/update) — export branches so hosts can intersect extras
+export type ConnectorAuthOAuth = { type: "oauth"; authUrl?: string };
+export type ConnectorAuthApiKey = {
+    type: "apiKey";
     apiKey?: string;
     headerName?: string;
-}
+};
+export type ConnectorAuthNone = { type: "none" };
+export type ConnectorAuth =
+    | ConnectorAuthOAuth
+    | ConnectorAuthApiKey
+    | ConnectorAuthNone;
 
-/**
- * Catalog / list auth — no secrets. Host extends / narrows via `TType`.
- */
-export interface ConnectorAuthPublic<
-    TType extends ConnectorAuthType = ConnectorAuthType,
-> {
-    type: TType;
+// Public (list/detail) — no secrets; oauth requires authUrl
+export type ConnectorAuthPublicOAuth = { type: "oauth"; authUrl: string };
+export type ConnectorAuthPublicApiKey = {
+    type: "apiKey";
     headerName?: string;
-}
+};
+export type ConnectorAuthPublicNone = { type: "none" };
+export type ConnectorAuthPublic =
+    | ConnectorAuthPublicOAuth
+    | ConnectorAuthPublicApiKey
+    | ConnectorAuthPublicNone;
 
 /**
  * MCP / connector create-edit config. Host extends for extra fields, etc.
@@ -457,6 +459,8 @@ export interface ConnectorBase<
     description: string;
     url: string;
     auth: TAuth;
+    /** When true, UI should not show Disconnect. */
+    requiresAuth: boolean;
     authenticated: boolean;
     tools: TTool[];
 }
@@ -500,7 +504,10 @@ export interface ConnectorCatalogServer<
     createConnector(req: TCreate): Promise<TConnector>;
     /** Full replace update keyed by connector `id`. */
     updateConnector(req: TUpdate): Promise<TConnector>;
-    /** Start connector auth (e.g. OAuth). Host may widen return with `authUrl`. */
+    /**
+     * Start connector auth (e.g. OAuth).
+     * For oauth, the returned connector's `auth.authUrl` is the authorize URL.
+     */
     authenticateConnector(req: { id: string }): Promise<TConnector>;
     /** Clear connector auth. */
     disconnectConnector(req: { id: string }): Promise<TConnector>;

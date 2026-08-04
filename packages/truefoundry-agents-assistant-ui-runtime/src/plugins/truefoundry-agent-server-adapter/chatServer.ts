@@ -258,7 +258,7 @@ export function createTrueFoundryChatServer<
             return toSession<TSpec>(raw);
         },
 
-        prepareAndExecuteTurn(req: {
+        createTurn(req: {
             sessionId: string;
             input?: TurnInputItem[];
             previousTurnId?: PreviousTurnIdInput;

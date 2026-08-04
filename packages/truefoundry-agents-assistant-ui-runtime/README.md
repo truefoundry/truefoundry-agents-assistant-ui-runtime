@@ -207,7 +207,7 @@ const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
 
 ## Server port (`AgentChatServer`)
 
-The runtime never holds credentials. It accepts any object implementing `AgentChatServer` — a flat, stateless port with methods like `createSession`, `listSessions`, `prepareAndExecuteTurn`, etc.
+The runtime never holds credentials. It accepts any object implementing `AgentChatServer` — a flat, stateless port with methods like `createSession`, `listSessions`, `createTurn`, etc.
 
 **First-party:** use [`createTrueFoundryAgentUIServer`](#truefoundry-agent-ui-server-plugin) (requires `truefoundry-gateway-sdk`). Chat-only: `createTrueFoundryChatServer`.
 
@@ -229,7 +229,7 @@ const server: AgentChatServer = {
   updateSession: async (req) => {
     /* … */
   },
-  prepareAndExecuteTurn: (req) => {
+  createTurn: (req) => {
     /* return AsyncIterable<TurnStreamData> */
   },
   cancelSession: async (req) => {

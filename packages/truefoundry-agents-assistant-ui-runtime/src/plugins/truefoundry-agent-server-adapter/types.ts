@@ -123,7 +123,7 @@ export interface TfyListSessionsParams extends ListSessionsParams {
 // Event-side types.
 //
 // These do NOT flow through AgentChatServer — its listEvents / listTurnEvents /
-// subscribeToTurn / prepareAndExecuteTurn signatures hardcode the runtime's
+// subscribeToTurn / createTurn signatures hardcode the runtime's
 // event types with no generic to override. Hosts narrow at the point of use
 // with the guards in `guards.ts`.
 // ---------------------------------------------------------------------------
