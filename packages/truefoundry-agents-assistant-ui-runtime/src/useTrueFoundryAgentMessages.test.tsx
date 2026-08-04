@@ -46,6 +46,7 @@ vi.mock("./convertTurnMessages.js", async (importOriginal) => {
 
 const mockServer = {
     cancelSession: vi.fn().mockResolvedValue(undefined),
+    listTurns: vi.fn(),
 } as unknown as AgentChatServer;
 
 function snapshotWithAssistantMessage(
@@ -279,6 +280,7 @@ describe("useTrueFoundryAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(mockServer.cancelSession).mockResolvedValue(undefined);
+        vi.mocked(mockServer.listTurns).mockResolvedValue({ data: [] });
         vi.mocked(loadSessionSnapshot).mockResolvedValue(createEmptySessionSnapshot());
         vi.mocked(streamTurnContent).mockReturnValue(singleUpdateStream());
         vi.mocked(resumeTurnStream).mockReturnValue(singleUpdateStream());
@@ -299,13 +301,15 @@ describe("useTrueFoundryAgentMessages", () => {
     });
 
     it("loads the initial URL session before it is marked as the main thread", async () => {
-        renderHook(() =>
-            useTrueFoundryAgentMessages({
-                server: mockServer,
-                sessionId: "session-from-url",
-                isMain: false,
-                isInitialSession: true,
-            }),
+        const { rerender } = renderHook(
+            ({ isMain }: { isMain: boolean }) =>
+                useTrueFoundryAgentMessages({
+                    server: mockServer,
+                    sessionId: "session-from-url",
+                    isMain,
+                    isInitialSession: true,
+                }),
+            { initialProps: { isMain: false } },
         );
 
         await waitFor(() =>
@@ -315,6 +319,14 @@ describe("useTrueFoundryAgentMessages", () => {
                 expect.any(Function),
             ),
         );
+
+        rerender({ isMain: true });
+        await act(async () => Promise.resolve());
+        expect(loadSessionSnapshot).toHaveBeenCalledTimes(1);
+
+        rerender({ isMain: false });
+        rerender({ isMain: true });
+        await waitFor(() => expect(loadSessionSnapshot).toHaveBeenCalledTimes(2));
     });
 
     it("does not load an inactive background thread", async () => {
@@ -532,6 +544,21 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("editFromTurn drops prior turns before showing the edited user message", async () => {
         const createdAt = new Date().toISOString();
+        vi.mocked(mockServer.listTurns).mockResolvedValue({
+            data: [
+                {
+                    id: "turn-1",
+                    sessionId: "session-1",
+                    createdAt,
+                    state: {
+                        status: "done",
+                        requiredActions: [],
+                        completedAt: createdAt,
+                    },
+                    input: [{ type: "user.message", content: "Hello" }],
+                } as Turn,
+            ],
+        });
         const fold = new PeerThreadFoldState();
         ingestTurnEvent(fold, {
             type: "model.message",
@@ -625,6 +652,47 @@ describe("useTrueFoundryAgentMessages", () => {
         await act(async () => {
             releaseStream?.();
             await editPromise!;
+        });
+    });
+
+    it("restores history when edit fails before turn.created", async () => {
+        const createdAt = new Date().toISOString();
+        const original = snapshotWithUserTurn("Hello");
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(original);
+        vi.mocked(mockServer.listTurns).mockResolvedValue({
+            data: [
+                {
+                    id: "turn-1",
+                    sessionId: "session-1",
+                    createdAt,
+                    state: {
+                        status: "done",
+                        requiredActions: [],
+                        completedAt: createdAt,
+                    },
+                    input: [{ type: "user.message", content: "Hello" }],
+                } as Turn,
+            ],
+        });
+        vi.mocked(streamTurnContent).mockImplementation(async function* () {
+            throw new Error("Turn preparation failed");
+        });
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        await act(async () => {
+            await expect(
+                result.current.editFromTurn("turn-1", "Edited"),
+            ).rejects.toThrow("Turn preparation failed");
+        });
+
+        expect(result.current.messages).toHaveLength(1);
+        expect(result.current.messages[0]).toMatchObject({
+            role: "user",
+            content: [{ type: "text", text: "Hello" }],
         });
     });
 

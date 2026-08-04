@@ -87,6 +87,8 @@ export type SendTurnOptions =
            * keep pre-branch turns while the new user message is appended.
            */
           branchFromSnapshot?: SessionSnapshot;
+          /** Original history restored when a branch fails before turn.created. */
+          branchRollbackSnapshot?: SessionSnapshot;
       }
     | { inputs: RequiredActionInput[] }
     | { resumeMcpAuth: true };
@@ -328,6 +330,8 @@ export function useTrueFoundryAgentMessages({
     const loadGenerationRef = useRef(0);
     const streamGenerationRef = useRef(0);
     const lazilyCreatedSessionIdRef = useRef<string | undefined>(undefined);
+    const initialLoadStartedForRef = useRef<string | undefined>(undefined);
+    const skipInitialPromotionLoadForRef = useRef<string | undefined>(undefined);
 
     const projectOptions = useMemo(
         () => ({
@@ -477,11 +481,26 @@ export function useTrueFoundryAgentMessages({
             return;
         }
 
-        // Thread components are never unmounted on navigation — isMain going
-        // false→true is the only reliable signal that the user has clicked on
-        // this thread.  Skip the load when this thread is not the active one
-        // so that isMain being a dep triggers a fresh load on every selection.
-        if (isMain === false && isInitialSession !== true) return;
+        // Allow the URL-selected session one early load before assistant-ui marks
+        // it main. Suppress only that first promotion; later selections still reload.
+        const isEarlyInitialLoad =
+            isMain === false &&
+            isInitialSession === true &&
+            initialLoadStartedForRef.current !== sessionId;
+        if (isMain === false) {
+            if (!isEarlyInitialLoad) return;
+            initialLoadStartedForRef.current = sessionId;
+            skipInitialPromotionLoadForRef.current = sessionId;
+        } else if (
+            isMain === true &&
+            skipInitialPromotionLoadForRef.current === sessionId
+        ) {
+            skipInitialPromotionLoadForRef.current = undefined;
+            return;
+        }
+        if (isInitialSession === true) {
+            initialLoadStartedForRef.current = sessionId;
+        }
 
         // When we are loading a *different* session the user has navigated away
         // from the lazily-created one — clear the guard so navigating back to it
@@ -557,6 +576,9 @@ export function useTrueFoundryAgentMessages({
             }
         } catch (error) {
             if (generation === loadGenerationRef.current) {
+                if (isEarlyInitialLoad) {
+                    skipInitialPromotionLoadForRef.current = undefined;
+                }
                 onErrorRef.current?.(error);
             }
             throw error;
@@ -754,7 +776,17 @@ export function useTrueFoundryAgentMessages({
                 );
             } catch (error) {
                 if ("userMessage" in options && !gatewayTurnAccepted) {
-                    if (pendingUserWasSet) {
+                    const branchRollbackSnapshot =
+                        options.branchRollbackSnapshot;
+                    const canRestoreBranch =
+                        branchRollbackSnapshot != null &&
+                        (snapshotRef.current === options.branchFromSnapshot ||
+                            snapshotRef.current.pendingUser?.turnId ===
+                                pendingUserTurnId);
+                    if (canRestoreBranch) {
+                        snapshotRef.current = branchRollbackSnapshot;
+                        setSnapshot(branchRollbackSnapshot);
+                    } else if (pendingUserWasSet) {
                         const clearPendingUser = (
                             previous: SessionSnapshot,
                         ): SessionSnapshot => {
@@ -916,6 +948,7 @@ export function useTrueFoundryAgentMessages({
                 userMessage,
                 previousTurnId,
                 branchFromSnapshot: rewound,
+                branchRollbackSnapshot: committed,
             });
         },
         [
