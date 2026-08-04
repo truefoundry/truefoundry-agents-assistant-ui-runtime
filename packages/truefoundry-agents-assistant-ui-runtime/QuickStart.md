@@ -16,24 +16,24 @@ pnpm --filter "@truefoundry/assistant-ui-runtime" build
 pnpm --filter assistant-ui-vite dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and enter your credentials in the first-load form (stored in `localStorage`):
+Open [http://localhost:5173](http://localhost:5173). Copy `examples/assistant-ui-vite/.env.example` to `.env` and set:
 
 | Field | Example |
 |-------|---------|
-| API key | Your TrueFoundry PAT |
-| Gateway URL | Your TrueFoundry Gateway URL |
-| Agent name | A saved agent name, e.g. `my-agent` |
-
-Prefer to keep credentials in a local env file rather than the form? Drop a `.env.local` in `examples/assistant-ui-vite` (gitignored) and copy the values into the first-load form:
+| `VITE_TFY_API_KEY` | Your TrueFoundry PAT (same bearer for CP + gateway) |
+| `VITE_TFY_CP_URL` | Control Plane base URL |
+| `VITE_TFY_GATEWAY_URL` | Optional gateway override |
+| `VITE_TFY_AGENT_NAME` | Optional — omit for Agents Library / draft |
 
 ```bash
-# examples/assistant-ui-vite/.env.local
+# examples/assistant-ui-vite/.env
 VITE_TFY_API_KEY=your_truefoundry_pat
-VITE_TFY_GATEWAY_URL=https://your-gateway-url
-VITE_TFY_AGENT_NAME=my-agent
+VITE_TFY_CP_URL=https://your-control-plane
+# VITE_TFY_GATEWAY_URL=https://gateway.truefoundry.ai/<tenant>
+# VITE_TFY_AGENT_NAME=my-agent
 ```
 
-> The demo reads credentials from `localStorage` (populated by the first-load form), so these values aren't auto-loaded — the file just keeps them handy in one place.
+In dev, Vite proxies `/api/svc`, `/api/ml`, and `/api/llm` to `VITE_TFY_CP_URL` so browser CP calls avoid CORS.
 
 Adapt what you see in `examples/assistant-ui-vite` when integrating into your own project, then skip ahead to [Next steps](#next-steps) to start adding features.
 

@@ -136,8 +136,15 @@ export { isEventDelta, mergeEventDelta } from "./server/index.js";
 
 export {
     createTrueFoundryChatServer,
+    createTrueFoundryAgentUIServer,
     type CreateTrueFoundryChatServerOptions,
     type TrueFoundryChatServer,
+    type CreateTrueFoundryAgentUIServerOptions,
+    type TrueFoundryAgentUIServer,
+    type TfyModelSelectorEntry,
+    type TfySkillSelectorEntry,
+    type TfyConnectorSelectorEntry,
+    type TfyAgentSelectorEntry,
     type TfyAgentSpec,
     type TfySkillMount,
     type TfyMcpServerMount,

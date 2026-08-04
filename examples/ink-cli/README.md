@@ -1,5 +1,5 @@
 # examples/ink-cli
-A terminal chat app that demonstrates [`@truefoundry/assistant-ui-runtime`](../../packages/truefoundry-agents-assistant-ui-runtime) wired to a live TrueFoundry Gateway agent, rendered with [Ink](https://github.com/vadimdemedes/ink) (`@assistant-ui/react-ink`).
+A terminal chat app that demonstrates [`@truefoundry/assistant-ui-runtime`](../../packages/truefoundry-agents-assistant-ui-runtime) wired via `createTrueFoundryAgentUIServer`, rendered with [Ink](https://github.com/vadimdemedes/ink) (`@assistant-ui/react-ink`).
 
 This shows that the same runtime works across frontends — swap the Ink primitives for React DOM or React Native and nothing in the runtime layer changes.
 
@@ -52,18 +52,20 @@ For the authoritative list of runtime-level gaps (shared across all frontends), 
    ```bash
    # from repo root
    TFY_API_KEY=your-api-key \
+   TFY_CP_URL=https://your-control-plane \
    TFY_GATEWAY_URL=https://gateway.truefoundry.ai/<your-tenant> \
-   TFY_AGENT_NAME=your-agent-name \
    pnpm dev:ink
    # or, scoped from this directory:
-   TFY_API_KEY=... TFY_GATEWAY_URL=... pnpm dev
+   TFY_API_KEY=... TFY_CP_URL=... pnpm dev
    ```
-   `TFY_AGENT_NAME` is optional and defaults to `my-agent`.
+   - `TFY_API_KEY` / `TFY_CP_URL` are required (same bearer for CP + gateway).
+   - `TFY_GATEWAY_URL` is optional — when omitted, resolved via CP `/session`.
+   - `TFY_AGENT_NAME` is optional — when omitted, starts a draft session with the first enabled CP model.
 3. **Chat.** Type a message and press **Enter** to send. Press **Ctrl+C** to exit.
 ## Key files
 | File | Role |
 |------|------|
-| `src/index.tsx` | Entry point — `render(<App />)` |
-| `src/app.tsx` | Reads env vars, creates `AgentSessionClient`, wires `useTrueFoundryAgentRuntime` and `AssistantRuntimeProvider` |
+| `src/index.tsx` | Entry — awaits full pack server, then `render(<App />)` |
+| `src/app.tsx` | Env + `createTrueFoundryAgentUIServer`, named or draft agent, Ink runtime |
 | `src/components/thread.tsx` | Ink UI — messages, composer, loading spinner, tool call display |
 

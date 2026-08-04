@@ -1,4 +1,5 @@
 import { render } from "ink";
-import { App } from "./app.js";
+import { App, createAppServer } from "./app.js";
 
-render(<App />);
+const { server, agent, label } = await createAppServer();
+render(<App server={server} agent={agent} label={label} />);
