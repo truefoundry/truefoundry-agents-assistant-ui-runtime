@@ -408,12 +408,12 @@ export interface ToolBase {
 }
 
 /** Strict auth type id. Hosts widen branches via intersection + re-union. */
-export type ConnectorAuthType = "oauth" | "apiKey" | "none";
+export type ConnectorAuthType = "dcr" | "header" | "none";
 
 // Write (create/update) — export branches so hosts can intersect extras
-export type ConnectorAuthOAuth = { type: "oauth"; authUrl?: string };
+export type ConnectorAuthOAuth = { type: "dcr"; authUrl?: string };
 export type ConnectorAuthApiKey = {
-    type: "apiKey";
+    type: "header";
     apiKey?: string;
     headerName?: string;
 };
@@ -423,10 +423,10 @@ export type ConnectorAuth =
     | ConnectorAuthApiKey
     | ConnectorAuthNone;
 
-// Public (list/detail) — no secrets; oauth requires authUrl
-export type ConnectorAuthPublicOAuth = { type: "oauth"; authUrl: string };
+// Public (list/detail) — no secrets; dcr requires authUrl
+export type ConnectorAuthPublicOAuth = { type: "dcr"; authUrl: string };
 export type ConnectorAuthPublicApiKey = {
-    type: "apiKey";
+    type: "header";
     headerName?: string;
 };
 export type ConnectorAuthPublicNone = { type: "none" };
