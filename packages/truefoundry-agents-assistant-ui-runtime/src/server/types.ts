@@ -520,22 +520,19 @@ export interface ConnectorCatalogServer<
 // Skills catalog — FE-minimal settings DTOs (host extends via generics)
 // ---------------------------------------------------------------------------
 
-export type SkillType = "registry" | "github"; // TODO: Do not add this and remove from the UI as well
-
 /** Skill row shown in settings/skills (list + delete). Host extends for fqn, etc. */
-export interface SkillBase<TType extends SkillType = SkillType> {
+export interface SkillBase {
     id: string;
     name: string;
     description: string;
-    type: TType;
 }
 
-export interface RegistrySkill extends SkillBase<"registry"> {
+export interface RegistrySkill extends SkillBase {
     /** `SkillCatalogEntry.id` this skill was created from. */
     catalogId: string;
 }
 
-export interface GithubSkill extends SkillBase<"github"> {}
+export interface GithubSkill extends SkillBase {}
 
 export type DefinedSkill = RegistrySkill | GithubSkill;
 
@@ -552,21 +549,15 @@ export interface SkillCatalogEntry extends SkillConfigBase {
     id: string;
 }
 
-/** Create-skill branches. Hosts may intersect extra fields and re-union. */
-export interface CreateSkillRequestBase<
-    TType extends SkillType = SkillType,
-> extends SkillConfigBase {
-    type: TType;
-}
+/** Create-skill base. Hosts may intersect extra fields and re-union. */
+export interface CreateSkillRequestBase extends SkillConfigBase {}
 
-export interface SelectRegistrySkillRequest
-    extends CreateSkillRequestBase<"registry"> {
+export interface SelectRegistrySkillRequest extends CreateSkillRequestBase {
     /** `SkillCatalogEntry.id`, persisted so the created skill links back to it. */
     catalogId: string;
 }
 
-export interface ImportGithubSkillRequest
-    extends CreateSkillRequestBase<"github"> {}
+export interface ImportGithubSkillRequest extends CreateSkillRequestBase {}
 
 export type CreateSkillRequest =
     | SelectRegistrySkillRequest

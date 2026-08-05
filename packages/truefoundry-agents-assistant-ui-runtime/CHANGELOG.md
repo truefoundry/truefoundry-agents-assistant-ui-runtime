@@ -5,7 +5,7 @@
 ### Added
 
 - **Sandboxes catalog** — new `SandboxCatalogServer` port and DTOs (`SandboxConfig`, `SandboxCatalogEntry`, `SandboxBase`, `CreateSandboxRequest`, `UpdateSandboxRequest`). Exposed as the optional `CatalogServer.sandboxCatalog` sub-port. `SandboxConfig` holds the mutable settings (`snapshotName`, `execTimeoutMs`, `autoStopIntervalInMinutes`, `autoArchiveIntervalInMinutes`, `autoDeleteIntervalInMinutes`) shared by catalog rows, create, and update; create adds `apiKey`.
-- **Skills catalog** — `SkillCatalogServer.getSkillCatalog()` plus registry/github skill DTOs (`SkillType`, `RegistrySkill`, `GithubSkill`, `DefinedSkill`, `SkillConfigBase`, `SkillCatalogEntry`, `CreateSkillRequestBase`, `SelectRegistrySkillRequest`, `ImportGithubSkillRequest`). `SkillBase` is now generic over `SkillType`.
+- **Skills catalog** — `SkillCatalogServer.getSkillCatalog()` plus registry/github skill DTOs (`RegistrySkill`, `GithubSkill`, `DefinedSkill`, `SkillConfigBase`, `SkillCatalogEntry`, `CreateSkillRequestBase`, `SelectRegistrySkillRequest`, `ImportGithubSkillRequest`). Registry vs github is distinguished by `catalogId` presence, not a `type` field.
 - **`ModelSelectorEntry.reasoningEfforts?: string[]`** and **`ToolBase.description: string`**.
 
 ## 0.1.8

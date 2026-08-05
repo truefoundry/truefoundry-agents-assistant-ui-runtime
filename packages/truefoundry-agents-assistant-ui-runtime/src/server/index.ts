@@ -55,7 +55,6 @@ export type {
     CreateConnectorRequest,
     UpdateConnectorRequest,
     ConnectorCatalogServer,
-    SkillType,
     SkillBase,
     RegistrySkill,
     GithubSkill,
