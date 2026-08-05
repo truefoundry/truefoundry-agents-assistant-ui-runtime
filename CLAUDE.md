@@ -54,7 +54,7 @@ cd packages/truefoundry-agents-assistant-ui-runtime
 npx vitest run src/toolApproval.test.ts
 ```
 
-The demo app needs credentials (API key, gateway URL, agent name) entered into its first-load form, which stores them in `localStorage` — see `examples/assistant-ui-vite/README.md`.
+The demo app needs credentials in `.env` (`VITE_TFY_API_KEY`, `VITE_TFY_CP_URL`; optional `VITE_TFY_GATEWAY_URL`, `VITE_TFY_AGENT_NAME`) — see `examples/assistant-ui-vite/README.md`.
 
 ## Architecture
 

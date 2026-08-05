@@ -30,12 +30,13 @@ pnpm dev
 # → http://localhost:5173
 ```
 
-On first load, enter your credentials in the form (stored in `localStorage`):
+Set credentials in `examples/assistant-ui-vite/.env` (see `.env.example`):
 
 ```
-API key      your TrueFoundry API key
-Gateway URL  https://gateway.truefoundry.ai/<your-tenant>
-Agent name   a saved agent name, e.g. my-agent
+VITE_TFY_API_KEY      your TrueFoundry API key
+VITE_TFY_CP_URL       Control Plane base URL
+VITE_TFY_GATEWAY_URL  optional gateway override
+VITE_TFY_AGENT_NAME   optional — omit for Agents Library / draft
 ```
 
 ## Using the package in your own app

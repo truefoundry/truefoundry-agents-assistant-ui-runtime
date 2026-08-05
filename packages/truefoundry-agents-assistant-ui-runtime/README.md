@@ -53,14 +53,15 @@ The fastest path is a TrueFoundry gateway server + the runtime hook + your Threa
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
-  createTrueFoundryChatServer,
+  createTrueFoundryAgentUIServer,
   useTrueFoundryAgentRuntime,
 } from "@truefoundry/assistant-ui-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 
-const server = createTrueFoundryChatServer({
+const server = await createTrueFoundryAgentUIServer({
   apiKey: process.env.TFY_API_KEY!,
-  baseUrl: process.env.TFY_GATEWAY_URL!,
+  cpURL: process.env.TFY_CP_URL!,
+  // gatewayURL: process.env.TFY_GATEWAY_URL, // optional
 });
 
 export function MyAssistant() {
@@ -206,9 +207,9 @@ const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
 
 ## Server port (`AgentChatServer`)
 
-The runtime never holds credentials. It accepts any object implementing `AgentChatServer` — a flat, stateless port with methods like `createSession`, `listSessions`, `prepareAndExecuteTurn`, etc.
+The runtime never holds credentials. It accepts any object implementing `AgentChatServer` — a flat, stateless port with methods like `createSession`, `listSessions`, `createTurn`, etc.
 
-**First-party:** use [`createTrueFoundryChatServer`](#truefoundry-gateway-plugin) (requires `truefoundry-gateway-sdk`).
+**First-party:** use [`createTrueFoundryAgentUIServer`](#truefoundry-agent-ui-server-plugin) (requires `truefoundry-gateway-sdk`). Chat-only: `createTrueFoundryChatServer`.
 
 **Your own backend:**
 
@@ -228,7 +229,7 @@ const server: AgentChatServer = {
   updateSession: async (req) => {
     /* … */
   },
-  prepareAndExecuteTurn: (req) => {
+  createTurn: (req) => {
     /* return AsyncIterable<TurnStreamData> */
   },
   cancelSession: async (req) => {
@@ -250,22 +251,24 @@ const server: AgentChatServer = {
 
 ---
 
-## TrueFoundry gateway plugin
+## TrueFoundry agent UI server plugin
 
-`createTrueFoundryChatServer` wraps `truefoundry-gateway-sdk` into an `AgentChatServer`. Import from the main entry or the isolated subpath (no React):
+`createTrueFoundryAgentUIServer` builds gateway chat + Control Plane builder lists from `{ apiKey, cpURL, gatewayURL? }`. Same bearer for CP and gateway.
 
 ```tsx
-import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime";
+import { createTrueFoundryAgentUIServer } from "@truefoundry/assistant-ui-runtime";
 // or
-import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter";
+import { createTrueFoundryAgentUIServer } from "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter";
 
-const server = createTrueFoundryChatServer({
+const server = await createTrueFoundryAgentUIServer({
   apiKey: process.env.TFY_API_KEY!,
-  baseUrl: process.env.TFY_GATEWAY_URL!,
+  cpURL: process.env.TFY_CP_URL!,
 });
 ```
 
-See the [plugin README](./src/plugins/truefoundry-agent-server-adapter/README.md) for options, named vs draft routing, `Tfy*` types, type guards, and host-spec extension.
+Chat-only escape hatch: `createTrueFoundryChatServer({ apiKey, baseUrl })`.
+
+See the [plugin README](./src/plugins/truefoundry-agent-server-adapter/README.md) for gateway URL resolution, builder CP paths, `Tfy*` types, and host-spec extension.
 
 ---
 
@@ -274,7 +277,8 @@ See the [plugin README](./src/plugins/truefoundry-agent-server-adapter/README.md
 | Export | Kind | Purpose |
 | ------ | ---- | ------- |
 | `useTrueFoundryAgentRuntime` | Hook | Root runtime — wires external-store + thread list |
-| `createTrueFoundryChatServer` | Function | TrueFoundry gateway → `AgentChatServer` (also via plugin subpath) |
+| `createTrueFoundryAgentUIServer` | Function | Full pack: gateway chat + CP builder (also via plugin subpath) |
+| `createTrueFoundryChatServer` | Function | Chat-only gateway → `AgentChatServer` |
 | `trueFoundryAttachmentAdapter` | Adapter | Opt-in composer attachments |
 | `trueFoundryExtras` | Namespace | Low-level extras access |
 | `useTrueFoundryApprovals` / `ToolResponses` / `McpAuth` / … | Hooks | Pending state + actions |
@@ -298,7 +302,7 @@ For contributors working inside this package. Source lives in `src/`; the publis
 | `truefoundryExtras.ts` / `hooks.ts` | Extras namespace + consumer hooks |
 | `convertTurnMessages.ts` | Pure projection from snapshot → thread messages |
 | `foldPeerThreads.ts` | Nest peer/sub-agent threads under spawning tool calls |
-| `plugins/truefoundry-agent-server-adapter/` | Gateway SDK → `AgentChatServer` |
+| `plugins/truefoundry-agent-server-adapter/` | Gateway chat + CP builder → `AgentUIServerPort` |
 
 ### Invariants
 

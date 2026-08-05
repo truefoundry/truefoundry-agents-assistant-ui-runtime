@@ -2,7 +2,7 @@
  * Point-of-use narrowing for the event half of the gateway protocol.
  *
  * `AgentChatServer` hardcodes the runtime's event types on listEvents,
- * listTurnEvents, subscribeToTurn and prepareAndExecuteTurn — there is no
+ * listTurnEvents, subscribeToTurn and createTurn — there is no
  * generic to override them from here. So instead of typing those channels,
  * hosts call these guards on the values they receive.
  *

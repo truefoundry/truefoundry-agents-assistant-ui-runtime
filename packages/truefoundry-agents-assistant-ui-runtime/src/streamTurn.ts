@@ -18,7 +18,7 @@ export type StreamTurnOptions = {
     resumeMcpAuth?: boolean;
     inputs?: RequiredActionInput[];
     /**
-     * Branch anchor for prepareAndExecuteTurn. Omit for `"auto"`. Pass `"none"` for a fresh
+     * Branch anchor for createTurn. Omit for `"auto"`. Pass `"none"` for a fresh
      * root turn.
      */
     previousTurnId?: PreviousTurnIdInput;
@@ -79,7 +79,7 @@ export async function* streamTurnContent(
         }
     };
 
-    const stream: AsyncIterable<TurnStreamData> = server.prepareAndExecuteTurn({
+    const stream: AsyncIterable<TurnStreamData> = server.createTurn({
         sessionId,
         input: buildTurnInput(options),
         previousTurnId: options.previousTurnId ?? "auto",

@@ -63,7 +63,10 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
         async rename() {},
         async archive() {},
         async unarchive() {},
-        async delete() {},
+        async delete(remoteId) {
+            if (typeof server.deleteSession !== "function") return;
+            await server.deleteSession({ sessionId: remoteId });
+        },
 
         async generateTitle() {
             return new ReadableStream();

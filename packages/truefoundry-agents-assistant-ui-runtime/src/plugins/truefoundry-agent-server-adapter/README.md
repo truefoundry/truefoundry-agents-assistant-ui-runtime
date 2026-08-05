@@ -1,8 +1,11 @@
 # truefoundry-agent-server-adapter
 
-A gateway plugin that wraps [`truefoundry-gateway-sdk`](https://www.npmjs.com/package/truefoundry-gateway-sdk) into an [`AgentChatServer`](../../README.md#server-port-agentchatserver) for `@truefoundry/assistant-ui-runtime`.
+TrueFoundry **agent UI server** for `@truefoundry/assistant-ui-runtime`: gateway chat + Control Plane builder lists.
 
-Named vs draft session routing is internal — you pass `apiKey` / `baseUrl` (or pre-built clients) and get a flat server the runtime can call.
+- **Preferred:** `createTrueFoundryAgentUIServer` — chat + builder from `{ apiKey, cpURL, gatewayURL? }`
+- **Chat-only escape hatch:** `createTrueFoundryChatServer` — gateway sessions only (CLI / tests)
+
+The same API key bearer is used for Control Plane and gateway.
 
 ### Used by the [runtime Quick start](../../README.md#quick-start)
 
@@ -11,8 +14,11 @@ Named vs draft session routing is internal — you pass `apiKey` / `baseUrl` (or
 ## Table of contents
 
 - [Installation](#installation)
-- [Quick start](#quick-start)
-- [`createTrueFoundryChatServer` options](#createtruefoundrychatserver-options)
+- [Quick start (full pack)](#quick-start-full-pack)
+- [`createTrueFoundryAgentUIServer` options](#createtruefoundryagentuiserver-options)
+- [Gateway URL resolution](#gateway-url-resolution)
+- [Builder methods](#builder-methods)
+- [Chat-only: `createTrueFoundryChatServer`](#chat-only-createtruefoundrychatserver)
 - [Named vs draft sessions](#named-vs-draft-sessions)
 - [Types & guards](#types--guards)
 - [Extending `TfyAgentSpec`](#extending-tfyagentspec)
@@ -37,44 +43,82 @@ yarn add @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk
 
 ---
 
-## Quick start
+## Quick start (full pack)
+
+```tsx
+import { createTrueFoundryAgentUIServer } from "@truefoundry/assistant-ui-runtime";
+// Isolated import (no React):
+// import { createTrueFoundryAgentUIServer } from "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter";
+
+const server = await createTrueFoundryAgentUIServer({
+  apiKey: process.env.TFY_API_KEY!,
+  cpURL: process.env.TFY_CP_URL!,
+  // gatewayURL: process.env.TFY_GATEWAY_URL, // optional
+});
+
+// Pass `server` to TrueFoundryAssistantUI / useTrueFoundryAgentRuntime
+```
+
+Returns `TrueFoundryAgentUIServer` = `AgentChatServer` & `AgentBuilderServer` (no settings `catalog`). Concurrent calls with the same credentials share one in-flight promise.
+
+---
+
+## `createTrueFoundryAgentUIServer` options
+
+| Option | Type | Required | Description |
+| ------ | ---- | -------- | ----------- |
+| `apiKey` | `string` | ✅ | Bearer for CP and gateway (same PAT) |
+| `cpURL` | `string` | ✅ | Control Plane base URL (builder lists + optional `/session`) |
+| `gatewayURL` | `string` | — | Gateway base URL; when omitted, resolved via CP session (see below) |
+
+---
+
+## Gateway URL resolution
+
+1. If `gatewayURL` is set → use it (no `/session` call)
+2. Else `GET {cpURL}/api/svc/v1/session` → `{cpURL}{env.LLM_GATEWAY_URL ?? "/api/llm"}/{tenantName}`
+3. If session fails or `tenantName` is missing → **throws** (no silent public-gateway fallback)
+
+Pass a public gateway explicitly when needed, e.g. `https://gateway.truefoundry.ai/<tenant>`.
+
+---
+
+## Builder methods
+
+Implemented against Control Plane HTTP (not the gateway SDK):
+
+| Method | CP path |
+| ------ | ------- |
+| `getModels` | `GET /api/svc/v1/llm-gateway/model/enabled` |
+| `getSkills` | `GET /api/ml/v1/agent-skills?include_empty_agent_skills=false` |
+| `getMcp` | `GET /api/svc/v1/mcp-servers` |
+| `searchAgents` | `GET /api/svc/v1/agents?type=truefoundry-agent&…` |
+| `saveAgent` | `PUT /api/svc/v1/agents` (`{ manifest }`, upsert by name) |
+
+Selector rows include TFY mount fields (`apiModel`, skill `fqn`, `mcpName`).
+
+---
+
+## Chat-only: `createTrueFoundryChatServer`
+
+For CLI / tests that only need sessions:
 
 ```tsx
 import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime";
-// Isolated import (no React):
-// import { createTrueFoundryChatServer } from "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter";
 
 const server = createTrueFoundryChatServer({
   apiKey: process.env.TFY_API_KEY!,
   baseUrl: process.env.TFY_GATEWAY_URL!,
 });
-
-// Pass `server` to useTrueFoundryAgentRuntime({ server, agentName })
 ```
-
-That returns a `TrueFoundryChatServer` implementing `AgentChatServer` with concrete `TfySession` / `TfyTurn` types.
-
----
-
-## `createTrueFoundryChatServer` options
 
 | Option | Type | Required | Description |
 | ------ | ---- | -------- | ----------- |
 | `apiKey` | `string` | ✅ | TrueFoundry API key |
 | `baseUrl` | `string` | ✅ | Gateway base URL |
-| `client` | `AgentSessionClient` | — | Override the named-session client (otherwise built from `apiKey` / `baseUrl`) |
+| `client` | `AgentSessionClient` | — | Override the named-session client |
 | `privateClient` | `PrivateAgentSessionClient` | — | Override the draft/private client |
-| `deleteSession` | `(req: { sessionId: string }) => Promise<void>` | — | Optional delete hook — not on the gateway SDK today; pass your own if needed |
-
-```tsx
-const server = createTrueFoundryChatServer({
-  apiKey,
-  baseUrl,
-  // client, privateClient, deleteSession — optional overrides
-});
-```
-
-Escape hatch for hosts that still need raw gateway clients:
+| `deleteSession` | `(req: { sessionId: string }) => Promise<void>` | — | Optional delete hook |
 
 ```tsx
 const { client, privateClient } = server.getGatewayClients();
@@ -93,13 +137,9 @@ Routing is fully internal via an in-memory session-type cache populated by `crea
 
 `updateSession` is only allowed when `session.isMutable === true` (draft). Calling it on a named session throws.
 
-> Ensure `createSession` or `listSessions` ran before `getSession` / turn methods for a given id — the adapter must have cached the session type.
-
 ---
 
 ## Types & guards
-
-The plugin surfaces concrete gateway types for hosts that need them:
 
 ```tsx
 import type {
@@ -108,8 +148,9 @@ import type {
   TfyMcpServerMount,
   TfySession,
   TfyTurn,
-  TfyTurnState,
-  TfyToolInfo,
+  TfyModelSelectorEntry,
+  TfySkillSelectorEntry,
+  TfyConnectorSelectorEntry,
 } from "@truefoundry/assistant-ui-runtime";
 
 import {
@@ -122,8 +163,6 @@ import {
 } from "@truefoundry/assistant-ui-runtime";
 ```
 
-Use the type guards to narrow event fields typed as `unknown` by the runtime.
-
 ---
 
 ## Extending `TfyAgentSpec`
@@ -132,23 +171,20 @@ Only the **spec** is generic. Session / turn / list-params stay as concrete `Tfy
 
 ```tsx
 import {
-  createTrueFoundryChatServer,
+  createTrueFoundryAgentUIServer,
   type TfyAgentSpec,
-  type TrueFoundryChatServer,
+  type TrueFoundryAgentUIServer,
 } from "@truefoundry/assistant-ui-runtime";
 
 interface MySpec extends TfyAgentSpec {
   workspaceId: string;
-  deploymentId: string;
 }
 
-const server: TrueFoundryChatServer<MySpec> = createTrueFoundryChatServer<MySpec>({
-  apiKey,
-  baseUrl,
-});
-
-const session = await server.getSession({ sessionId: "ses_abc" });
-console.log(session.agentSpec?.workspaceId); // string | undefined
+const server: TrueFoundryAgentUIServer<MySpec> =
+  await createTrueFoundryAgentUIServer<MySpec>({
+    apiKey,
+    cpURL,
+  });
 ```
 
 ---
@@ -157,11 +193,14 @@ console.log(session.agentSpec?.workspaceId); // string | undefined
 
 | Export | Kind | Purpose |
 | ------ | ---- | ------- |
-| `createTrueFoundryChatServer` | Function | Build a `TrueFoundryChatServer` from gateway credentials / clients |
-| `CreateTrueFoundryChatServerOptions` | Type | Options bag above |
-| `TrueFoundryChatServer<TSpec>` | Type | `AgentChatServer` + `getGatewayClients()` |
+| `createTrueFoundryAgentUIServer` | Function | Full pack: chat + builder |
+| `CreateTrueFoundryAgentUIServerOptions` | Type | Options bag |
+| `TrueFoundryAgentUIServer<TSpec>` | Type | Chat + builder result |
+| `createTrueFoundryChatServer` | Function | Chat-only escape hatch |
+| `TrueFoundryChatServer<TSpec>` | Type | Chat-only result |
+| `TfyModelSelectorEntry`, … | Types | Builder selector rows |
 | `TfyAgentSpec`, `TfySession`, `TfyTurn`, … | Types | Concrete gateway DTOs |
-| `isTfyToolInfo`, `getTfyUsage`, … | Guards / helpers | Narrow / extract gateway event fields |
+| `isTfyToolInfo`, `getTfyUsage`, … | Guards | Narrow gateway event fields |
 
 Import path:
 
@@ -169,7 +208,7 @@ Import path:
 "@truefoundry/assistant-ui-runtime/plugins/truefoundry-agent-server-adapter"
 ```
 
-(or the main `@truefoundry/assistant-ui-runtime` entry, which re-exports these symbols).
+(or the main `@truefoundry/assistant-ui-runtime` entry).
 
 ---
 
