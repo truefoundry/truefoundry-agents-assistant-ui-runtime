@@ -516,6 +516,10 @@ function attachRunningTurn(
     if (runningTurn == null) {
         return snapshot;
     }
+    // Session-level history excludes the running turn. Apply continuation inputs
+    // from the turn listing so answered approvals / ask-user prompts are not
+    // restored as pending while reconnecting to that turn after a refresh.
+    applyUserToolResponsesToFold(snapshot.fold, runningTurn.input ?? []);
     const pendingUserText = extractTurnUserText(runningTurn.input);
     return replaceSessionSnapshot(snapshot, {
         runningTurn,
