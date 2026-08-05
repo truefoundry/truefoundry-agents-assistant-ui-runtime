@@ -98,4 +98,26 @@ describe("createTrueFoundryThreadListAdapter", () => {
 
         expect(result.nextCursor).toBeUndefined();
     });
+
+    it("delete calls server.deleteSession when implemented", async () => {
+        const deleteSession = vi.fn().mockResolvedValue(undefined);
+        const server = mockServer({ deleteSession });
+        const adapter = createTrueFoundryThreadListAdapter({
+            server,
+            agentName: "my-agent",
+        });
+
+        await adapter.delete("s1");
+
+        expect(deleteSession).toHaveBeenCalledWith({ sessionId: "s1" });
+    });
+
+    it("delete is a no-op when server.deleteSession is missing", async () => {
+        const adapter = createTrueFoundryThreadListAdapter({
+            server: mockServer({}),
+            agentName: "my-agent",
+        });
+
+        await expect(adapter.delete("s1")).resolves.toBeUndefined();
+    });
 });
