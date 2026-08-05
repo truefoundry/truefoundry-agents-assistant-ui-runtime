@@ -600,7 +600,11 @@ export interface SandboxBase {
     isConnected: boolean;
 }
 
-export interface CreateSandboxRequest extends SandboxCatalogEntry {
+export interface CreateSandboxRequest extends SandboxConfig {
+    /** `SandboxCatalogEntry.id` used to create this sandbox. */
+    catalogId: string;
+    name: string;
+    type: string;
     apiKey: string;
 }
 
