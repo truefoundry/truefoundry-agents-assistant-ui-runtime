@@ -18,6 +18,12 @@
 - **`ConnectorBase.requiresAuth: boolean`**  
   Required alongside existing `authenticated`. When `requiresAuth` is true, UI should not show Disconnect.
 
+### Added
+
+- **Sandboxes catalog** — new `SandboxCatalogServer` port and DTOs (`SandboxConfig`, `SandboxCatalogEntry`, `SandboxBase`, `CreateSandboxRequest`, `UpdateSandboxRequest`). Exposed as the optional `CatalogServer.sandboxCatalog` sub-port. `SandboxConfig` holds the mutable settings (`snapshotName`, `execTimeoutMs`, `autoStopIntervalInMinutes`, `autoArchiveIntervalInMinutes`, `autoDeleteIntervalInMinutes`) shared by catalog rows, create, and update; create adds `apiKey`.
+- **Skills catalog** — `SkillCatalogServer.getSkillCatalog()` plus registry/github skill DTOs (`SkillType`, `RegistrySkill`, `GithubSkill`, `DefinedSkill`, `SkillConfigBase`, `SkillCatalogEntry`, `CreateSkillRequestBase`, `SelectRegistrySkillRequest`, `ImportGithubSkillRequest`). `SkillBase` is now generic over `SkillType`.
+- **`ModelSelectorEntry.reasoningEfforts?: string[]`** and **`ToolBase.description: string`**.
+
 ### Notes
 
 - After `authenticateConnector`, OAuth authorize URL is on `connector.auth.authUrl` when `auth.type === "oauth"` (not a separate widened return field).
