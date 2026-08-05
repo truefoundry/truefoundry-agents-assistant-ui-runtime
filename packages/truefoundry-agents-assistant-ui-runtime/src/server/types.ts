@@ -21,6 +21,7 @@ import type {
 export interface ModelSelectorEntry {
     name: string;
     provider: string;
+    reasoningEfforts?: string[];
 }
 
 /** Skill selector row. Host extends for fqn, preload, etc. */
@@ -405,6 +406,7 @@ export interface ModelCatalogServer<
 export interface ToolBase {
     id: string;
     name: string;
+    description: string;
 }
 
 /** Strict auth type id. Hosts widen branches via intersection + re-union. */
@@ -518,41 +520,134 @@ export interface ConnectorCatalogServer<
 // Skills catalog — FE-minimal settings DTOs (host extends via generics)
 // ---------------------------------------------------------------------------
 
+export type SkillType = "registry" | "github"; // TODO: Do not add this and remove from the UI as well
+
 /** Skill row shown in settings/skills (list + delete). Host extends for fqn, etc. */
-export interface SkillBase {
+export interface SkillBase<TType extends SkillType = SkillType> {
     id: string;
     name: string;
     description: string;
+    type: TType;
 }
 
-/** Create-skill request. Host extends for branch, auth, etc. */
-export interface CreateSkillRequest {
-    repo: string;
-    directory: string;
+export interface RegistrySkill extends SkillBase<"registry"> {
+    /** `SkillCatalogEntry.id` this skill was created from. */
+    catalogId: string;
 }
+
+export interface GithubSkill extends SkillBase<"github"> {}
+
+export type DefinedSkill = RegistrySkill | GithubSkill;
+
+/** Git source fields shared by catalog entries and create requests. */
+export interface SkillConfigBase {
+    name: string;
+    description: string;
+    repoURL: string;
+    path: string;
+    ref: string;
+}
+
+export interface SkillCatalogEntry extends SkillConfigBase {
+    id: string;
+}
+
+/** Create-skill branches. Hosts may intersect extra fields and re-union. */
+export interface CreateSkillRequestBase<
+    TType extends SkillType = SkillType,
+> extends SkillConfigBase {
+    type: TType;
+}
+
+export interface SelectRegistrySkillRequest
+    extends CreateSkillRequestBase<"registry"> {
+    /** `SkillCatalogEntry.id`, persisted so the created skill links back to it. */
+    catalogId: string;
+}
+
+export interface ImportGithubSkillRequest
+    extends CreateSkillRequestBase<"github"> {}
+
+export type CreateSkillRequest =
+    | SelectRegistrySkillRequest
+    | ImportGithubSkillRequest;
 
 export interface SkillCatalogServer<
     TSkill extends SkillBase = SkillBase,
+    TCatalogEntry extends SkillCatalogEntry = SkillCatalogEntry,
     TCreate extends CreateSkillRequest = CreateSkillRequest,
 > {
+    getSkillCatalog(): Promise<TCatalogEntry[]>;
     listSkills(req?: { query?: string }): Promise<TSkill[]>;
     createSkill(req: TCreate): Promise<TSkill>;
     deleteSkill?(req: { id: string }): Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// Sandboxes catalog — public rows omit credentials; writes accept them
+// ---------------------------------------------------------------------------
+
+/** Mutable sandbox settings shared by catalog rows, create, and update. */
+export interface SandboxConfig {
+    snapshotName: string;
+    execTimeoutMs: number;
+    autoStopIntervalInMinutes: number;
+    autoArchiveIntervalInMinutes: number;
+    autoDeleteIntervalInMinutes: number;
+}
+
+export interface SandboxCatalogEntry extends SandboxConfig {
+    id: string;
+    name: string;
+    type: string;
+}
+
+export interface SandboxBase {
+    id: string;
+    name: string;
+    catalogId: string;
+    isConnected: boolean;
+}
+
+export interface CreateSandboxRequest extends SandboxCatalogEntry {
+    apiKey: string;
+}
+
+export interface UpdateSandboxRequest extends SandboxConfig {
+    id: string;
+    apiKey: string;
+}
+
+export interface SandboxCatalogServer<
+    TSandbox extends SandboxBase = SandboxBase,
+    TCatalogEntry extends SandboxCatalogEntry = SandboxCatalogEntry,
+    TCreate extends CreateSandboxRequest = CreateSandboxRequest,
+    TUpdate extends UpdateSandboxRequest = UpdateSandboxRequest,
+> {
+    getSandboxCatalog(): Promise<TCatalogEntry[]>;
+    listSandboxes(req?: { query?: string }): Promise<TSandbox[]>;
+    createSandbox(req: TCreate): Promise<TSandbox>;
+    updateSandbox(req: TUpdate): Promise<TSandbox>;
+    deleteSandbox(req: { id: string }): Promise<void>;
+}
+
 /**
- * Settings management aggregate — modelCatalog + connectorCatalog + optional skillCatalog.
+ * Settings management aggregate — modelCatalog + connectorCatalog + optional
+ * skill and sandbox catalogs.
  * Hosts may pass the whole object to an app shell, or a focused sub-port to a page.
  */
 export interface CatalogServer<
     TModelCatalog extends ModelCatalogServer = ModelCatalogServer,
     TConnectorCatalog extends ConnectorCatalogServer = ConnectorCatalogServer,
     TSkillCatalog extends SkillCatalogServer = SkillCatalogServer,
+    TSandboxCatalog extends SandboxCatalogServer = SandboxCatalogServer,
 > {
     modelCatalog: TModelCatalog;
     connectorCatalog: TConnectorCatalog;
     /** Optional — omit when the host has no skills settings surface. */
     skillCatalog?: TSkillCatalog;
+    /** Optional — omit when the host has no sandboxes settings surface. */
+    sandboxCatalog?: TSandboxCatalog;
 }
 
 /**
