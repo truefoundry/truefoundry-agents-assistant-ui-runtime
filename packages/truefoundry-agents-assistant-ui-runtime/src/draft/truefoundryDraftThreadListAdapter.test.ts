@@ -49,6 +49,11 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
                         agentName: "from-sdk",
                         agentSpec: undefined,
                     }),
+                    mockDraft("s2", undefined, "2026-06-30T08:00:00.000Z", {
+                        isMutable: false,
+                        agentName: "untitled-agent",
+                        agentSpec: undefined,
+                    }),
                 ],
                 "page-2",
             ),
@@ -89,6 +94,13 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
                 title: "Named",
                 lastMessageAt: new Date("2026-06-30T09:00:00.000Z"),
                 custom: { agentName: "from-sdk" },
+            },
+            {
+                status: "regular",
+                remoteId: "s2",
+                title: "untitled-agent",
+                lastMessageAt: new Date("2026-06-30T08:00:00.000Z"),
+                custom: { agentName: "untitled-agent" },
             },
         ]);
         expect(result.nextCursor).toBe("page-2");

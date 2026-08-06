@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.10
+
+### Breaking
+
+- **`ListSessionsParams.agentName` → `agentId`**  
+  Thread-list adapters and the TFY chat server forward the optional filter as `agentId`. Hosts that previously keyed list filters by name should pass that same value as `agentId` (or via `listSessionsAgentId` on the runtime / adapters).
+
+- **Draft thread list no longer filters `isMutable` client-side**  
+  `createTrueFoundryDraftThreadListAdapter.list` returns every session from `listSessions`. Title named (immutable) rows with `title → agentName → id`, not the draft model name.
+
+### Added
+
+- **`listSessionsAgentId?: string`** on `useTrueFoundryAgentRuntime` and all three thread-list adapters (`createTrueFoundryThreadListAdapter`, `createTrueFoundryDraftThreadListAdapter`, `createTrueFoundryOwnedSessionsThreadListAdapter`). Omit to list all chats; set to filter `listSessions({ agentId })`.
+- **`AgentSelectorEntry.agentId?` / `agentSpec?`** — CP `normalizeAgents` fills these from agent id + `latestVersionDetails.manifest` so hosts can offer Edit when a published spec is present.
+- **`agentSpecFromCpManifest` / `toCamelCaseDeep`** — map CP AgentManifest (snake_case) → FE `TfyAgentSpec` for Edit seeding, preserving agent `config` and mount `enableTools` / `preload` / `config`.
+- **`sessionDisplayTitle` / `sessionToThreadMetadata`** — shared session → thread-list metadata helpers; named sessions expose `custom.agentName` when present.
+
+### Fixed
+
+- **Edit → Save round-trip** — catalog mounts from CP keep runtime fields; `normalizeMcpMount` / `normalizeSkillMount` forward `enableTools`, `preload`, and `config` so save no longer defaults MCP tools to `@all`, forces skill `preload: false`, or drops config.
+- **Untitled named sessions in draft history** — mixed lists use `sessionDisplayTitle` so immutable rows fall back to `agentName` / `id` instead of `defaultAgentSpec.model.name`.
+
+### Changed
+
+- Bump `@assistant-ui/core` to `^0.2.22` and `@assistant-ui/store` to `^0.2.21`.
+
 ## 0.1.9
 
 ### Added

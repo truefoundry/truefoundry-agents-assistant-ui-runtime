@@ -1,21 +1,13 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 
-import type { AgentChatServer, Session } from "./server/types.js";
-import { draftSessionTitle } from "./draft/agentSpec.js";
+import type { AgentChatServer } from "./server/types.js";
 import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
-import { sessionToThreadMetadata } from "./sessionThreadMetadata.js";
+import {
+    sessionDisplayTitle,
+    sessionToThreadMetadata,
+} from "./sessionThreadMetadata.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
-
-function ownedSessionTitle(session: Session): string {
-    if (session.isMutable && session.agentSpec != null) {
-        return draftSessionTitle({
-            title: session.title,
-            agentSpec: session.agentSpec,
-        });
-    }
-    return session.title ?? session.agentName ?? session.id;
-}
 
 /**
  * Read-only thread-list adapter backed by `AgentChatServer.listSessions`.
@@ -37,7 +29,7 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
                 startTimestamp: sessionListStartTimestamp(),
             });
             const threads = page.data.map((session) =>
-                sessionToThreadMetadata(session, ownedSessionTitle(session)),
+                sessionToThreadMetadata(session, sessionDisplayTitle(session)),
             );
             return {
                 threads,
@@ -53,7 +45,7 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
 
         async fetch(remoteId) {
             const session = await server.getSession({ sessionId: remoteId });
-            return sessionToThreadMetadata(session, ownedSessionTitle(session));
+            return sessionToThreadMetadata(session, sessionDisplayTitle(session));
         },
 
         async rename() {},

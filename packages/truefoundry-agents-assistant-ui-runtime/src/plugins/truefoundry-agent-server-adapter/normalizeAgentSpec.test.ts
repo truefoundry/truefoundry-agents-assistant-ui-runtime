@@ -29,6 +29,24 @@ describe("normalizeMcpMount", () => {
             name: "deepwiki-mcp",
         });
     });
+
+    it("forwards enableTools / preload / config from catalog rows", () => {
+        expect(
+            normalizeMcpMount({
+                id: "gmail",
+                name: "gmail",
+                enableTools: ["@read-only"],
+                preload: true,
+                config: { locale: "en" },
+            }),
+        ).toEqual({
+            type: "truefoundry-mcp-registry",
+            name: "gmail",
+            enableTools: ["@read-only"],
+            preload: true,
+            config: { locale: "en" },
+        });
+    });
 });
 
 describe("normalizeSkillMount", () => {
@@ -55,6 +73,22 @@ describe("normalizeSkillMount", () => {
         ).toEqual({
             type: "truefoundry-skills-registry",
             fqn: "agent-skill:truefoundry/skills/web:1",
+        });
+    });
+
+    it("forwards preload / config from catalog rows, including preload false", () => {
+        expect(
+            normalizeSkillMount({
+                id: "agent-skill:truefoundry/skills/web:1",
+                name: "web",
+                preload: false,
+                config: { timeoutMs: 1000 },
+            }),
+        ).toEqual({
+            type: "truefoundry-skills-registry",
+            fqn: "agent-skill:truefoundry/skills/web:1",
+            preload: false,
+            config: { timeoutMs: 1000 },
         });
     });
 });

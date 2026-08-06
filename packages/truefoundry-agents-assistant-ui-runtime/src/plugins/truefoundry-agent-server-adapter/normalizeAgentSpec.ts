@@ -20,7 +20,7 @@ export function normalizeMcpMount(
         throw new Error("mcpServers entry must be an object");
     }
     if (raw.type === "truefoundry-mcp-registry" || raw.type === "inline") {
-        return raw as TruefoundryGatewayApi.McpServer;
+        return raw as unknown as TruefoundryGatewayApi.McpServer;
     }
     const name =
         (typeof raw.name === "string" && raw.name !== "" ? raw.name : null) ??
@@ -33,7 +33,13 @@ export function normalizeMcpMount(
             "mcpServers entry needs name, mcpName, or id to mount as registry MCP",
         );
     }
-    return { type: "truefoundry-mcp-registry", name };
+    return {
+        type: "truefoundry-mcp-registry",
+        name,
+        ...(Array.isArray(raw.enableTools) ? { enableTools: raw.enableTools } : {}),
+        ...(typeof raw.preload === "boolean" ? { preload: raw.preload } : {}),
+        ...(raw.config != null ? { config: raw.config } : {}),
+    } as unknown as TruefoundryGatewayApi.McpServer;
 }
 
 export function normalizeSkillMount(
@@ -43,7 +49,7 @@ export function normalizeSkillMount(
         throw new Error("skills entry must be an object");
     }
     if (raw.type === "truefoundry-skills-registry" || raw.type === "git") {
-        return raw as TruefoundryGatewayApi.SkillMount;
+        return raw as unknown as TruefoundryGatewayApi.SkillMount;
     }
     const fqn =
         (typeof raw.fqn === "string" && raw.fqn !== "" ? raw.fqn : null) ??
@@ -56,8 +62,9 @@ export function normalizeSkillMount(
     return {
         type: "truefoundry-skills-registry",
         fqn,
-        ...(raw.preload === true ? { preload: true } : {}),
-    };
+        ...(typeof raw.preload === "boolean" ? { preload: raw.preload } : {}),
+        ...(raw.config != null ? { config: raw.config } : {}),
+    } as unknown as TruefoundryGatewayApi.SkillMount;
 }
 
 /** Rewrite UI `{id,name}` mounts so create/update draft session can serialize. */

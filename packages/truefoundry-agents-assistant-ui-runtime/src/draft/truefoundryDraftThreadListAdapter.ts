@@ -2,9 +2,11 @@ import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 
 import type { AgentChatServer } from "../server/types.js";
 import type { AgentSpec } from "../server/types.js";
-import { draftSessionTitle } from "./agentSpec.js";
 import { sessionListStartTimestamp } from "../sessionListStartTimestamp.js";
-import { sessionToThreadMetadata } from "../sessionThreadMetadata.js";
+import {
+    sessionDisplayTitle,
+    sessionToThreadMetadata,
+} from "../sessionThreadMetadata.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
@@ -28,10 +30,7 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
             const threads = page.data.map((session) =>
                 sessionToThreadMetadata(
                     session,
-                    draftSessionTitle({
-                        title: session.title,
-                        agentSpec: session.agentSpec ?? defaultAgentSpec,
-                    }),
+                    sessionDisplayTitle(session, defaultAgentSpec),
                 ),
             );
             return {
@@ -51,10 +50,7 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
             const draft = await server.getSession({ sessionId: remoteId });
             return sessionToThreadMetadata(
                 draft,
-                draftSessionTitle({
-                    title: draft.title,
-                    agentSpec: draft.agentSpec ?? defaultAgentSpec,
-                }),
+                sessionDisplayTitle(draft, defaultAgentSpec),
             );
         },
 

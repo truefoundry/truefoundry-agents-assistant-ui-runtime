@@ -7,7 +7,6 @@
 
 import type {
     AgentSelectorEntry,
-    AgentSpec,
     ConnectorSelectorEntry,
     ModelSelectorEntry,
     SearchAgentSelectorParams,
@@ -370,18 +369,22 @@ export function toCamelCaseDeep(value: unknown): unknown {
 
 /**
  * Map a CP AgentManifest (snake_case wire) → FE AgentSpec for Edit seeding.
- * Skills/MCP become UI catalog mounts `{ id, name }` so draft pickers light up;
- * gateway registry shapes are restored on save via normalizeAgentSpecForGateway.
+ * Skills/MCP keep `{ id, name }` for draft pickers plus runtime fields
+ * (`enableTools`, `preload`, `config`) so Edit → Save does not widen tool
+ * access or wipe settings. Gateway registry shapes are restored on save via
+ * normalizeAgentSpecForGateway.
  */
-export function agentSpecFromCpManifest(manifest: unknown): AgentSpec | undefined {
+export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undefined {
     if (!isRecord(manifest)) return undefined;
     const modelRaw = manifest.model;
     if (!isRecord(modelRaw) || typeof modelRaw.name !== "string" || modelRaw.name === "") {
         return undefined;
     }
-    const model = toCamelCaseDeep(modelRaw) as AgentSpec["model"];
+    const model = toCamelCaseDeep(modelRaw) as TfyAgentSpec["model"];
 
-    const skills: Array<{ id: string; name: string }> = [];
+    // Catalog-shaped mounts (`id`/`name` + runtime fields). Not yet gateway
+    // registry unions — normalizeAgentSpecForGateway restores those on save.
+    const skills: Array<Record<string, unknown>> = [];
     if (Array.isArray(manifest.skills)) {
         for (const row of manifest.skills) {
             if (!isRecord(row)) continue;
@@ -392,13 +395,23 @@ export function agentSpecFromCpManifest(manifest: unknown): AgentSpec | undefine
                       ? row.id
                       : null;
             if (fqn == null) continue;
+            const camel = toCamelCaseDeep(row) as Record<string, unknown>;
             const name =
-                typeof row.name === "string" && row.name !== "" ? row.name : fqn;
-            skills.push({ id: fqn, name });
+                typeof camel.name === "string" && camel.name !== ""
+                    ? camel.name
+                    : fqn;
+            skills.push({
+                id: fqn,
+                name,
+                ...(typeof camel.preload === "boolean"
+                    ? { preload: camel.preload }
+                    : {}),
+                ...(camel.config != null ? { config: camel.config } : {}),
+            });
         }
     }
 
-    const mcpServers: Array<{ id: string; name: string }> = [];
+    const mcpServers: Array<Record<string, unknown>> = [];
     const mcpRaw = Array.isArray(manifest.mcp_servers)
         ? manifest.mcp_servers
         : Array.isArray(manifest.mcpServers)
@@ -406,24 +419,40 @@ export function agentSpecFromCpManifest(manifest: unknown): AgentSpec | undefine
           : [];
     for (const row of mcpRaw) {
         if (!isRecord(row)) continue;
+        const camel = toCamelCaseDeep(row) as Record<string, unknown>;
         const name =
-            typeof row.name === "string" && row.name !== ""
-                ? row.name
-                : typeof row.id === "string" && row.id !== ""
-                  ? row.id
+            typeof camel.name === "string" && camel.name !== ""
+                ? camel.name
+                : typeof camel.id === "string" && camel.id !== ""
+                  ? camel.id
                   : null;
         if (name == null) continue;
-        mcpServers.push({ id: name, name });
+        mcpServers.push({
+            id: name,
+            name,
+            ...(Array.isArray(camel.enableTools)
+                ? { enableTools: camel.enableTools }
+                : {}),
+            ...(typeof camel.preload === "boolean"
+                ? { preload: camel.preload }
+                : {}),
+            ...(camel.config != null ? { config: camel.config } : {}),
+        });
     }
+
+    const configRaw = manifest.config;
+    const config =
+        configRaw != null ? (toCamelCaseDeep(configRaw) as TfyAgentSpec["config"]) : undefined;
 
     return {
         model,
         ...(typeof manifest.instructions === "string"
             ? { instructions: manifest.instructions }
             : {}),
+        ...(config != null ? { config } : {}),
         ...(skills.length > 0 ? { skills } : {}),
         ...(mcpServers.length > 0 ? { mcpServers } : {}),
-    };
+    } as TfyAgentSpec;
 }
 
 export function normalizeAgents(raw: unknown): TfyAgentSelectorEntry[] {
