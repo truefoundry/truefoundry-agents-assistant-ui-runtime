@@ -335,8 +335,125 @@ export async function listMcpServers(
 // ---------------------------------------------------------------------------
 
 type RawAgent = {
+    id?: string;
     name?: string;
+    latestVersionDetails?: {
+        manifest?: unknown;
+    };
+    /** Defensive: some payloads nest manifest at the top level. */
+    manifest?: unknown;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function snakeToCamelKey(key: string): string {
+    return key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+/** Deep snake_case → camelCase (inverse of {@link toSnakeCaseDeep}). */
+export function toCamelCaseDeep(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(toCamelCaseDeep);
+    }
+    if (isRecord(value)) {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(value)) {
+            out[snakeToCamelKey(k)] = toCamelCaseDeep(v);
+        }
+        return out;
+    }
+    return value;
+}
+
+/**
+ * Map a CP AgentManifest (snake_case wire) → FE AgentSpec for Edit seeding.
+ * Skills/MCP keep `{ id, name }` for draft pickers plus runtime fields
+ * (`enableTools`, `preload`, `config`) so Edit → Save does not widen tool
+ * access or wipe settings. Gateway registry shapes are restored on save via
+ * normalizeAgentSpecForGateway.
+ */
+export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undefined {
+    if (!isRecord(manifest)) return undefined;
+    const modelRaw = manifest.model;
+    if (!isRecord(modelRaw) || typeof modelRaw.name !== "string" || modelRaw.name === "") {
+        return undefined;
+    }
+    const model = toCamelCaseDeep(modelRaw) as TfyAgentSpec["model"];
+
+    // Catalog-shaped mounts (`id`/`name` + runtime fields). Not yet gateway
+    // registry unions — normalizeAgentSpecForGateway restores those on save.
+    const skills: Array<Record<string, unknown>> = [];
+    if (Array.isArray(manifest.skills)) {
+        for (const row of manifest.skills) {
+            if (!isRecord(row)) continue;
+            const fqn =
+                typeof row.fqn === "string" && row.fqn !== ""
+                    ? row.fqn
+                    : typeof row.id === "string" && row.id !== ""
+                      ? row.id
+                      : null;
+            if (fqn == null) continue;
+            const camel = toCamelCaseDeep(row) as Record<string, unknown>;
+            const name =
+                typeof camel.name === "string" && camel.name !== ""
+                    ? camel.name
+                    : fqn;
+            skills.push({
+                id: fqn,
+                name,
+                ...(typeof camel.preload === "boolean"
+                    ? { preload: camel.preload }
+                    : {}),
+                ...(camel.config != null ? { config: camel.config } : {}),
+            });
+        }
+    }
+
+    const mcpServers: Array<Record<string, unknown>> = [];
+    const mcpRaw = Array.isArray(manifest.mcp_servers)
+        ? manifest.mcp_servers
+        : Array.isArray(manifest.mcpServers)
+          ? manifest.mcpServers
+          : [];
+    for (const row of mcpRaw) {
+        if (!isRecord(row)) continue;
+        const camel = toCamelCaseDeep(row) as Record<string, unknown>;
+        const name =
+            typeof camel.name === "string" && camel.name !== ""
+                ? camel.name
+                : typeof camel.id === "string" && camel.id !== ""
+                  ? camel.id
+                  : null;
+        if (name == null) continue;
+        mcpServers.push({
+            id: name,
+            name,
+            ...(Array.isArray(camel.enableTools)
+                ? { enableTools: camel.enableTools }
+                : {}),
+            ...(typeof camel.preload === "boolean"
+                ? { preload: camel.preload }
+                : {}),
+            ...(camel.config != null ? { config: camel.config } : {}),
+        });
+    }
+
+    const configRaw = manifest.config;
+    const config =
+        configRaw != null ? (toCamelCaseDeep(configRaw) as TfyAgentSpec["config"]) : undefined;
+
+    return {
+        model,
+        ...(typeof manifest.instructions === "string"
+            ? { instructions: manifest.instructions }
+            : {}),
+        ...(config != null ? { config } : {}),
+        ...(skills.length > 0 ? { skills } : {}),
+        ...(mcpServers.length > 0 ? { mcpServers } : {}),
+    } as TfyAgentSpec;
+}
 
 export function normalizeAgents(raw: unknown): TfyAgentSelectorEntry[] {
     const data =
@@ -348,7 +465,15 @@ export function normalizeAgents(raw: unknown): TfyAgentSelectorEntry[] {
     const out: TfyAgentSelectorEntry[] = [];
     for (const row of data) {
         if (row.name == null || row.name === "") continue;
-        out.push({ name: row.name });
+        const manifest = row.latestVersionDetails?.manifest ?? row.manifest;
+        const agentSpec = agentSpecFromCpManifest(manifest);
+        const agentId =
+            typeof row.id === "string" && row.id !== "" ? row.id : row.name;
+        out.push({
+            name: row.name,
+            agentId,
+            ...(agentSpec != null ? { agentSpec } : {}),
+        });
     }
     return out;
 }

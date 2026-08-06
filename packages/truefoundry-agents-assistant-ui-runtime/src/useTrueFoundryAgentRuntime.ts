@@ -282,6 +282,7 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
 
     const agentMode = agent.mode;
     const namedAgentName = agent.mode === "named" ? agent.agentName : undefined;
+    const listSessionsAgentId = resolved.listSessionsAgentId;
     const threadListAdapter = useMemo(() => {
         if (agentMode === "draft") {
             const draftAgent = agent as Extract<typeof agent, { mode: "draft" }>;
@@ -289,14 +290,16 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
                 server,
                 defaultAgentSpec: draftAgent.defaultAgentSpec,
                 getAgentSpec: () => pendingAgentSpecRef.current ?? draftAgent.defaultAgentSpec,
+                listSessionsAgentId,
             });
         }
         return createTrueFoundryThreadListAdapter({
             server,
             agentName: namedAgentName!,
+            listSessionsAgentId,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agentMode, namedAgentName, server]);
+    }, [agentMode, namedAgentName, listSessionsAgentId, server]);
 
     return useRemoteThreadListRuntime({
         allowNesting: true,

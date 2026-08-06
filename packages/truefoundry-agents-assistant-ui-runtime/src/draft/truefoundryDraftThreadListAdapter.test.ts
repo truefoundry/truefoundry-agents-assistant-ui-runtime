@@ -10,7 +10,12 @@ const defaultAgentSpec: AgentSpec = {
     instructions: "You are helpful.",
 };
 
-function mockDraft(id: string, title: string | undefined, updatedAt: string): Session {
+function mockDraft(
+    id: string,
+    title: string | undefined,
+    updatedAt: string,
+    extras?: Partial<Session>,
+): Session {
     return {
         id,
         agentSpec: defaultAgentSpec,
@@ -18,6 +23,7 @@ function mockDraft(id: string, title: string | undefined, updatedAt: string): Se
         createdAt: updatedAt,
         updatedAt,
         isMutable: true,
+        ...extras,
     };
 }
 
@@ -33,10 +39,22 @@ function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
 }
 
 describe("createTrueFoundryDraftThreadListAdapter", () => {
-    it("lists draft sessions with pagination cursor", async () => {
+    it("lists sessions with pagination cursor and does not filter isMutable client-side", async () => {
         const listSessions = vi.fn().mockResolvedValue(
             mockDraftListPage(
-                [mockDraft("d1", "My draft", "2026-06-30T10:00:00.000Z")],
+                [
+                    mockDraft("d1", "My draft", "2026-06-30T10:00:00.000Z"),
+                    mockDraft("s1", "Named", "2026-06-30T09:00:00.000Z", {
+                        isMutable: false,
+                        agentName: "from-sdk",
+                        agentSpec: undefined,
+                    }),
+                    mockDraft("s2", undefined, "2026-06-30T08:00:00.000Z", {
+                        isMutable: false,
+                        agentName: "untitled-agent",
+                        agentSpec: undefined,
+                    }),
+                ],
                 "page-2",
             ),
         );
@@ -61,7 +79,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             }),
         );
         expect(listSessions).toHaveBeenCalledWith(
-            expect.not.objectContaining({ agentName: expect.anything() }),
+            expect.not.objectContaining({ agentId: expect.anything() }),
         );
         expect(result.threads).toEqual([
             {
@@ -70,8 +88,43 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
                 title: "My draft",
                 lastMessageAt: new Date("2026-06-30T10:00:00.000Z"),
             },
+            {
+                status: "regular",
+                remoteId: "s1",
+                title: "Named",
+                lastMessageAt: new Date("2026-06-30T09:00:00.000Z"),
+                custom: { agentName: "from-sdk" },
+            },
+            {
+                status: "regular",
+                remoteId: "s2",
+                title: "untitled-agent",
+                lastMessageAt: new Date("2026-06-30T08:00:00.000Z"),
+                custom: { agentName: "untitled-agent" },
+            },
         ]);
         expect(result.nextCursor).toBe("page-2");
+    });
+
+    it("forwards listSessionsAgentId as agentId", async () => {
+        const listSessions = vi.fn().mockResolvedValue(mockDraftListPage([]));
+        const server = mockServer({
+            listSessions,
+            createSession: vi.fn(),
+            getSession: vi.fn(),
+        });
+
+        const adapter = createTrueFoundryDraftThreadListAdapter({
+            server,
+            defaultAgentSpec,
+            listSessionsAgentId: "agent-x",
+        });
+
+        await adapter.list();
+
+        expect(listSessions).toHaveBeenCalledWith(
+            expect.objectContaining({ agentId: "agent-x" }),
+        );
     });
 
     it("creates a draft session on initialize", async () => {

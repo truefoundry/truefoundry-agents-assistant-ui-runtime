@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+    agentSpecFromCpManifest,
     buildSaveAgentManifest,
     normalizeAgents,
     normalizeAgentSkills,
@@ -10,6 +11,7 @@ import {
     saveAgent,
     SAVE_AGENT_COLLABORATORS,
     SAVE_AGENT_METADATA_TAGS,
+    toCamelCaseDeep,
     toSnakeCaseDeep,
 } from "./cp.js";
 
@@ -273,16 +275,175 @@ describe("normalizeMcpServers", () => {
 });
 
 describe("normalizeAgents", () => {
-    it("maps name only", () => {
+    it("maps name, agentId, and agentSpec from latestVersionDetails.manifest", () => {
         expect(
             normalizeAgents({
                 data: [
-                    { name: "ask-ai-agent", id: "ag_1" },
+                    {
+                        id: "ag_1",
+                        name: "ask-ai-agent",
+                        latestVersionDetails: {
+                            manifest: {
+                                type: "truefoundry-agent",
+                                name: "ask-ai-agent",
+                                model: {
+                                    name: "openai-main/gpt-4.1",
+                                    params: {
+                                        max_tokens: 8192,
+                                        reasoning_effort: "medium",
+                                    },
+                                },
+                                instructions: "Be helpful",
+                                config: {
+                                    iteration_limit: 50,
+                                    ask_user_questions: { enabled: true },
+                                },
+                                skills: [
+                                    {
+                                        type: "truefoundry-skills-registry",
+                                        fqn: "agent-skill:tfy/skills/web:1",
+                                        preload: true,
+                                        config: { timeout_ms: 1000 },
+                                    },
+                                ],
+                                mcp_servers: [
+                                    {
+                                        name: "gmail",
+                                        enable_tools: ["@read-only"],
+                                        preload: true,
+                                        config: { locale: "en" },
+                                    },
+                                ],
+                            },
+                        },
+                    },
                     { name: "" },
                     {},
+                    {
+                        name: "try-only",
+                        // no manifest → Try still works; Edit hidden
+                    },
                 ],
             }),
-        ).toEqual([{ name: "ask-ai-agent" }]);
+        ).toEqual([
+            {
+                name: "ask-ai-agent",
+                agentId: "ag_1",
+                agentSpec: {
+                    model: {
+                        name: "openai-main/gpt-4.1",
+                        params: { maxTokens: 8192, reasoningEffort: "medium" },
+                    },
+                    instructions: "Be helpful",
+                    config: {
+                        iterationLimit: 50,
+                        askUserQuestions: { enabled: true },
+                    },
+                    skills: [
+                        {
+                            id: "agent-skill:tfy/skills/web:1",
+                            name: "agent-skill:tfy/skills/web:1",
+                            preload: true,
+                            config: { timeoutMs: 1000 },
+                        },
+                    ],
+                    mcpServers: [
+                        {
+                            id: "gmail",
+                            name: "gmail",
+                            enableTools: ["@read-only"],
+                            preload: true,
+                            config: { locale: "en" },
+                        },
+                    ],
+                },
+            },
+            { name: "try-only", agentId: "try-only" },
+        ]);
+    });
+});
+
+describe("toCamelCaseDeep", () => {
+    it("converts nested snake_case keys", () => {
+        expect(
+            toCamelCaseDeep({
+                max_tokens: 8192,
+                reasoning_effort: "medium",
+                nested: { iteration_limit: 50 },
+            }),
+        ).toEqual({
+            maxTokens: 8192,
+            reasoningEffort: "medium",
+            nested: { iterationLimit: 50 },
+        });
+    });
+});
+
+describe("agentSpecFromCpManifest", () => {
+    it("returns undefined when model.name is missing", () => {
+        expect(agentSpecFromCpManifest({ type: "truefoundry-agent" })).toBeUndefined();
+        expect(agentSpecFromCpManifest(null)).toBeUndefined();
+    });
+
+    it("preserves mount runtime fields and agent config for Edit → Save", () => {
+        const spec = agentSpecFromCpManifest({
+            type: "truefoundry-agent",
+            name: "saved",
+            model: { name: "openai-main/gpt-4.1" },
+            config: { iteration_limit: 25 },
+            skills: [
+                {
+                    type: "truefoundry-skills-registry",
+                    fqn: "agent-skill:tfy/skills/web:1",
+                    preload: false,
+                },
+            ],
+            mcp_servers: [
+                {
+                    name: "gmail",
+                    enable_tools: ["@read-only"],
+                    preload: true,
+                },
+            ],
+        });
+
+        expect(spec).toEqual({
+            model: { name: "openai-main/gpt-4.1" },
+            config: { iterationLimit: 25 },
+            skills: [
+                {
+                    id: "agent-skill:tfy/skills/web:1",
+                    name: "agent-skill:tfy/skills/web:1",
+                    preload: false,
+                },
+            ],
+            mcpServers: [
+                {
+                    id: "gmail",
+                    name: "gmail",
+                    enableTools: ["@read-only"],
+                    preload: true,
+                },
+            ],
+        });
+
+        const saved = buildSaveAgentManifest("saved", spec!);
+        expect(saved.config).toEqual({ iteration_limit: 25 });
+        expect(saved.mcp_servers).toEqual([
+            {
+                type: "truefoundry-mcp-registry",
+                name: "gmail",
+                enable_tools: ["@read-only"],
+                preload: true,
+            },
+        ]);
+        expect(saved.skills).toEqual([
+            {
+                type: "truefoundry-skills-registry",
+                fqn: "agent-skill:tfy/skills/web:1",
+                preload: false,
+            },
+        ]);
     });
 });
 
@@ -432,9 +593,11 @@ describe("saveAgent", () => {
                 }),
             }),
         );
-        const body = JSON.parse(
-            (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string,
-        );
+        const [, init] = fetchMock.mock.calls[0] as unknown as [
+            string,
+            RequestInit,
+        ];
+        const body = JSON.parse(String(init.body));
         expect(body.manifest.type).toBe("truefoundry-agent");
         expect(body.manifest.name).toBe("my-agent");
         expect(body.manifest.model).toEqual({ name: "openai-main/gpt-4.1" });

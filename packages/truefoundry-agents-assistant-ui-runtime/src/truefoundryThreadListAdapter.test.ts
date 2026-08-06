@@ -4,13 +4,19 @@ import type { AgentChatServer, Session } from "./server/index.js";
 
 import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 
-function mockSession(id: string, title: string, updatedAt: string): Session {
+function mockSession(
+    id: string,
+    title: string,
+    updatedAt: string,
+    agentName?: string,
+): Session {
     return {
         id,
         title,
         updatedAt,
         createdAt: updatedAt,
         isMutable: false,
+        ...(agentName != null ? { agentName } : {}),
     };
 }
 
@@ -26,10 +32,10 @@ function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
 }
 
 describe("createTrueFoundryThreadListAdapter", () => {
-    it("lists the first page with limit and returns nextCursor", async () => {
+    it("lists the first page without agentId when filter is omitted", async () => {
         const listSessions = vi.fn().mockResolvedValue(
             mockListSessionsPage(
-                [mockSession("s1", "First", "2026-06-30T10:00:00.000Z")],
+                [mockSession("s1", "First", "2026-06-30T10:00:00.000Z", "my-agent")],
                 "page-2",
             ),
         );
@@ -43,11 +49,13 @@ describe("createTrueFoundryThreadListAdapter", () => {
 
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
-                agentName: "my-agent",
                 limit: 20,
                 pageToken: undefined,
                 startTimestamp: expect.any(String),
             }),
+        );
+        expect(listSessions).toHaveBeenCalledWith(
+            expect.not.objectContaining({ agentId: expect.anything() }),
         );
         expect(result.threads).toEqual([
             {
@@ -55,28 +63,28 @@ describe("createTrueFoundryThreadListAdapter", () => {
                 remoteId: "s1",
                 title: "First",
                 lastMessageAt: new Date("2026-06-30T10:00:00.000Z"),
+                custom: { agentName: "my-agent" },
             },
         ]);
         expect(result.nextCursor).toBe("page-2");
     });
 
-    it("forwards after as pageToken for subsequent pages", async () => {
+    it("forwards listSessionsAgentId as agentId", async () => {
         const listSessions = vi.fn().mockResolvedValue(
-            mockListSessionsPage(
-                [mockSession("s2", "Second", "2026-06-29T10:00:00.000Z")],
-            ),
+            mockListSessionsPage([mockSession("s2", "Second", "2026-06-29T10:00:00.000Z")]),
         );
         const server = mockServer({ listSessions });
         const adapter = createTrueFoundryThreadListAdapter({
             server,
             agentName: "my-agent",
+            listSessionsAgentId: "filter-agent",
         });
 
         const result = await adapter.list({ after: "page-2" });
 
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
-                agentName: "my-agent",
+                agentId: "filter-agent",
                 limit: 20,
                 pageToken: "page-2",
             }),
