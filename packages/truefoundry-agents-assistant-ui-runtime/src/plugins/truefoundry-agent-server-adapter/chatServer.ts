@@ -350,11 +350,12 @@ export function createTrueFoundryChatServer<
             ) as AsyncIterable<TurnStreamData>;
         },
 
-        async downloadSandboxFile(sandboxId, req) {
-            const response = await privateClient.downloadSandboxFile(
-                sandboxId,
-                req,
-            );
+        // The gateway addresses sandboxes directly, so the turn is carried for hosts that need it
+        // but is not part of this route.
+        async downloadSandboxFile({ sandboxId, path }) {
+            const response = await privateClient.downloadSandboxFile(sandboxId, {
+                path,
+            });
             return await response.blob();
         },
 

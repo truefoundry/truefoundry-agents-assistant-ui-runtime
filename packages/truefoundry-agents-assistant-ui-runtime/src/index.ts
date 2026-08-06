@@ -49,6 +49,7 @@ export {
     useTrueFoundryRespondToToolResponse,
     useTrueFoundryResumeMcpAuth,
     useTrueFoundrySandboxId,
+    useTrueFoundryTurnId,
     useTrueFoundryDownloadSandboxFile,
     useTrueFoundryCancel,
     useTrueFoundryResetFromTurn,

@@ -291,10 +291,17 @@ export interface AgentChatServer<
         abortSignal?: AbortSignal;
     }): AsyncIterable<TurnStreamData>;
 
-    downloadSandboxFile?(
-        sandboxId: string,
-        req: { path: string },
-    ): Promise<Blob>;
+    /**
+     * Reads a file the agent wrote inside its sandbox. Hosts whose download route is scoped to a
+     * turn resolve the sandbox from `turnId` and ignore `sandboxId`; hosts addressing sandboxes
+     * directly use `sandboxId`.
+     */
+    downloadSandboxFile?(req: {
+        sessionId: string;
+        turnId: string;
+        sandboxId: string;
+        path: string;
+    }): Promise<Blob>;
 }
 
 /**

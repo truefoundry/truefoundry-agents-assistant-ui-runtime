@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAui } from "@assistant-ui/store";
+import { useAui, useAuiState } from "@assistant-ui/store";
 
+import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     EMPTY_DRAFT_EXTRAS,
     trueFoundryExtras,
@@ -86,10 +87,29 @@ export const useTrueFoundryResumeMcpAuth = () => {
 export const useTrueFoundrySandboxId = (): string | undefined =>
     trueFoundryExtras.use((e) => e.sandboxId, undefined);
 
-/** Returns a function to download a sandbox file by path from any render context. */
+/** Turn that produced the message being rendered. Only defined inside a message scope. */
+export const useTrueFoundryTurnId = (): string | undefined =>
+    useAuiState(
+        (state) =>
+            (state.message.metadata?.custom as TrueFoundryMessageCustomMetadata | undefined)
+                ?.turnId,
+    );
+
+/**
+ * Returns a function to download a file the current turn wrote to its sandbox. Must be called
+ * from a message scope, since the artifact belongs to the turn that rendered it.
+ */
 export const useTrueFoundryDownloadSandboxFile = () => {
     const aui = useAui();
-    return (path: string) => trueFoundryExtras.get(aui).downloadSandboxFile(path);
+    const turnId = useTrueFoundryTurnId();
+    return (path: string) => {
+        if (turnId == null) {
+            throw new Error(
+                "Downloading a sandbox file requires a message scope to resolve its turn.",
+            );
+        }
+        return trueFoundryExtras.get(aui).downloadSandboxFile({ turnId, path });
+    };
 };
 
 /** Returns a function to cancel the current run from any render context. */
