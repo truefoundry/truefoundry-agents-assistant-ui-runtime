@@ -1074,8 +1074,14 @@ function projectHistoryTurns(
             content,
             record,
         );
-        const custom =
-            record.sandboxId != null ? { ...baseCustom, sandboxId: record.sandboxId } : baseCustom;
+        // Continuation turns fold into the previous assistant message and overwrite this custom,
+        // so a folded message reports the latest turn that contributed to it — the one whose
+        // sandbox wrote the newest artifacts.
+        const custom = {
+            ...baseCustom,
+            turnId: record.id,
+            ...(record.sandboxId != null ? { sandboxId: record.sandboxId } : {}),
+        };
 
         if (record.userText) {
             messages.push(
@@ -1732,7 +1738,7 @@ export function turnStreamUpdateToAssistantMessage(
             unstable_annotations: [],
             unstable_data: [],
             steps: [],
-            custom: update.metadata?.custom ?? {},
+            custom: { ...update.metadata?.custom, turnId },
         },
     };
 }

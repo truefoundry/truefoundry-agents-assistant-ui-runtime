@@ -152,18 +152,28 @@ function useTrueFoundryAgentRuntimeImpl(
     );
 
     const downloadSandboxFile = useCallback(
-        async (path: string) => {
+        async ({ turnId, path }: { turnId: string; path: string }) => {
             if (server.downloadSandboxFile == null) {
                 throw new Error(
                     "Downloading a sandbox file requires AgentChatServer.downloadSandboxFile.",
                 );
             }
+            if (sessionId == null) {
+                throw new Error(
+                    "This session has not been saved yet, so its files cannot be downloaded.",
+                );
+            }
             if (sandboxId == null) {
                 throw new Error("No sandbox is available yet for this session.");
             }
-            return await server.downloadSandboxFile(sandboxId, { path });
+            return await server.downloadSandboxFile({
+                sessionId,
+                turnId,
+                sandboxId,
+                path,
+            });
         },
-        [server, sandboxId],
+        [server, sessionId, sandboxId],
     );
 
     const draftExtras = useMemo(() => {

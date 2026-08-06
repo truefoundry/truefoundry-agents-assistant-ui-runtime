@@ -10,6 +10,8 @@ export type TrueFoundryMessageCustomMetadata = {
     pendingMcpAuth?: true;
     mcpServers?: McpAuthRequiredEvent["mcpServers"];
     sandboxId?: string;
+    /** Turn that produced this message. Scopes artifact downloads to their own turn. */
+    turnId?: string;
     [TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY]?: string;
     [TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY]?: string;
 };

@@ -461,6 +461,26 @@ describe("convertTurnMessages", () => {
             expect(updated.id).toBe(existing.id);
             expect(updated.content).toEqual([{ type: "text", text: "second" }]);
         });
+
+        it("stamps the streaming turn id onto the message metadata", () => {
+            const message = turnStreamUpdateToAssistantMessage("turn-1", {
+                content: [{ type: "text", text: "hi" }],
+            });
+            expect(message.metadata.custom.turnId).toBe("turn-1");
+        });
+
+        it("advances the turn id when a continuation reuses the existing message", () => {
+            const existing = turnStreamUpdateToAssistantMessage("turn-1", {
+                content: [{ type: "text", text: "first" }],
+            });
+            const updated = turnStreamUpdateToAssistantMessage(
+                "turn-2",
+                { content: [{ type: "text", text: "second" }] },
+                existing,
+            );
+            expect(updated.id).toBe("turn-1-assistant");
+            expect(updated.metadata.custom.turnId).toBe("turn-2");
+        });
     });
 
     describe("repositoryItemsFromMessages", () => {
@@ -546,7 +566,7 @@ describe("convertTurnMessages", () => {
 
             expect(result.messages[1]).toMatchObject({
                 role: "assistant",
-                metadata: { custom: { sandboxId: "sbx-123" } },
+                metadata: { custom: { sandboxId: "sbx-123", turnId: "turn-1" } },
             });
         });
 
@@ -601,6 +621,8 @@ describe("convertTurnMessages", () => {
                 { type: "text", text: "first chunk" },
                 { type: "text", text: " after approval" },
             ]);
+            // Artifacts on a merged message belong to the turn that wrote them last.
+            expect(assistant.metadata.custom.turnId).toBe("turn-2");
         });
 
         it("preserves requires-action on reload when a turn ends awaiting tool approval", async () => {
