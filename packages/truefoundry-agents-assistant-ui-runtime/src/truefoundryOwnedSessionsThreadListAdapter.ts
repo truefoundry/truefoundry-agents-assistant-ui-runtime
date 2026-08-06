@@ -3,6 +3,7 @@ import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 import type { AgentChatServer, Session } from "./server/types.js";
 import { draftSessionTitle } from "./draft/agentSpec.js";
 import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
+import { sessionToThreadMetadata } from "./sessionThreadMetadata.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
@@ -22,22 +23,22 @@ function ownedSessionTitle(session: Session): string {
  */
 export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
     server: AgentChatServer;
+    /** When set, filters `listSessions` by this agent id. Omit for all chats. */
+    listSessionsAgentId?: string;
 }): RemoteThreadListAdapter {
-    const { server } = options;
+    const { server, listSessionsAgentId } = options;
 
     return {
         async list({ after } = {}) {
             const page = await server.listSessions({
+                ...(listSessionsAgentId != null ? { agentId: listSessionsAgentId } : {}),
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),
             });
-            const threads = page.data.map((session) => ({
-                status: "regular" as const,
-                remoteId: session.id,
-                title: ownedSessionTitle(session),
-                lastMessageAt: new Date(session.updatedAt),
-            }));
+            const threads = page.data.map((session) =>
+                sessionToThreadMetadata(session, ownedSessionTitle(session)),
+            );
             return {
                 threads,
                 nextCursor: page.nextPageToken ?? undefined,
@@ -52,12 +53,7 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
 
         async fetch(remoteId) {
             const session = await server.getSession({ sessionId: remoteId });
-            return {
-                status: "regular" as const,
-                remoteId: session.id,
-                title: ownedSessionTitle(session),
-                lastMessageAt: new Date(session.updatedAt),
-            };
+            return sessionToThreadMetadata(session, ownedSessionTitle(session));
         },
 
         async rename() {},

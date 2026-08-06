@@ -227,7 +227,7 @@ export function createTrueFoundryChatServer<
                 pageToken: req?.pageToken,
                 startTimestamp: req?.startTimestamp,
                 endTimestamp: req?.endTimestamp,
-                ...(req?.agentName != null ? { agentName: req.agentName } : {}),
+                ...(req?.agentId != null ? { agentName: req.agentId } : {}),
             });
             const result = await toListResult(page, (s) => toSession<TSpec>(s));
             for (const session of result.data) {

@@ -61,6 +61,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
                 remoteId: "s1",
                 title: "Named chat",
                 lastMessageAt: new Date("2026-06-30T12:00:00.000Z"),
+                custom: { agentName: "my-agent" },
             },
             {
                 status: "regular",
@@ -70,6 +71,21 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
             },
         ]);
         expect(result.nextCursor).toBe("page-2");
+    });
+
+    it("forwards listSessionsAgentId as agentId", async () => {
+        const listSessions = vi.fn().mockResolvedValue({ data: [] });
+        const server = mockServer({ listSessions, getSession: vi.fn() });
+
+        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({
+            server,
+            listSessionsAgentId: "agent-x",
+        });
+        await adapter.list();
+
+        expect(listSessions).toHaveBeenCalledWith(
+            expect.objectContaining({ agentId: "agent-x" }),
+        );
     });
 
     it("falls back to model name for untitled drafts", async () => {

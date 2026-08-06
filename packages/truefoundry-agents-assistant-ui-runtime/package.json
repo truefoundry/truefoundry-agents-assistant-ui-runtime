@@ -1,6 +1,6 @@
 {
   "name": "@truefoundry/assistant-ui-runtime",
-  "version": "0.1.10-rc.1",
+  "version": "0.1.10",
   "description": "TrueFoundry Gateway agent runtime adapter for assistant-ui",
   "license": "Apache-2.0",
   "repository": {
@@ -54,8 +54,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@assistant-ui/core": "^0.2.19",
-    "@assistant-ui/store": "^0.2.19"
+    "@assistant-ui/core": "^0.2.22",
+    "@assistant-ui/store": "^0.2.21"
   },
   "peerDependencies": {
     "@types/react": "*",

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+    agentSpecFromCpManifest,
     buildSaveAgentManifest,
     normalizeAgents,
     normalizeAgentSkills,
@@ -10,6 +11,7 @@ import {
     saveAgent,
     SAVE_AGENT_COLLABORATORS,
     SAVE_AGENT_METADATA_TAGS,
+    toCamelCaseDeep,
     toSnakeCaseDeep,
 } from "./cp.js";
 
@@ -273,16 +275,87 @@ describe("normalizeMcpServers", () => {
 });
 
 describe("normalizeAgents", () => {
-    it("maps name only", () => {
+    it("maps name, agentId, and agentSpec from latestVersionDetails.manifest", () => {
         expect(
             normalizeAgents({
                 data: [
-                    { name: "ask-ai-agent", id: "ag_1" },
+                    {
+                        id: "ag_1",
+                        name: "ask-ai-agent",
+                        latestVersionDetails: {
+                            manifest: {
+                                type: "truefoundry-agent",
+                                name: "ask-ai-agent",
+                                model: {
+                                    name: "openai-main/gpt-4.1",
+                                    params: {
+                                        max_tokens: 8192,
+                                        reasoning_effort: "medium",
+                                    },
+                                },
+                                instructions: "Be helpful",
+                                skills: [
+                                    {
+                                        type: "truefoundry-skills-registry",
+                                        fqn: "agent-skill:tfy/skills/web:1",
+                                    },
+                                ],
+                                mcp_servers: [{ name: "gmail" }],
+                            },
+                        },
+                    },
                     { name: "" },
                     {},
+                    {
+                        name: "try-only",
+                        // no manifest → Try still works; Edit hidden
+                    },
                 ],
             }),
-        ).toEqual([{ name: "ask-ai-agent" }]);
+        ).toEqual([
+            {
+                name: "ask-ai-agent",
+                agentId: "ag_1",
+                agentSpec: {
+                    model: {
+                        name: "openai-main/gpt-4.1",
+                        params: { maxTokens: 8192, reasoningEffort: "medium" },
+                    },
+                    instructions: "Be helpful",
+                    skills: [
+                        {
+                            id: "agent-skill:tfy/skills/web:1",
+                            name: "agent-skill:tfy/skills/web:1",
+                        },
+                    ],
+                    mcpServers: [{ id: "gmail", name: "gmail" }],
+                },
+            },
+            { name: "try-only", agentId: "try-only" },
+        ]);
+    });
+});
+
+describe("toCamelCaseDeep", () => {
+    it("converts nested snake_case keys", () => {
+        expect(
+            toCamelCaseDeep({
+                max_tokens: 8192,
+                reasoning_effort: "medium",
+                nested: { iteration_limit: 50 },
+            }),
+        ).toEqual({
+            maxTokens: 8192,
+            reasoningEffort: "medium",
+            nested: { iterationLimit: 50 },
+        });
+    });
+});
+
+describe("agentSpecFromCpManifest", () => {
+    it("returns undefined when model.name is missing", () => {
+        expect(agentSpecFromCpManifest({ type: "truefoundry-agent" })).toBeUndefined();
+        expect(agentSpecFromCpManifest(null)).toBeUndefined();
     });
 });
 

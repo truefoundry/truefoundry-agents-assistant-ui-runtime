@@ -38,9 +38,13 @@ export interface ConnectorSelectorEntry {
     description?: string;
 }
 
-/** Agent selector row — UI shows name only. Host extends for metadata. */
+/** Agent selector row. Host extends for metadata; `agentSpec` enables Edit. */
 export interface AgentSelectorEntry {
     name: string;
+    /** Stable id when distinct from display `name`. Falls back to `name` when omitted. */
+    agentId?: string;
+    /** Published agent spec — required for Edit; optional for Try-only hosts. */
+    agentSpec?: AgentSpec;
 }
 
 export type SearchAgentSelectorParams = {
@@ -147,7 +151,8 @@ export type PageParams = {
 };
 
 export interface ListSessionsParams extends PageParams {
-    agentName?: string;
+    /** Host-owned agent identity filter. Hosts that key agents by name pass that name here. */
+    agentId?: string;
     /** Host-specific filter (e.g. TFY startTimestamp). */
     startTimestamp?: string;
 }

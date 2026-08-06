@@ -4,6 +4,7 @@ import type { AgentChatServer } from "../server/types.js";
 import type { AgentSpec } from "../server/types.js";
 import { draftSessionTitle } from "./agentSpec.js";
 import { sessionListStartTimestamp } from "../sessionListStartTimestamp.js";
+import { sessionToThreadMetadata } from "../sessionThreadMetadata.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
@@ -11,27 +12,28 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
     server: AgentChatServer;
     defaultAgentSpec: AgentSpec;
     getAgentSpec?: () => AgentSpec;
+    /** When set, filters `listSessions` by this agent id. Omit for all chats. */
+    listSessionsAgentId?: string;
 }): RemoteThreadListAdapter {
-    const { server, defaultAgentSpec, getAgentSpec } = options;
+    const { server, defaultAgentSpec, getAgentSpec, listSessionsAgentId } = options;
 
     return {
         async list({ after } = {}) {
             const page = await server.listSessions({
+                ...(listSessionsAgentId != null ? { agentId: listSessionsAgentId } : {}),
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),
             });
-            const threads = page.data
-                .filter((session) => session.isMutable)
-                .map((draft) => ({
-                    status: "regular" as const,
-                    remoteId: draft.id,
-                    title: draftSessionTitle({
-                        title: draft.title,
-                        agentSpec: draft.agentSpec ?? defaultAgentSpec,
+            const threads = page.data.map((session) =>
+                sessionToThreadMetadata(
+                    session,
+                    draftSessionTitle({
+                        title: session.title,
+                        agentSpec: session.agentSpec ?? defaultAgentSpec,
                     }),
-                    lastMessageAt: new Date(draft.updatedAt),
-                }));
+                ),
+            );
             return {
                 threads,
                 nextCursor: page.nextPageToken ?? undefined,
@@ -47,15 +49,13 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
 
         async fetch(remoteId) {
             const draft = await server.getSession({ sessionId: remoteId });
-            return {
-                status: "regular" as const,
-                remoteId: draft.id,
-                title: draftSessionTitle({
+            return sessionToThreadMetadata(
+                draft,
+                draftSessionTitle({
                     title: draft.title,
                     agentSpec: draft.agentSpec ?? defaultAgentSpec,
                 }),
-                lastMessageAt: new Date(draft.updatedAt),
-            };
+            );
         },
 
         async rename() {},

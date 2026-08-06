@@ -7,6 +7,7 @@
 
 import type {
     AgentSelectorEntry,
+    AgentSpec,
     ConnectorSelectorEntry,
     ModelSelectorEntry,
     SearchAgentSelectorParams,
@@ -335,8 +336,95 @@ export async function listMcpServers(
 // ---------------------------------------------------------------------------
 
 type RawAgent = {
+    id?: string;
     name?: string;
+    latestVersionDetails?: {
+        manifest?: unknown;
+    };
+    /** Defensive: some payloads nest manifest at the top level. */
+    manifest?: unknown;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function snakeToCamelKey(key: string): string {
+    return key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+/** Deep snake_case → camelCase (inverse of {@link toSnakeCaseDeep}). */
+export function toCamelCaseDeep(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(toCamelCaseDeep);
+    }
+    if (isRecord(value)) {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(value)) {
+            out[snakeToCamelKey(k)] = toCamelCaseDeep(v);
+        }
+        return out;
+    }
+    return value;
+}
+
+/**
+ * Map a CP AgentManifest (snake_case wire) → FE AgentSpec for Edit seeding.
+ * Skills/MCP become UI catalog mounts `{ id, name }` so draft pickers light up;
+ * gateway registry shapes are restored on save via normalizeAgentSpecForGateway.
+ */
+export function agentSpecFromCpManifest(manifest: unknown): AgentSpec | undefined {
+    if (!isRecord(manifest)) return undefined;
+    const modelRaw = manifest.model;
+    if (!isRecord(modelRaw) || typeof modelRaw.name !== "string" || modelRaw.name === "") {
+        return undefined;
+    }
+    const model = toCamelCaseDeep(modelRaw) as AgentSpec["model"];
+
+    const skills: Array<{ id: string; name: string }> = [];
+    if (Array.isArray(manifest.skills)) {
+        for (const row of manifest.skills) {
+            if (!isRecord(row)) continue;
+            const fqn =
+                typeof row.fqn === "string" && row.fqn !== ""
+                    ? row.fqn
+                    : typeof row.id === "string" && row.id !== ""
+                      ? row.id
+                      : null;
+            if (fqn == null) continue;
+            const name =
+                typeof row.name === "string" && row.name !== "" ? row.name : fqn;
+            skills.push({ id: fqn, name });
+        }
+    }
+
+    const mcpServers: Array<{ id: string; name: string }> = [];
+    const mcpRaw = Array.isArray(manifest.mcp_servers)
+        ? manifest.mcp_servers
+        : Array.isArray(manifest.mcpServers)
+          ? manifest.mcpServers
+          : [];
+    for (const row of mcpRaw) {
+        if (!isRecord(row)) continue;
+        const name =
+            typeof row.name === "string" && row.name !== ""
+                ? row.name
+                : typeof row.id === "string" && row.id !== ""
+                  ? row.id
+                  : null;
+        if (name == null) continue;
+        mcpServers.push({ id: name, name });
+    }
+
+    return {
+        model,
+        ...(typeof manifest.instructions === "string"
+            ? { instructions: manifest.instructions }
+            : {}),
+        ...(skills.length > 0 ? { skills } : {}),
+        ...(mcpServers.length > 0 ? { mcpServers } : {}),
+    };
+}
 
 export function normalizeAgents(raw: unknown): TfyAgentSelectorEntry[] {
     const data =
@@ -348,7 +436,15 @@ export function normalizeAgents(raw: unknown): TfyAgentSelectorEntry[] {
     const out: TfyAgentSelectorEntry[] = [];
     for (const row of data) {
         if (row.name == null || row.name === "") continue;
-        out.push({ name: row.name });
+        const manifest = row.latestVersionDetails?.manifest ?? row.manifest;
+        const agentSpec = agentSpecFromCpManifest(manifest);
+        const agentId =
+            typeof row.id === "string" && row.id !== "" ? row.id : row.name;
+        out.push({
+            name: row.name,
+            agentId,
+            ...(agentSpec != null ? { agentSpec } : {}),
+        });
     }
     return out;
 }
