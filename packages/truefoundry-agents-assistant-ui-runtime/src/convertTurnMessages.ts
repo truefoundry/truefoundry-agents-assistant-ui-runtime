@@ -1139,10 +1139,7 @@ function projectHistoryTurns(
                 status,
                 metadata: {
                     ...existing.metadata,
-                    custom: {
-                        ...existing.metadata.custom,
-                        ...custom,
-                    },
+                    custom,
                 },
             };
         } else if (record.state.status === "running") {

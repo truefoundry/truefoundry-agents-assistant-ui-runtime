@@ -677,6 +677,77 @@ describe("convertTurnMessages", () => {
             });
         });
 
+        it("clears pendingMcpAuth when an MCP auth continuation is merged", async () => {
+            const mcpServers = [
+                {
+                    id: "github-auth",
+                    name: "github",
+                    authUrl: "https://example.com/auth",
+                },
+            ];
+            const pausedTurn = mockTurn({
+                id: "turn-1",
+                createdAt,
+                input: [{ type: "user.message", content: "use github" }],
+                state: {
+                    status: "done",
+                    output: undefined,
+                    requiredActions: [
+                        {
+                            type: "mcp.auth_required",
+                            id: "mcp-auth",
+                            createdAt,
+                            mcpServers,
+                        },
+                    ] as never,
+                    completedAt: createdAt,
+                },
+                events: [
+                    sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                    modelMessage({
+                        id: "m1",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Need auth",
+                    }),
+                    {
+                        type: "mcp.auth_required",
+                        id: "mcp-auth",
+                        createdAt,
+                        mcpServers,
+                    },
+                ],
+            });
+            const continuationTurn = mockTurn({
+                id: "turn-2",
+                createdAt,
+                input: [],
+                events: [
+                    modelMessage({
+                        id: "m2",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Authorized",
+                    }),
+                ],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockServerWithTurns([continuationTurn, pausedTurn]),
+                SESSION_ID,
+            );
+
+            const assistant = result.messages[1];
+            expect(assistant?.role).toBe("assistant");
+            if (assistant?.role !== "assistant") {
+                return;
+            }
+            expect(assistant.status).toEqual({ type: "complete", reason: "stop" });
+            expect(assistant.metadata.custom).toEqual({
+                sandboxId: "sbx-123",
+                turnId: "turn-2",
+            });
+            expect(assistant.metadata.custom.pendingMcpAuth).toBeUndefined();
+        });
+
         it("preserves requires-action on reload when a turn ends awaiting tool approval", async () => {
             const pausedTurn = mockTurn({
                 id: "turn-approval",
