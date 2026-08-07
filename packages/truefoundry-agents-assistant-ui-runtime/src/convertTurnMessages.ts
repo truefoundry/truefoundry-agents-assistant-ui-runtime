@@ -1029,10 +1029,12 @@ function projectHistoryTurns(
     const messages: ThreadMessage[] = [];
     let lastAssistantIndex: number | undefined;
     let groupRootIds: string[] = [];
+    let sandboxId: string | undefined;
 
     for (let turnIndex = 0; turnIndex < snapshot.turns.length; turnIndex++) {
         const record = snapshot.turns[turnIndex]!;
         const turnRootIds = record.rootModelMessageIds ?? [];
+        sandboxId = record.sandboxId ?? sandboxId;
 
         if (record.userText) {
             groupRootIds = [...turnRootIds];
@@ -1080,7 +1082,7 @@ function projectHistoryTurns(
         const custom = {
             ...baseCustom,
             turnId: record.id,
-            ...(record.sandboxId != null ? { sandboxId: record.sandboxId } : {}),
+            ...(sandboxId != null ? { sandboxId } : {}),
         };
 
         if (record.userText) {
@@ -1137,7 +1139,10 @@ function projectHistoryTurns(
                 status,
                 metadata: {
                     ...existing.metadata,
-                    custom,
+                    custom: {
+                        ...existing.metadata.custom,
+                        ...custom,
+                    },
                 },
             };
         } else if (record.state.status === "running") {
@@ -1738,7 +1743,11 @@ export function turnStreamUpdateToAssistantMessage(
             unstable_annotations: [],
             unstable_data: [],
             steps: [],
-            custom: { ...update.metadata?.custom, turnId },
+            custom: {
+                ...(existing?.role === "assistant" ? existing.metadata.custom : {}),
+                ...update.metadata?.custom,
+                turnId,
+            },
         },
     };
 }

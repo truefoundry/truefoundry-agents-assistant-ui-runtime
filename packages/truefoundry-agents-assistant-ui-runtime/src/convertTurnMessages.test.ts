@@ -472,6 +472,7 @@ describe("convertTurnMessages", () => {
         it("advances the turn id when a continuation reuses the existing message", () => {
             const existing = turnStreamUpdateToAssistantMessage("turn-1", {
                 content: [{ type: "text", text: "first" }],
+                metadata: { custom: { sandboxId: "sbx-123" } },
             });
             const updated = turnStreamUpdateToAssistantMessage(
                 "turn-2",
@@ -480,6 +481,7 @@ describe("convertTurnMessages", () => {
             );
             expect(updated.id).toBe("turn-1-assistant");
             expect(updated.metadata.custom.turnId).toBe("turn-2");
+            expect(updated.metadata.custom.sandboxId).toBe("sbx-123");
         });
     });
 
@@ -623,6 +625,56 @@ describe("convertTurnMessages", () => {
             ]);
             // Artifacts on a merged message belong to the turn that wrote them last.
             expect(assistant.metadata.custom.turnId).toBe("turn-2");
+        });
+
+        it("keeps the sandboxId when an ask-user continuation is merged", async () => {
+            const firstTurn = mockTurn({
+                id: "turn-1",
+                createdAt,
+                input: [{ type: "user.message", content: "create a file" }],
+                events: [
+                    sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                    modelMessage({
+                        id: "m1",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Which format?",
+                    }),
+                ],
+            });
+            const continuationTurn = mockTurn({
+                id: "turn-2",
+                createdAt,
+                input: [
+                    {
+                        type: "user.tool_response",
+                        threadId: ROOT_THREAD_ID,
+                        toolCallId: "ask-1",
+                        content: "Markdown",
+                    },
+                ],
+                events: [
+                    modelMessage({
+                        id: "m2",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Done",
+                    }),
+                ],
+            });
+
+            const result = await convertTurnsToThreadMessages(
+                mockServerWithTurns([continuationTurn, firstTurn]),
+                SESSION_ID,
+            );
+
+            expect(result.messages[1]).toMatchObject({
+                role: "assistant",
+                metadata: {
+                    custom: {
+                        sandboxId: "sbx-123",
+                        turnId: "turn-2",
+                    },
+                },
+            });
         });
 
         it("preserves requires-action on reload when a turn ends awaiting tool approval", async () => {
