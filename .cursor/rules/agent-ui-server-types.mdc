@@ -1,10 +1,15 @@
 ---
-description: FE-owned AgentUIServer types — FE-only fields, host widens via generics
-globs: packages/truefoundry-agents-assistant-ui-runtime/src/server/types.ts,packages/truefoundry-agents-assistant-ui-runtime/src/plugins/truefoundry-agent-server-adapter/types.ts
+description: FE-owned AgentUIServer types — sole owner; FE-only fields; host widens via generics
+globs: packages/truefoundry-agents-assistant-ui-runtime/src/server/types.ts,packages/truefoundry-agents-assistant-ui-runtime/src/server/index.ts,packages/truefoundry-agents-assistant-ui-runtime/src/plugins/truefoundry-agent-server-adapter/types.ts
 alwaysApply: false
 ---
 
 # AgentUIServer type contract (`server/types.ts`)
+
+This package is the **sole owner** of server-port types (`AgentChatServer`,
+`AgentBuilderServer`, catalog ports, DTOs, and stream/session events in
+`events.ts`). Consumers such as `@truefoundry/trueforge-ui` must re-export these
+types — they must not fork a parallel `types.ts`.
 
 Only declare types/fields the runtime or UI actually reads or writes.
 Everything else belongs on the host via `T extends Base` generics.
@@ -18,7 +23,8 @@ Everything else belongs on the host via `T extends Base` generics.
 - Host-specific fields (`fqn`, `tfyMetadata`, `config`, pricing, `modelId`, `properties`, etc.) go on host types — never on the SDK base.
 - Opaque mounts stay `object` (`SkillMount` / `McpServerMount`); hosts intersect concrete shapes.
 - Chat (`AgentChatServer`), builder (`AgentBuilderServer`), and catalog (`CatalogServer` / `ModelCatalogServer` / `ConnectorCatalogServer`) share this principle.
-- Compose via `AgentUIServerPort` (`chat & builder & { catalog? }`); settings use the nested `catalog` field.
+- Compose via `AgentUIServerPort` (`chat & builder & { catalog? }`); settings use the nested `catalog` field. Host-facing alias: `AgentUIServer`.
+- Keep host-stable aliases (`ModelSelection`, `SandboxProvider*`, etc.) next to canonical names so UI re-exports stay thin.
 - Catalog FE bases encode UI display + CRUD ids only (`ModelEntry`, `ModelProviderBase`, `ToolBase`, `ConnectorBase`).
 - Harness / backend wire shapes are scratch-only in `src/harness.temp.ts` (not published); hosts own the adapter outside this repo.
 - No dependency on `truefoundry-gateway-sdk` in `server/types.ts`.
@@ -40,4 +46,5 @@ export interface HostModelEntry extends ModelEntry {
 }
 
 // ❌ don't put gateway-only / harness wire fields on CatalogServer bases in server/types.ts
+// ❌ don't redefine these ports in trueforge-ui-sdk — re-export only
 ```

@@ -87,20 +87,21 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
                 remoteId: "d1",
                 title: "My draft",
                 lastMessageAt: new Date("2026-06-30T10:00:00.000Z"),
+                custom: { isMutable: true },
             },
             {
                 status: "regular",
                 remoteId: "s1",
                 title: "Named",
                 lastMessageAt: new Date("2026-06-30T09:00:00.000Z"),
-                custom: { agentName: "from-sdk" },
+                custom: { isMutable: false, agentName: "from-sdk" },
             },
             {
                 status: "regular",
                 remoteId: "s2",
                 title: "untitled-agent",
                 lastMessageAt: new Date("2026-06-30T08:00:00.000Z"),
-                custom: { agentName: "untitled-agent" },
+                custom: { isMutable: false, agentName: "untitled-agent" },
             },
         ]);
         expect(result.nextCursor).toBe("page-2");

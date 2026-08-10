@@ -24,7 +24,7 @@ export function sessionDisplayTitle(
     return session.title ?? session.agentName ?? session.id;
 }
 
-/** Map a Session DTO onto RemoteThreadMetadata, including display agentName in custom. */
+/** Map a Session DTO onto RemoteThreadMetadata (mutability + display name in custom). */
 export function sessionToThreadMetadata(
     session: Session,
     title: string | undefined,
@@ -34,6 +34,9 @@ export function sessionToThreadMetadata(
         remoteId: session.id,
         title,
         lastMessageAt: new Date(session.updatedAt),
-        ...(session.agentName != null ? { custom: { agentName: session.agentName } } : {}),
+        custom: {
+            isMutable: session.isMutable,
+            ...(session.agentName != null ? { agentName: session.agentName } : {}),
+        },
     };
 }

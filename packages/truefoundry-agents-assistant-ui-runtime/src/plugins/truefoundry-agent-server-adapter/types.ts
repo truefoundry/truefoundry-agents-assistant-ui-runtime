@@ -1,8 +1,8 @@
 /**
  * TrueFoundry-specific type extensions over the runtime's generic bases.
  *
- * The runtime defines minimal bases (SkillMount = {id,name}, McpServerMount =
- * {id,name}, AgentSpec.config = unknown, etc.) that hosts extend via generics.
+ * The runtime defines opaque mount bases (`SkillMount` / `McpServerMount` =
+ * `object`) that hosts intersect with gateway shapes via generics.
  *
  * This file builds the concrete TrueFoundry types by:
  *  - Importing the runtime's AgentSpec as the base to extend.
