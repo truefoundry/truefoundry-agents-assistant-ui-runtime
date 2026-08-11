@@ -1,4 +1,6 @@
 export type {
+    ProviderEntry,
+    ModelProperties,
     ModelSelectorEntry,
     SkillSelectorEntry,
     ConnectorSelectorEntry,

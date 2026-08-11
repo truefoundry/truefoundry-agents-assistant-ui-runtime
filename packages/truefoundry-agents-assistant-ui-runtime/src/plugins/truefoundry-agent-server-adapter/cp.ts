@@ -24,7 +24,6 @@ export interface TfyModelSelectorEntry extends ModelSelectorEntry {
     apiModel: string;
     modelId: string;
     providerAccount?: string;
-    id?: string;
 }
 
 export interface TfySkillSelectorEntry extends SkillSelectorEntry {
@@ -163,17 +162,17 @@ function toModelEntry(row: RawEnabledModel): TfyModelSelectorEntry | null {
     if (apiModel == null || apiModel === "" || name == null || name === "") {
         return null;
     }
-    const provider = row.provider ?? "unknown";
     const modelId = row.model_id ?? name;
     return {
+        id: apiModel,
         name,
-        provider,
+        provider: { name: row.provider ?? "unknown" },
+        properties: {},
         apiModel,
         modelId,
         ...(row.provider_account_name != null
             ? { providerAccount: row.provider_account_name }
             : {}),
-        id: apiModel,
     };
 }
 

@@ -148,6 +148,8 @@ export type {
     CatalogServer,
     AgentUIServerPort,
     AgentUIServer,
+    ProviderEntry,
+    ModelProperties,
     ModelSelectorEntry,
     SkillSelectorEntry,
     ConnectorSelectorEntry,
