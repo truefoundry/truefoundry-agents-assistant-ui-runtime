@@ -76,6 +76,13 @@ export async function createTrueFoundryAgentUIServer<
 
         const server: TrueFoundryAgentUIServer<TSpec> = {
             ...chat,
+            getCapabilities: async () => ({
+                data: {
+                    sandbox: { enabled: true },
+                    skill: { enabled: true },
+                    settings: { enabled: true },
+                },
+            }),
             getModels: () => listEnabledModels(cp),
             getSkills: () => listAgentSkills(cp),
             getMcp: () => listMcpServers(cp),

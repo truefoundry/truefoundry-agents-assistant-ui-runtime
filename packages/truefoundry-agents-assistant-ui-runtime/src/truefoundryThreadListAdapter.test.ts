@@ -63,7 +63,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
                 remoteId: "s1",
                 title: "First",
                 lastMessageAt: new Date("2026-06-30T10:00:00.000Z"),
-                custom: { agentName: "my-agent" },
+                custom: { isMutable: false, agentName: "my-agent" },
             },
         ]);
         expect(result.nextCursor).toBe("page-2");

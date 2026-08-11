@@ -61,13 +61,14 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
                 remoteId: "s1",
                 title: "Named chat",
                 lastMessageAt: new Date("2026-06-30T12:00:00.000Z"),
-                custom: { agentName: "my-agent" },
+                custom: { isMutable: false, agentName: "my-agent" },
             },
             {
                 status: "regular",
                 remoteId: "d1",
                 title: "Draft chat",
                 lastMessageAt: new Date("2026-06-30T11:00:00.000Z"),
+                custom: { isMutable: true },
             },
         ]);
         expect(result.nextCursor).toBe("page-2");

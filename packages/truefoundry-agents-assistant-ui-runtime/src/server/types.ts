@@ -22,6 +22,8 @@ export interface ModelSelectorEntry {
   name: string;
   provider: string;
   reasoningEfforts?: string[];
+  /** Provider logo URL from the model catalog; selector falls back to a monogram when omitted. */
+  providerLogo?: string;
 }
 
 /** Skill selector row. Host extends for fqn, preload, etc. */
@@ -36,6 +38,10 @@ export interface ConnectorSelectorEntry {
   id: string;
   name: string;
   description?: string;
+  /** When true, the connector must be authenticated before use. Omitted when the host does not report auth. */
+  requiresAuth?: boolean;
+  /** When true, the connector is already authenticated. Omitted when the host does not report auth. */
+  authenticated?: boolean;
 }
 
 /** Agent selector row. Host extends for metadata; `agentSpec` enables Edit. */
@@ -157,7 +163,7 @@ export interface ListSessionsParams extends PageParams {
   startTimestamp?: string;
 }
 
-export type PreviousTurnIdInput = "auto" | string;
+export type PreviousTurnIdInput = "auto" | "none" | string;
 
 // ---------------------------------------------------------------------------
 // Turn input / state — what runtime sends and reads
@@ -309,6 +315,15 @@ export interface AgentChatServer<
   }): Promise<Blob>;
 }
 
+/** Request body for `AgentBuilderServer.saveAgent`. */
+export interface SaveAgentRequest<TSpec extends AgentSpec = AgentSpec> {
+  agentName: string;
+  agentSpec: TSpec;
+}
+
+/**
+ * Builder feature flags — atoms gate sandbox / skill / settings surfaces on these.
+ */
 export interface AgentBuilderCapabilitiesResponse {
   data: {
     sandbox: { enabled: boolean };
@@ -328,18 +343,14 @@ export interface AgentBuilderServer<
   TMcp extends ConnectorSelectorEntry = ConnectorSelectorEntry,
   TAgent extends AgentSelectorEntry = AgentSelectorEntry,
   TSave = unknown,
-  TCapabilities extends AgentBuilderCapabilitiesResponse =
-    AgentBuilderCapabilitiesResponse,
+  TCapabilities extends AgentBuilderCapabilitiesResponse = AgentBuilderCapabilitiesResponse,
 > {
   getCapabilities(): Promise<TCapabilities>;
   getModels(): Promise<TModel[]>;
   getSkills(): Promise<TSkill[]>;
   getMcp(): Promise<TMcp[]>;
   searchAgents(req?: SearchAgentSelectorParams): Promise<TAgent[]>;
-  saveAgent(req: {
-      agentName: string;
-      agentSpec: TSpec;
-  }): Promise<TSave>;
+  saveAgent(req: SaveAgentRequest<TSpec>): Promise<TSave>;
   deleteAgent?(req: { agentName: string }): Promise<void>;
 }
 
@@ -400,6 +411,8 @@ export interface ModelProviderCatalogEntry<TModel extends ModelEntry = ModelEntr
   type: ProviderType;
   name: string;
   models: TModel[];
+  supportedReasoningEfforts?: string[];
+  logo?: string;
 }
 
 /** Create — no `id`; server assigns it. Catalog path = entry + apiKey. */
@@ -448,8 +461,8 @@ export type ConnectorAuth =
   | ConnectorAuthApiKey
   | ConnectorAuthNone;
 
-// Public (list/detail) — no secrets; dcr requires authUrl
-export type ConnectorAuthPublicOAuth = { type: "dcr"; authUrl: string };
+// Public (list/detail) — no secrets
+export type ConnectorAuthPublicOAuth = { type: "dcr"; authUrl?: string };
 export type ConnectorAuthPublicApiKey = {
   type: "header";
   headerName?: string;
@@ -472,11 +485,11 @@ export interface ConnectorConfigBase<
 }
 
 /**
-* Connected connector row (settings/connectors). No raw `apiKey`.
-* Host extends.
-*/
+ * Connected connector row (settings/connectors). No raw `apiKey` or tools.
+ * Tools are fetched separately with `getToolsByConnectorId`.
+ * Host extends.
+ */
 export interface ConnectorBase<
-  TTool extends ToolBase = ToolBase,
   TAuth extends ConnectorAuthPublic = ConnectorAuthPublic,
 > {
   id: string;
@@ -487,7 +500,6 @@ export interface ConnectorBase<
   /** When true, UI should not show Disconnect. */
   requiresAuth: boolean;
   authenticated: boolean;
-  tools: TTool[];
 }
 
 /** Discovery catalog entry for "+ Add MCP server". Host extends. */
@@ -499,6 +511,7 @@ export interface ConnectorCatalogEntry<
   description?: string;
   url: string;
   auth: TAuth;
+  logo?: string;
 }
 
 /** Create connector — no `id`; server assigns it. Host extends. */
@@ -509,31 +522,47 @@ export type CreateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> 
 export type UpdateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
   ConnectorConfigBase<TAuth> & { id: string };
 
+export interface AuthenticateConnectorRequest {
+  id: string;
+  /** OAuth callback page owned by the host application. */
+  redirectURL?: string;
+}
+
+export interface ConnectorAuthenticationResult<
+  TConnector extends ConnectorBase = ConnectorBase,
+> {
+  connector?: TConnector;
+  status?: string;
+  authorization_endpoint?: string | undefined;
+}
+
 export interface ConnectorCatalogServer<
   TTool extends ToolBase = ToolBase,
   TAuthWrite extends ConnectorAuth = ConnectorAuth,
   TAuthPublic extends ConnectorAuthPublic = ConnectorAuthPublic,
-  TConnector extends ConnectorBase<TTool, TAuthPublic> = ConnectorBase<
-      TTool,
-      TAuthPublic
-  >,
+  TConnector extends ConnectorBase<TAuthPublic> = ConnectorBase<TAuthPublic>,
   TCatalogEntry extends ConnectorCatalogEntry<TAuthPublic> =
-      ConnectorCatalogEntry<TAuthPublic>,
+    ConnectorCatalogEntry<TAuthPublic>,
   TCreate extends CreateConnectorRequest<TAuthWrite> =
-      CreateConnectorRequest<TAuthWrite>,
+    CreateConnectorRequest<TAuthWrite>,
   TUpdate extends UpdateConnectorRequest<TAuthWrite> =
-      UpdateConnectorRequest<TAuthWrite>,
+    UpdateConnectorRequest<TAuthWrite>,
 > {
   getConnectorCatalog(): Promise<TCatalogEntry[]>;
+  getConnector(req: { id: string }): Promise<TConnector>;
   listConnectors(req?: { query?: string }): Promise<TConnector[]>;
+  getToolsByConnectorId(req: { id: string }): Promise<TTool[]>;
   createConnector(req: TCreate): Promise<TConnector>;
   /** Full replace update keyed by connector `id`. */
   updateConnector(req: TUpdate): Promise<TConnector>;
   /**
    * Start connector auth (e.g. OAuth).
-   * For oauth, the returned connector's `auth.authUrl` is the authorize URL.
+   * May return a connector (already authenticated / with `auth.authUrl`) or a
+   * result carrying `authorization_endpoint` for the popup flow.
    */
-  authenticateConnector(req: { id: string }): Promise<TConnector>;
+  authenticateConnector(
+    req: AuthenticateConnectorRequest,
+  ): Promise<TConnector | ConnectorAuthenticationResult<TConnector>>;
   /** Clear connector auth. */
   disconnectConnector(req: { id: string }): Promise<TConnector>;
   deleteConnector?(req: { id: string }): Promise<void>;
@@ -598,10 +627,10 @@ export interface SkillCatalogServer<
 }
 
 // ---------------------------------------------------------------------------
-// Sandboxes catalog — public rows omit credentials; writes accept them
+// Sandbox providers catalog — public rows omit credentials; writes accept them
 // ---------------------------------------------------------------------------
 
-/** Mutable sandbox settings shared by catalog rows, create, and update. */
+/** Mutable sandbox provider settings shared by catalog rows, create, and update. */
 export interface SandboxConfig {
   snapshotName: string;
   execTimeoutMs: number;
@@ -616,7 +645,11 @@ export interface SandboxCatalogEntry extends SandboxConfig {
   type: string;
 }
 
-export interface SandboxBase {
+/**
+ * Connected sandbox provider row (settings/sandboxes). No raw `apiKey`.
+ * Includes last-saved config so update forms can show previous values.
+ */
+export interface SandboxBase extends SandboxConfig {
   id: string;
   name: string;
   catalogId: string;
@@ -624,7 +657,7 @@ export interface SandboxBase {
 }
 
 export interface CreateSandboxRequest extends SandboxConfig {
-  /** `SandboxCatalogEntry.id` used to create this sandbox. */
+  /** `SandboxCatalogEntry.id` used to create this sandbox provider. */
   catalogId: string;
   name: string;
   type: string;
@@ -633,21 +666,36 @@ export interface CreateSandboxRequest extends SandboxConfig {
 
 export interface UpdateSandboxRequest extends SandboxConfig {
   id: string;
-  apiKey: string;
+  /** Omit to keep the existing key; send a value to rotate. */
+  apiKey?: string;
 }
 
+/** Host-facing aliases (trueforge-ui public names). */
+export type SandboxProviderConfig = SandboxConfig;
+export type SandboxProviderCatalogEntry = SandboxCatalogEntry;
+export type SandboxProviderBase = SandboxBase;
+export type CreateSandboxProviderRequest = CreateSandboxRequest;
+export type UpdateSandboxProviderRequest = UpdateSandboxRequest;
+
 export interface SandboxCatalogServer<
-  TSandbox extends SandboxBase = SandboxBase,
+  TProvider extends SandboxBase = SandboxBase,
   TCatalogEntry extends SandboxCatalogEntry = SandboxCatalogEntry,
   TCreate extends CreateSandboxRequest = CreateSandboxRequest,
   TUpdate extends UpdateSandboxRequest = UpdateSandboxRequest,
 > {
-  getSandboxCatalog(): Promise<TCatalogEntry[]>;
-  listSandboxes(req?: { query?: string }): Promise<TSandbox[]>;
-  createSandbox(req: TCreate): Promise<TSandbox>;
-  updateSandbox(req: TUpdate): Promise<TSandbox>;
-  deleteSandbox(req: { id: string }): Promise<void>;
+  getSandboxProviderCatalog(): Promise<TCatalogEntry[]>;
+  listSandboxProviders(req?: { query?: string }): Promise<TProvider[]>;
+  createSandboxProvider(req: TCreate): Promise<TProvider>;
+  updateSandboxProvider(req: TUpdate): Promise<TProvider>;
+  deleteSandboxProvider?(req: { id: string }): Promise<void>;
 }
+
+/** Host-facing selector / compose aliases (trueforge-ui public names). */
+export type ModelSelection = ModelSelectorEntry;
+export type AgentSkill = SkillSelectorEntry;
+export type ConnectorState = ConnectorSelectorEntry;
+export type AgentLibraryEntry = AgentSelectorEntry;
+export type SearchAgentsParams = SearchAgentSelectorParams;
 
 /**
 * Settings management aggregate — modelCatalog + connectorCatalog + optional
@@ -669,16 +717,19 @@ export interface CatalogServer<
 }
 
 /**
-* Composed host port: chat + builder + optional settings catalog.
-* Agent-ui's `AgentUIServer` mirrors this shape; named differently here to
-* avoid colliding with that package's local type name.
-*
-* `catalog` is optional — if the host passes it, settings UI can call
-* `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
-* if omitted, those surfaces stay hidden.
-*/
+ * Composed host port: chat + builder + optional settings catalog.
+ *
+ * `catalog` is optional — if the host passes it, settings UI can call
+ * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
+ * if omitted, those surfaces stay hidden.
+ *
+ * trueforge-ui re-exports this as `AgentUIServer`.
+ */
 export type AgentUIServerPort<
   TChat extends AgentChatServer = AgentChatServer,
   TBuilder extends AgentBuilderServer = AgentBuilderServer,
   TCatalog extends CatalogServer = CatalogServer,
 > = TChat & TBuilder & { catalog?: TCatalog };
+
+/** Host-facing alias used by trueforge-ui. */
+export type AgentUIServer = AgentUIServerPort;

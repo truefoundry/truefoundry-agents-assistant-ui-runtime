@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.1.12
+
+### Breaking
+
+- **`SandboxCatalogServer` method renames (sandbox → sandbox provider)**  
+  `getSandboxCatalog` → `getSandboxProviderCatalog`, `listSandboxes` → `listSandboxProviders`, `createSandbox` → `createSandboxProvider`, `updateSandbox` → `updateSandboxProvider`, `deleteSandbox` → `deleteSandboxProvider?` (now optional). Host aliases (`SandboxProviderConfig`, `SandboxProviderCatalogEntry`, `SandboxProviderBase`, `CreateSandboxProviderRequest`, `UpdateSandboxProviderRequest`) map to the existing DTO names.
+
+- **`SandboxBase` now extends `SandboxConfig`**  
+  Connected rows always carry last-saved provider settings so update forms can show previous values.
+
+- **`UpdateSandboxRequest.apiKey` is optional**  
+  Omit to keep the existing key; send a value to rotate.
+
+- **`ConnectorBase.tools` removed**  
+  Tools are no longer embedded on the connector row. Fetch with new required `ConnectorCatalogServer.getToolsByConnectorId({ id })`. `ConnectorBase` is no longer generic in `TTool`.
+
+- **`ConnectorCatalogServer` adds required `getConnector` / `getToolsByConnectorId`**  
+  Implement both on every catalog adapter.
+
+- **`authenticateConnector` request/return changed**  
+  Request is `AuthenticateConnectorRequest` (`id` + optional `redirectURL`). Return is `TConnector | ConnectorAuthenticationResult<TConnector>` — either an authenticated connector (or one carrying `auth.authUrl`) or a result with `authorization_endpoint` for the popup flow.
+
+- **`ConnectorAuthPublicOAuth.authUrl` is optional**  
+  Public dcr rows may omit `authUrl` when auth is started via `authorization_endpoint` instead. (Supersedes the 0.1.8 note that public dcr required `authUrl`.)
+
+### Added
+
+- **Sole ownership of server-port types** — this package is the canonical home for `AgentChatServer` / `AgentBuilderServer` / catalog ports and DTOs. Hosts (e.g. trueforge-ui) should re-export, not fork.
+- **`AgentUIServer`** — host-facing alias of `AgentUIServerPort`.
+- **Selector / compose aliases** — `ModelSelection`, `AgentSkill`, `ConnectorState`, `AgentLibraryEntry`, `SearchAgentsParams` (aliases of the `*SelectorEntry` / `SearchAgentSelectorParams` names).
+- **Root exports** for builder/catalog types previously internal to `server/` (`SaveAgentRequest`, `AgentBuilderCapabilitiesResponse`, `AuthenticateConnectorRequest`, `ConnectorAuthenticationResult`, mounts, selector entries, sandbox-provider aliases, etc.).
+- **`ModelSelectorEntry.providerLogo?`**, **`ConnectorSelectorEntry.requiresAuth?` / `authenticated?`**, **`ModelProviderCatalogEntry.supportedReasoningEfforts?` / `logo?`**, **`ConnectorCatalogEntry.logo?`**.
+- **`SaveAgentRequest`** — named request body for `AgentBuilderServer.saveAgent`.
+- **`createTrueFoundryAgentUIServer.getCapabilities`** — returns sandbox / skill / settings enabled (stub; always `true` for this pack).
+- **`PreviousTurnIdInput` documents `"none"`** alongside `"auto"` and turn ids.
+
+### Fixed
+
+- **`sessionToThreadMetadata`** — always stamps `custom.isMutable` from the session (plus `agentName` when present). History UIs can trust mutability without inferring it from `agentName`, so ref sessions whose agent was deleted stay immutable.
+
 ## 0.1.10
 
 ### Breaking
