@@ -1,10 +1,10 @@
 # Quickstart
 
-From-example and manual setup paths to a working TrueFoundry agent chat, wired through assistant-ui.
+From-example and manual setup paths to a working agent chat, wired through assistant-ui.
 
-Two paths to a running chat against a TrueFoundry gateway agent. The example is fastest; the manual path is what you adapt when integrating into an existing project.
+Two paths to a running chat against an `AgentChatServer` (the Vite demo uses the TrueFoundry gateway plugin). The example is fastest; the manual path is what you adapt when integrating into an existing project.
 
-The runtime is a headless adapter: it maps TrueFoundry gateway sessions, turns, and streaming events onto assistant-ui's external-store runtime. You bring the UI (`Thread`, `Composer`, `ThreadList`) from `@assistant-ui/react`, and a pre-built `AgentSessionClient` from `truefoundry-gateway-sdk`.
+The runtime is a headless adapter: it maps server sessions, turns, and streaming events onto assistant-ui's external-store runtime. You bring the UI (`Thread`, `Composer`, `ThreadList`) from `@assistant-ui/react`, and a pre-built `AgentChatServer` (e.g. `createTrueFoundryAgentUIServer`).
 
 ## From the example
 
@@ -47,46 +47,43 @@ Works in any React app (Vite, Next.js, Remix, etc.).
    npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-gateway-sdk
    ```
 
-2. ### Create the `AgentSessionClient` helper
+2. ### Create the `AgentChatServer`
 
-   Construct the client in your app. The runtime only ever accepts a pre-built client — it does **not** read API keys or gateway URLs itself.
+   Construct the server in your app. The runtime only ever accepts a pre-built `AgentChatServer` — it does **not** read API keys or gateway URLs itself.
 
-   In development the client hits the gateway directly with a browser-visible key. In production, omit the key and point `baseUrl` at your own proxy route so the real key stays server-side (see [Production proxy backend](#production-proxy-backend)).
+   Preferred (chat + Control Plane builder):
 
    ```ts
-   import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
+   import { createTrueFoundryAgentUIServer } from "@truefoundry/assistant-ui-runtime";
 
-   export function createClient() {
-     const apiKey = import.meta.env.VITE_TFY_API_KEY;
-     const baseUrl =
-       import.meta.env.VITE_TFY_GATEWAY_URL ??
-       new URL("/api/tfy", window.location.origin).href;
-
-     return new AgentSessionClient({
-       baseUrl,
-       // Dev: browser-visible key talks to the gateway directly.
-       // Prod: no key in the browser — the /api/tfy proxy injects it server-side.
-       ...(apiKey ? { apiKey } : { auth: false }),
+   export async function createServer() {
+     return createTrueFoundryAgentUIServer({
+       apiKey: import.meta.env.VITE_TFY_API_KEY!,
+       cpURL: import.meta.env.VITE_TFY_CP_URL!,
+       // gatewayURL: import.meta.env.VITE_TFY_GATEWAY_URL,
      });
    }
    ```
 
+   Chat-only escape hatch: `createTrueFoundryChatServer({ apiKey, baseUrl })`.
+
 3. ### Build the assistant component
 
    ```tsx
-   import { useMemo } from "react";
+   import { use, useMemo } from "react";
    import { AssistantRuntimeProvider } from "@assistant-ui/react";
-   import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
+   import { useAgentRuntime } from "@truefoundry/assistant-ui-runtime";
    import { Thread } from "@/components/assistant-ui/thread";
 
-   import { createClient } from "./client";
+   import { createServer } from "./server";
+
+   const serverPromise = createServer();
 
    export function MyAssistant() {
-     const client = useMemo(() => createClient(), []);
-     const runtime = useTrueFoundryAgentRuntime({
-       client,
-       agentName: "my-agent",
-     });
+     const server = use(serverPromise);
+     const runtime = useAgentRuntime(
+       useMemo(() => ({ server, agentName: "my-agent" }), [server]),
+     );
 
      return (
        <AssistantRuntimeProvider runtime={runtime}>
@@ -188,7 +185,7 @@ With this route in place, drop `VITE_TFY_API_KEY` and `VITE_TFY_GATEWAY_URL` fro
 
 ## Next steps
 
-- **[README](./README.md)** — full option reference, hooks, and the `trueFoundryExtras` escape hatch.
+- **[README](./README.md)** — full option reference, hooks, and the `agentExtras` escape hatch.
 - **Thread list** — render `<ThreadList>` from `@assistant-ui/react` alongside `<Thread>`; the runtime supplies a cursor-paginated thread-list adapter automatically (one gateway session ⇄ one thread).
-- **Tool approvals & ask-user responses** — `useTrueFoundryApprovals` / `useTrueFoundryToolResponses` for gating tool calls and answering prompts.
-- **Attachments** — opt in by wiring `trueFoundryAttachmentAdapter` through the `adapters` option.
+- **Tool approvals & ask-user responses** — `useApprovals` / `useToolResponses` for gating tool calls and answering prompts.
+- **Attachments** — opt in by wiring `agentAttachmentAdapter` through the `adapters` option.

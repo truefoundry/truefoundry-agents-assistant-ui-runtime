@@ -32,16 +32,16 @@ import {
     DRAFT_SESSION_LAST_UPDATED_AT_HEADER,
 } from "./draft/draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
-import { createTrueFoundryDraftThreadListAdapter } from "./draft/truefoundryDraftThreadListAdapter.js";
-import { trueFoundryExtras } from "./truefoundryExtras.js";
-import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
-import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
-import { resolveTrueFoundryAgentRuntimeOptions } from "./types.js";
+import { createDraftThreadListAdapter } from "./draft/draftThreadListAdapter.js";
+import { agentExtras } from "./agentExtras.js";
+import { createThreadListAdapter } from "./threadListAdapter.js";
+import type { UseAgentRuntimeOptions } from "./types.js";
+import { resolveAgentRuntimeOptions } from "./types.js";
 import { useDraftAgentSpec } from "./draft/useDraftAgentSpec.js";
-import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
+import { useAgentMessages } from "./useAgentMessages.js";
 
-function useTrueFoundryAgentRuntimeImpl(
-    options: ReturnType<typeof resolveTrueFoundryAgentRuntimeOptions>,
+function useAgentRuntimeImpl(
+    options: ReturnType<typeof resolveAgentRuntimeOptions>,
     pendingAgentSpecRef: MutableRefObject<AgentSpec | undefined>,
 ) {
     const {
@@ -120,7 +120,7 @@ function useTrueFoundryAgentRuntimeImpl(
         editFromTurn,
         resetFromTurn,
         retryLoad,
-    } = useTrueFoundryAgentMessages({
+    } = useAgentMessages({
         server,
         sessionId,
         isMain,
@@ -195,7 +195,7 @@ function useTrueFoundryAgentRuntimeImpl(
         messages,
         isRunning,
         isLoading,
-        extras: trueFoundryExtras.provide({
+        extras: agentExtras.provide({
             pendingApprovals,
             pendingToolResponses,
             pendingMcpAuth,
@@ -272,8 +272,8 @@ function useTrueFoundryAgentRuntimeImpl(
     });
 }
 
-export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOptions) {
-    const resolved = resolveTrueFoundryAgentRuntimeOptions(options);
+export function useAgentRuntime(options: UseAgentRuntimeOptions) {
+    const resolved = resolveAgentRuntimeOptions(options);
     const { server, agent } = resolved;
 
     const pendingAgentSpecRef = useRef<AgentSpec | undefined>(
@@ -286,14 +286,14 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     const threadListAdapter = useMemo(() => {
         if (agentMode === "draft") {
             const draftAgent = agent as Extract<typeof agent, { mode: "draft" }>;
-            return createTrueFoundryDraftThreadListAdapter({
+            return createDraftThreadListAdapter({
                 server,
                 defaultAgentSpec: draftAgent.defaultAgentSpec,
                 getAgentSpec: () => pendingAgentSpecRef.current ?? draftAgent.defaultAgentSpec,
                 listSessionsAgentId,
             });
         }
-        return createTrueFoundryThreadListAdapter({
+        return createThreadListAdapter({
             server,
             agentName: namedAgentName!,
             listSessionsAgentId,
@@ -307,6 +307,6 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
         initialThreadId: resolved.initialSessionId,
         threadId: resolved.threadId,
         onThreadIdChange: resolved.onThreadIdChange,
-        runtimeHook: () => useTrueFoundryAgentRuntimeImpl(resolved, pendingAgentSpecRef),
+        runtimeHook: () => useAgentRuntimeImpl(resolved, pendingAgentSpecRef),
     });
 }

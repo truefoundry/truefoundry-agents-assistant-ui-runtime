@@ -56,7 +56,7 @@ const server = await createTrueFoundryAgentUIServer({
   // gatewayURL: process.env.TFY_GATEWAY_URL, // optional
 });
 
-// Pass `server` to TrueFoundryAssistantUI / useTrueFoundryAgentRuntime
+// Pass `server` to TrueFoundryAssistantUI / useAgentRuntime
 ```
 
 Returns `TrueFoundryAgentUIServer` = `AgentChatServer` & `AgentBuilderServer` (no settings `catalog`). Concurrent calls with the same credentials share one in-flight promise.

@@ -83,7 +83,7 @@ import {
  *
  * This module is the projection layer: it turns gateway session state into
  * `ThreadMessage[]` for `@assistant-ui/core`. The hook in
- * `useTrueFoundryAgentMessages.ts` owns the mutable `SessionSnapshot`; this
+ * `useAgentMessages.ts` owns the mutable `SessionSnapshot`; this
  * file defines how that snapshot is built and rendered.
  *
  * ## Data model

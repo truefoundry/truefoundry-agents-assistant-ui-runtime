@@ -28,7 +28,7 @@ import {
 import { extractTurnUserText } from "./extractTurnUserText.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
-import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
+import type { AgentMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     collectRequiredActionInputs,
     findPausedAssistantMessage,
@@ -53,7 +53,7 @@ import {
 } from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
-export type UseTrueFoundryAgentMessagesOptions = {
+export type UseAgentMessagesOptions = {
     server: AgentChatServer;
     sessionId: string | undefined;
     /** When true the thread is the currently selected (main) thread. */
@@ -126,7 +126,7 @@ function buildCompletedTurnState(
 export function requiredActionsFromActiveUpdate(
     update: TurnStreamUpdate,
 ): TurnStateDone["requiredActions"] {
-    const custom = update.metadata?.custom as TrueFoundryMessageCustomMetadata | undefined;
+    const custom = update.metadata?.custom as AgentMessageCustomMetadata | undefined;
     const requiredActions: TurnStateDone["requiredActions"] = [];
     const createdAt = new Date().toISOString();
 
@@ -288,7 +288,7 @@ function resolveTurnInput(
     return undefined;
 }
 
-export function useTrueFoundryAgentMessages({
+export function useAgentMessages({
     server,
     sessionId,
     isMain,
@@ -298,7 +298,7 @@ export function useTrueFoundryAgentMessages({
     initializeSession,
     resolveConversationSessionId,
     getTurnHeaders,
-}: UseTrueFoundryAgentMessagesOptions) {
+}: UseAgentMessagesOptions) {
     const [snapshot, setSnapshot] = useState<SessionSnapshot>(createEmptySessionSnapshot);
     const [isRunning, setIsRunning] = useState(false);
     // Existing sessions have history pending from the first render. Starting at

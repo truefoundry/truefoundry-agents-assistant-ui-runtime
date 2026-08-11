@@ -1,19 +1,24 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 
 import type { AgentChatServer } from "./server/types.js";
-import { getSession } from "./sessions.js";
 import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
-import { sessionToThreadMetadata } from "./sessionThreadMetadata.js";
+import {
+    sessionDisplayTitle,
+    sessionToThreadMetadata,
+} from "./sessionThreadMetadata.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
-export function createTrueFoundryThreadListAdapter(options: {
+/**
+ * Read-only thread-list adapter backed by `AgentChatServer.listSessions`.
+ * Hosts that previously used listOwnedSessions should filter in their server impl.
+ */
+export function createOwnedSessionsThreadListAdapter(options: {
     server: AgentChatServer;
-    agentName: string;
     /** When set, filters `listSessions` by this agent id. Omit for all chats. */
     listSessionsAgentId?: string;
 }): RemoteThreadListAdapter {
-    const { server, agentName, listSessionsAgentId } = options;
+    const { server, listSessionsAgentId } = options;
 
     return {
         async list({ after } = {}) {
@@ -24,7 +29,7 @@ export function createTrueFoundryThreadListAdapter(options: {
                 startTimestamp: sessionListStartTimestamp(),
             });
             const threads = page.data.map((session) =>
-                sessionToThreadMetadata(session, session.title ?? undefined),
+                sessionToThreadMetadata(session, sessionDisplayTitle(session)),
             );
             return {
                 threads,
@@ -32,14 +37,15 @@ export function createTrueFoundryThreadListAdapter(options: {
             };
         },
 
-        async initialize(_threadId: string) {
-            const session = await server.createSession({ agentName });
-            return { remoteId: session.id, externalId: undefined };
+        async initialize() {
+            throw new Error(
+                "Owned sessions history adapter is read-only; create sessions via a named or draft runtime.",
+            );
         },
 
         async fetch(remoteId) {
-            const session = await getSession(server, remoteId);
-            return sessionToThreadMetadata(session, session.title ?? undefined);
+            const session = await server.getSession({ sessionId: remoteId });
+            return sessionToThreadMetadata(session, sessionDisplayTitle(session));
         },
 
         async rename() {},

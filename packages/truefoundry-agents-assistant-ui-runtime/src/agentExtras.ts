@@ -9,7 +9,7 @@ import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
 export type { PendingApproval, PendingToolResponse };
 
-export type TrueFoundryDraftRuntimeExtras = {
+export type DraftRuntimeExtras = {
     agentSpec: AgentSpec | null;
     draftSessionId: string | undefined;
     isSpecLoading: boolean;
@@ -18,7 +18,7 @@ export type TrueFoundryDraftRuntimeExtras = {
     updateAgentSpec: (update: AgentSpecUpdate) => void;
 };
 
-export type TrueFoundryRuntimeExtras = {
+export type AgentRuntimeExtras = {
     pendingApprovals: PendingApproval[];
     pendingToolResponses: PendingToolResponse[];
     pendingMcpAuth: { mcpServers: McpAuthRequiredEvent["mcpServers"] } | null;
@@ -33,14 +33,14 @@ export type TrueFoundryRuntimeExtras = {
     hasOlderHistory: boolean;
     isLoadingOlderHistory: boolean;
     loadOlderHistory: () => Promise<void>;
-    draft: TrueFoundryDraftRuntimeExtras | null;
+    draft: DraftRuntimeExtras | null;
 };
 
-export const trueFoundryExtras = createRuntimeExtras<TrueFoundryRuntimeExtras>(
-    "useTrueFoundryAgentRuntime",
+export const agentExtras = createRuntimeExtras<AgentRuntimeExtras>(
+    "useAgentRuntime",
 );
 
-export const EMPTY_DRAFT_EXTRAS: TrueFoundryDraftRuntimeExtras = {
+export const EMPTY_DRAFT_EXTRAS: DraftRuntimeExtras = {
     agentSpec: null,
     draftSessionId: undefined,
     isSpecLoading: false,

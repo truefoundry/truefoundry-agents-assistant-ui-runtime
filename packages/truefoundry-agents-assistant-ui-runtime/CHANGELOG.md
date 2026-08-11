@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0
+
+### Breaking
+
+- **Hard rename of core API (TrueFoundry → generic Agent tokens).** Plugin APIs (`createTrueFoundry*`, `Tfy*`, plugin subpath) are unchanged. Notable renames:
+  - `useTrueFoundryAgentRuntime` → `useAgentRuntime`
+  - `UseTrueFoundryAgentRuntimeOptions` → `UseAgentRuntimeOptions`
+  - `TrueFoundryAgentConfig` → `AgentConfig`
+  - `trueFoundryExtras` → `agentExtras` (extras key `"useAgentRuntime"`)
+  - `TrueFoundryRuntimeExtras` / `TrueFoundryDraftRuntimeExtras` → `AgentRuntimeExtras` / `DraftRuntimeExtras`
+  - `TrueFoundryMessageCustomMetadata` → `AgentMessageCustomMetadata`
+  - `trueFoundryAttachmentAdapter` → `agentAttachmentAdapter`
+  - `toTrueFoundryApprovalInputs` → `toApprovalInputs`
+  - `createTrueFoundryThreadListAdapter` / `Draft` / `OwnedSessions` → `createThreadListAdapter` / `createDraftThreadListAdapter` / `createOwnedSessionsThreadListAdapter`
+  - Consumer hooks drop the `TrueFoundry` prefix (`useApprovals`, `useToolResponses`, `useMcpAuth`, `useAgentSpec`, …)
+  - Source files renamed to match (`useAgentRuntime.ts`, `agentExtras.ts`, `threadListAdapter.ts`, …)
+  - No deprecation aliases — update imports for 0.2.0.
+
 ## 0.1.12
 
 ### Breaking

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AgentChatServer, Session } from "./server/index.js";
 
-import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
+import { createThreadListAdapter } from "./threadListAdapter.js";
 
 function mockSession(
     id: string,
@@ -31,7 +31,7 @@ function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
     return partial as AgentChatServer;
 }
 
-describe("createTrueFoundryThreadListAdapter", () => {
+describe("createThreadListAdapter", () => {
     it("lists the first page without agentId when filter is omitted", async () => {
         const listSessions = vi.fn().mockResolvedValue(
             mockListSessionsPage(
@@ -40,7 +40,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
             ),
         );
         const server = mockServer({ listSessions });
-        const adapter = createTrueFoundryThreadListAdapter({
+        const adapter = createThreadListAdapter({
             server,
             agentName: "my-agent",
         });
@@ -74,7 +74,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
             mockListSessionsPage([mockSession("s2", "Second", "2026-06-29T10:00:00.000Z")]),
         );
         const server = mockServer({ listSessions });
-        const adapter = createTrueFoundryThreadListAdapter({
+        const adapter = createThreadListAdapter({
             server,
             agentName: "my-agent",
             listSessionsAgentId: "filter-agent",
@@ -97,7 +97,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
             mockListSessionsPage([mockSession("s1", "Only", "2026-06-30T10:00:00.000Z")]),
         );
         const server = mockServer({ listSessions });
-        const adapter = createTrueFoundryThreadListAdapter({
+        const adapter = createThreadListAdapter({
             server,
             agentName: "my-agent",
         });
@@ -110,7 +110,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
     it("delete calls server.deleteSession when implemented", async () => {
         const deleteSession = vi.fn().mockResolvedValue(undefined);
         const server = mockServer({ deleteSession });
-        const adapter = createTrueFoundryThreadListAdapter({
+        const adapter = createThreadListAdapter({
             server,
             agentName: "my-agent",
         });
@@ -121,7 +121,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
     });
 
     it("delete is a no-op when server.deleteSession is missing", async () => {
-        const adapter = createTrueFoundryThreadListAdapter({
+        const adapter = createThreadListAdapter({
             server: mockServer({}),
             agentName: "my-agent",
         });

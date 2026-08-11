@@ -2,7 +2,7 @@ import type { ThreadAssistantMessagePart, ThreadMessage } from "@assistant-ui/co
 import type { McpAuthRequiredEvent } from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
-import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
+import type { AgentMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     getToolApprovalThreadId,
     hasPendingToolApproval,
@@ -132,7 +132,7 @@ export function derivePendingMcpAuth(
         if (message.status?.type !== "requires-action") {
             continue;
         }
-        const custom = message.metadata.custom as TrueFoundryMessageCustomMetadata;
+        const custom = message.metadata.custom as AgentMessageCustomMetadata;
         if (custom.pendingMcpAuth !== true) {
             continue;
         }
@@ -156,7 +156,7 @@ export function deriveSandboxId(messages: readonly ThreadMessage[]): string | un
         if (message?.role !== "assistant") {
             continue;
         }
-        const custom = message.metadata.custom as TrueFoundryMessageCustomMetadata;
+        const custom = message.metadata.custom as AgentMessageCustomMetadata;
         if (typeof custom.sandboxId === "string") {
             return custom.sandboxId;
         }

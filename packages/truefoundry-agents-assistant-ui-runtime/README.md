@@ -1,6 +1,6 @@
 # @truefoundry/assistant-ui-runtime
 
-A headless React runtime that connects [assistant-ui](https://www.assistant-ui.com/) to TrueFoundry agent sessions. Bring your own UI and server — the adapter maps sessions, turns, and streaming events onto assistant-ui's external-store runtime.
+A headless React runtime that connects [assistant-ui](https://www.assistant-ui.com/) to any `AgentChatServer`. Bring your own UI and server — the adapter maps sessions, turns, and streaming events onto assistant-ui's external-store runtime. A TrueFoundry gateway plugin is included for first-party hosts.
 
 Built on top of [`@assistant-ui/react`](https://www.assistant-ui.com/), so Thread, Composer, ThreadList, and tool UIs work against a familiar contract out of the box.
 
@@ -12,12 +12,12 @@ Built on top of [`@assistant-ui/react`](https://www.assistant-ui.com/), so Threa
 
 - [Installation](#installation)
 - [Quick start](#quick-start)
-- [`useTrueFoundryAgentRuntime` options](#usetruefoundryagentruntime-options)
+- [`useAgentRuntime` options](#useagentruntime-options)
 - [Agent modes](#agent-modes)
 - [Attachments](#attachments)
 - [Runtime extras](#runtime-extras)
 - [Server port (`AgentChatServer`)](#server-port-agentchatserver)
-- [TrueFoundry gateway plugin](#truefoundry-gateway-plugin)
+- [TrueFoundry agent UI server plugin](#truefoundry-agent-ui-server-plugin)
 - [Exports](#exports)
 - [Architecture](#architecture-source-map)
 - [License](#license)
@@ -46,7 +46,7 @@ npm install truefoundry-gateway-sdk
 
 ## Quick start
 
-The fastest path is a TrueFoundry gateway server + the runtime hook + your Thread UI.
+The fastest path is the TrueFoundry gateway plugin + `useAgentRuntime` + your Thread UI.
 
 ```tsx
 "use client";
@@ -54,7 +54,7 @@ The fastest path is a TrueFoundry gateway server + the runtime hook + your Threa
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   createTrueFoundryAgentUIServer,
-  useTrueFoundryAgentRuntime,
+  useAgentRuntime,
 } from "@truefoundry/assistant-ui-runtime";
 import { Thread } from "@/components/assistant-ui/thread";
 
@@ -65,7 +65,7 @@ const server = await createTrueFoundryAgentUIServer({
 });
 
 export function MyAssistant() {
-  const runtime = useTrueFoundryAgentRuntime({
+  const runtime = useAgentRuntime({
     server,
     agentName: "support-bot",
   });
@@ -84,9 +84,9 @@ That wires streaming turns, tool approvals, ask-user prompts, MCP auth, and sub-
 
 ---
 
-## `useTrueFoundryAgentRuntime` options
+## `useAgentRuntime` options
 
-`UseTrueFoundryAgentRuntimeOptions` extends assistant-ui's `ExternalStoreSharedOptions`. Adapter-specific fields:
+`UseAgentRuntimeOptions` extends assistant-ui's `ExternalStoreSharedOptions`. Adapter-specific fields:
 
 | Option | Type | Required | Description |
 | ------ | ---- | -------- | ----------- |
@@ -102,7 +102,7 @@ That wires streaming turns, tool approvals, ask-user prompts, MCP auth, and sub-
 ### Resume / pin a session
 
 ```tsx
-const runtime = useTrueFoundryAgentRuntime({
+const runtime = useAgentRuntime({
   server,
   agentName: "support-bot",
   initialSessionId: "ses_abc123",
@@ -124,13 +124,13 @@ Omit `<ThreadList>` if you manage session ids yourself — the session-list adap
 
 ```tsx
 // Named
-const runtime = useTrueFoundryAgentRuntime({
+const runtime = useAgentRuntime({
   server,
   agentName: "support-bot",
 });
 
 // Draft
-const runtime = useTrueFoundryAgentRuntime({
+const runtime = useAgentRuntime({
   server,
   agent: {
     mode: "draft",
@@ -148,14 +148,14 @@ Attachments are **opt-in**. Wire the built-in adapter for composer file pick / p
 
 ```tsx
 import {
-  trueFoundryAttachmentAdapter,
-  useTrueFoundryAgentRuntime,
+  agentAttachmentAdapter,
+  useAgentRuntime,
 } from "@truefoundry/assistant-ui-runtime";
 
-const runtime = useTrueFoundryAgentRuntime({
+const runtime = useAgentRuntime({
   server,
   agentName,
-  adapters: { attachments: trueFoundryAttachmentAdapter },
+  adapters: { attachments: agentAttachmentAdapter },
 });
 ```
 
@@ -163,20 +163,20 @@ const runtime = useTrueFoundryAgentRuntime({
 
 ## Runtime extras
 
-Typed escape hatch for adapter-specific state and actions (same pattern as `@assistant-ui/react-google-adk`). Use selector hooks for thread-level UI; use action hooks / `trueFoundryExtras.get(aui)` inside nested sub-agent renderers.
+Typed escape hatch for adapter-specific state and actions (same pattern as `@assistant-ui/react-google-adk`). Use selector hooks for thread-level UI; use action hooks / `agentExtras.get(aui)` inside nested sub-agent renderers.
 
 ### Approvals, ask-user, MCP auth
 
 ```tsx
 import {
-  useTrueFoundryApprovals,
-  useTrueFoundryToolResponses,
-  useTrueFoundryMcpAuth,
+  useApprovals,
+  useToolResponses,
+  useMcpAuth,
 } from "@truefoundry/assistant-ui-runtime";
 
-const { pending, respond } = useTrueFoundryApprovals();
-const { pending: asks, respond: answer } = useTrueFoundryToolResponses();
-const { pending: mcp, resume } = useTrueFoundryMcpAuth();
+const { pending, respond } = useApprovals();
+const { pending: asks, respond: answer } = useToolResponses();
+const { pending: mcp, resume } = useMcpAuth();
 ```
 
 **Batched resume:** the gateway requires **every** pending `user.tool_approval` and `user.tool_response` across all threads (root + sub-agents) in a **single** resume call. The adapter stages decisions locally and only sends when nothing is pending anywhere — partial resumes are rejected.
@@ -185,22 +185,22 @@ const { pending: mcp, resume } = useTrueFoundryMcpAuth();
 
 | Hook | Returns | Description |
 | ---- | ------- | ----------- |
-| `useTrueFoundryApprovals()` | `{ pending, respond }` | Pending tool approvals + respond |
-| `useTrueFoundryToolResponses()` | `{ pending, respond }` | Pending ask-user prompts + respond |
-| `useTrueFoundryMcpAuth()` | `{ pending, resume }` | Pending MCP OAuth + resume |
-| `useTrueFoundryRespondToToolApproval()` | `(r) => void` | Respond from any render context |
-| `useTrueFoundryRespondToToolResponse()` | `(r) => void` | Answer ask-user from any render context |
-| `useTrueFoundryResumeMcpAuth()` | `() => Promise<void>` | Resume after MCP OAuth |
-| `useTrueFoundryCancel()` | `() => Promise<void>` | Cancel the active turn |
-| `useTrueFoundryHistoryPagination()` | `{ hasOlderHistory, isLoadingOlderHistory, loadOlderHistory }` | Scroll-up older history |
+| `useApprovals()` | `{ pending, respond }` | Pending tool approvals + respond |
+| `useToolResponses()` | `{ pending, respond }` | Pending ask-user prompts + respond |
+| `useMcpAuth()` | `{ pending, resume }` | Pending MCP OAuth + resume |
+| `useRespondToToolApproval()` | `(r) => void` | Respond from any render context |
+| `useRespondToToolResponse()` | `(r) => void` | Answer ask-user from any render context |
+| `useResumeMcpAuth()` | `() => Promise<void>` | Resume after MCP OAuth |
+| `useCancel()` | `() => Promise<void>` | Cancel the active turn |
+| `useHistoryPagination()` | `{ hasOlderHistory, isLoadingOlderHistory, loadOlderHistory }` | Scroll-up older history |
 
 ### Low-level namespace
 
 ```tsx
-import { trueFoundryExtras } from "@truefoundry/assistant-ui-runtime";
+import { agentExtras } from "@truefoundry/assistant-ui-runtime";
 
-const extras = trueFoundryExtras.use();
-const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
+const extras = agentExtras.use();
+const pending = agentExtras.use((e) => e.pendingApprovals, []);
 ```
 
 ---
@@ -276,12 +276,12 @@ See the [plugin README](./src/plugins/truefoundry-agent-server-adapter/README.md
 
 | Export | Kind | Purpose |
 | ------ | ---- | ------- |
-| `useTrueFoundryAgentRuntime` | Hook | Root runtime — wires external-store + thread list |
+| `useAgentRuntime` | Hook | Root runtime — wires external-store + thread list |
 | `createTrueFoundryAgentUIServer` | Function | Full pack: gateway chat + CP builder (also via plugin subpath) |
 | `createTrueFoundryChatServer` | Function | Chat-only gateway → `AgentChatServer` |
-| `trueFoundryAttachmentAdapter` | Adapter | Opt-in composer attachments |
-| `trueFoundryExtras` | Namespace | Low-level extras access |
-| `useTrueFoundryApprovals` / `ToolResponses` / `McpAuth` / … | Hooks | Pending state + actions |
+| `agentAttachmentAdapter` | Adapter | Opt-in composer attachments |
+| `agentExtras` | Namespace | Low-level extras access |
+| `useApprovals` / `ToolResponses` / `McpAuth` / … | Hooks | Pending state + actions |
 | `AgentChatServer`, `AgentBuilderServer`, `CatalogServer`, `Session`, `Turn`, … | Types | Server ports + DTOs |
 | `TfyAgentSpec`, `TfySession`, `isTfyToolInfo`, … | Types / guards | Gateway-concrete types from the plugin |
 | `NamedAgentConfig`, `DraftAgentConfig` | Types | Agent source discriminants |
@@ -297,9 +297,9 @@ For contributors working inside this package. Source lives in `src/`; the publis
 | `server/types.ts` | `AgentChatServer` + `AgentBuilderServer` + `CatalogServer` (modelCatalog/connectorCatalog/skillCatalog, optional via `AgentUIServerPort.catalog`), `AgentSpec`, session/turn/pagination types |
 | `server/events.ts` | Concrete turn/stream event types |
 | `draft/` | Draft-mode helpers (`mergeAgentSpec`, session bridge, draft thread-list, `useDraftAgentSpec`) |
-| `useTrueFoundryAgentRuntime.ts` | Public hook — external-store + thread-list + extras |
-| `useTrueFoundryAgentMessages.ts` | Reactive session snapshot: load, stream, cancel, resume |
-| `truefoundryExtras.ts` / `hooks.ts` | Extras namespace + consumer hooks |
+| `useAgentRuntime.ts` | Public hook — external-store + thread-list + extras |
+| `useAgentMessages.ts` | Reactive session snapshot: load, stream, cancel, resume |
+| `agentExtras.ts` / `hooks.ts` | Extras namespace + consumer hooks |
 | `convertTurnMessages.ts` | Pure projection from snapshot → thread messages |
 | `foldPeerThreads.ts` | Nest peer/sub-agent threads under spawning tool calls |
 | `plugins/truefoundry-agent-server-adapter/` | Gateway chat + CP builder → `AgentUIServerPort` |

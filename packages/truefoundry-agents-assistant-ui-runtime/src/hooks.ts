@@ -3,18 +3,18 @@
 import { useMemo } from "react";
 import { useAui, useAuiState } from "@assistant-ui/store";
 
-import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
+import type { AgentMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     EMPTY_DRAFT_EXTRAS,
-    trueFoundryExtras,
-    type TrueFoundryDraftRuntimeExtras,
-} from "./truefoundryExtras.js";
+    agentExtras,
+    type DraftRuntimeExtras,
+} from "./agentExtras.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
 /** Pending tool approvals plus a respond action. */
-export const useTrueFoundryApprovals = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+export const useApprovals = () => {
+    const extras = agentExtras.use((e) => e, undefined);
 
     return useMemo(
         () => ({
@@ -22,7 +22,7 @@ export const useTrueFoundryApprovals = () => {
             respond:
                 extras?.respondToToolApproval ??
                 (() => {
-                    throw new Error("TrueFoundry runtime is not ready yet");
+                    throw new Error("Agent runtime is not ready yet");
                 }),
         }),
         [extras],
@@ -30,8 +30,8 @@ export const useTrueFoundryApprovals = () => {
 };
 
 /** Pending ask-user tool responses plus a respond action. */
-export const useTrueFoundryToolResponses = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+export const useToolResponses = () => {
+    const extras = agentExtras.use((e) => e, undefined);
 
     return useMemo(
         () => ({
@@ -39,7 +39,7 @@ export const useTrueFoundryToolResponses = () => {
             respond:
                 extras?.respondToToolResponse ??
                 ((_response: RespondToToolResponseOptions) => {
-                    throw new Error("TrueFoundry runtime is not ready yet");
+                    throw new Error("Agent runtime is not ready yet");
                 }),
         }),
         [extras],
@@ -47,8 +47,8 @@ export const useTrueFoundryToolResponses = () => {
 };
 
 /** Pending MCP OAuth plus a resume action. */
-export const useTrueFoundryMcpAuth = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+export const useMcpAuth = () => {
+    const extras = agentExtras.use((e) => e, undefined);
 
     return useMemo(
         () => ({
@@ -56,7 +56,7 @@ export const useTrueFoundryMcpAuth = () => {
             resume:
                 extras?.resumeMcpAuth ??
                 (async () => {
-                    throw new Error("TrueFoundry runtime is not ready yet");
+                    throw new Error("Agent runtime is not ready yet");
                 }),
         }),
         [extras],
@@ -64,34 +64,34 @@ export const useTrueFoundryMcpAuth = () => {
 };
 
 /** Returns a function to respond to a tool approval from any render context. */
-export const useTrueFoundryRespondToToolApproval = () => {
+export const useRespondToToolApproval = () => {
     const aui = useAui();
     return (response: RespondToToolApprovalOptions) =>
-        trueFoundryExtras.get(aui).respondToToolApproval(response);
+        agentExtras.get(aui).respondToToolApproval(response);
 };
 
 /** Returns a function to respond to a pending tool response from any render context. */
-export const useTrueFoundryRespondToToolResponse = () => {
+export const useRespondToToolResponse = () => {
     const aui = useAui();
     return (response: RespondToToolResponseOptions) =>
-        trueFoundryExtras.get(aui).respondToToolResponse(response);
+        agentExtras.get(aui).respondToToolResponse(response);
 };
 
 /** Returns a function to resume after MCP OAuth from any render context. */
-export const useTrueFoundryResumeMcpAuth = () => {
+export const useResumeMcpAuth = () => {
     const aui = useAui();
-    return () => trueFoundryExtras.get(aui).resumeMcpAuth();
+    return () => agentExtras.get(aui).resumeMcpAuth();
 };
 
 /** Current sandboxId for this session, if a sandbox has been created. */
-export const useTrueFoundrySandboxId = (): string | undefined =>
-    trueFoundryExtras.use((e) => e.sandboxId, undefined);
+export const useSandboxId = (): string | undefined =>
+    agentExtras.use((e) => e.sandboxId, undefined);
 
 /** Turn that produced the message being rendered. Only defined inside a message scope. */
-export const useTrueFoundryTurnId = (): string | undefined =>
+export const useTurnId = (): string | undefined =>
     useAuiState(
         (state) =>
-            (state.message.metadata?.custom as TrueFoundryMessageCustomMetadata | undefined)
+            (state.message.metadata?.custom as AgentMessageCustomMetadata | undefined)
                 ?.turnId,
     );
 
@@ -99,34 +99,34 @@ export const useTrueFoundryTurnId = (): string | undefined =>
  * Returns a function to download a file the current turn wrote to its sandbox. Must be called
  * from a message scope, since the artifact belongs to the turn that rendered it.
  */
-export const useTrueFoundryDownloadSandboxFile = () => {
+export const useDownloadSandboxFile = () => {
     const aui = useAui();
-    const turnId = useTrueFoundryTurnId();
+    const turnId = useTurnId();
     return (path: string) => {
         if (turnId == null) {
             throw new Error(
                 "Downloading a sandbox file requires a message scope to resolve its turn.",
             );
         }
-        return trueFoundryExtras.get(aui).downloadSandboxFile({ turnId, path });
+        return agentExtras.get(aui).downloadSandboxFile({ turnId, path });
     };
 };
 
 /** Returns a function to cancel the current run from any render context. */
-export const useTrueFoundryCancel = () => {
+export const useCancel = () => {
     const aui = useAui();
-    return () => trueFoundryExtras.get(aui).cancel();
+    return () => agentExtras.get(aui).cancel();
 };
 
 /** Returns a function to reload (retry) the current session from any render context. */
-export const useTrueFoundryReload = () => {
+export const useReload = () => {
     const aui = useAui();
-    return () => trueFoundryExtras.get(aui).reload();
+    return () => agentExtras.get(aui).reload();
 };
 
 /** Older history pagination state plus a load-more action for scroll-up. */
-export const useTrueFoundryHistoryPagination = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+export const useHistoryPagination = () => {
+    const extras = agentExtras.use((e) => e, undefined);
 
     return useMemo(
         () => ({
@@ -135,7 +135,7 @@ export const useTrueFoundryHistoryPagination = () => {
             loadOlderHistory:
                 extras?.loadOlderHistory ??
                 (async () => {
-                    throw new Error("TrueFoundry runtime is not ready yet");
+                    throw new Error("Agent runtime is not ready yet");
                 }),
         }),
         [extras],
@@ -143,14 +143,14 @@ export const useTrueFoundryHistoryPagination = () => {
 };
 
 /** Returns a function to reset (re-submit) a user turn from any render context. */
-export const useTrueFoundryResetFromTurn = () => {
+export const useResetFromTurn = () => {
     const aui = useAui();
-    return (turnId: string) => trueFoundryExtras.get(aui).resetFromTurn(turnId);
+    return (turnId: string) => agentExtras.get(aui).resetFromTurn(turnId);
 };
 
 /** Current draft agent spec and sync state (draft mode only). */
-export const useTrueFoundryAgentSpec = () => {
-    const extras = trueFoundryExtras.use((e) => e.draft, null);
+export const useAgentSpec = () => {
+    const extras = agentExtras.use((e) => e.draft, null);
 
     return useMemo(
         () => ({ ...EMPTY_DRAFT_EXTRAS, ...extras }),
@@ -159,9 +159,9 @@ export const useTrueFoundryAgentSpec = () => {
 };
 
 /** Returns a draft spec updater from any render context. */
-export const useTrueFoundryUpdateAgentSpec = () => {
+export const useUpdateAgentSpec = () => {
     const aui = useAui();
-    return (update: Parameters<TrueFoundryDraftRuntimeExtras["updateAgentSpec"]>[0]) =>
-        trueFoundryExtras.get(aui).draft?.updateAgentSpec(update);
+    return (update: Parameters<DraftRuntimeExtras["updateAgentSpec"]>[0]) =>
+        agentExtras.get(aui).draft?.updateAgentSpec(update);
 };
 

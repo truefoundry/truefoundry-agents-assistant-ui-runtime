@@ -28,7 +28,7 @@ import {
     toolResponseMessageCustom,
     toolResponseStatus,
 } from "./toolResponse.js";
-import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
+import { useAgentMessages } from "./useAgentMessages.js";
 
 vi.mock("./loadSessionSnapshot.js", () => ({
     loadSessionSnapshot: vi.fn(),
@@ -276,7 +276,7 @@ async function* singleUpdateStream() {
     yield { content: [{ type: "text" as const, text: "streamed reply" }] };
 }
 
-describe("useTrueFoundryAgentMessages", () => {
+describe("useAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(mockServer.cancelSession).mockResolvedValue(undefined);
@@ -292,7 +292,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("clears messages when sessionId is undefined", async () => {
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: undefined }),
+            useAgentMessages({ server: mockServer, sessionId: undefined }),
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -303,7 +303,7 @@ describe("useTrueFoundryAgentMessages", () => {
     it("loads the initial URL session before it is marked as the main thread", async () => {
         const { rerender } = renderHook(
             ({ isMain }: { isMain: boolean }) =>
-                useTrueFoundryAgentMessages({
+                useAgentMessages({
                     server: mockServer,
                     sessionId: "session-from-url",
                     isMain,
@@ -331,7 +331,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("does not load an inactive background thread", async () => {
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({
+            useAgentMessages({
                 server: mockServer,
                 sessionId: "background-session",
                 isMain: false,
@@ -349,7 +349,7 @@ describe("useTrueFoundryAgentMessages", () => {
             .mockResolvedValueOnce(snapshotWithUserTurn("Hello"));
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({
+            useAgentMessages({
                 server: mockServer,
                 sessionId: "session-from-url",
                 isMain: false,
@@ -380,7 +380,7 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({
+            useAgentMessages({
                 server: mockServer,
                 sessionId: undefined,
                 initializeSession,
@@ -407,7 +407,7 @@ describe("useTrueFoundryAgentMessages", () => {
             .mockResolvedValueOnce(undefined);
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({
+            useAgentMessages({
                 server: mockServer,
                 sessionId: "session-1",
                 getTurnHeaders,
@@ -458,7 +458,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -489,7 +489,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
 
         await waitFor(() => expect(result.current.isRunning).toBe(false));
@@ -532,7 +532,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -551,7 +551,7 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("sendTurn appends a user message and streams the assistant reply", async () => {
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -631,7 +631,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
         expect(result.current.messages.map((m) => m.role)).toEqual([
@@ -710,7 +710,7 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({
+            useAgentMessages({
                 server: mockServer,
                 sessionId: "session-1",
                 onError,
@@ -769,7 +769,7 @@ describe("useTrueFoundryAgentMessages", () => {
             );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -814,7 +814,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -834,7 +834,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -878,7 +878,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -912,7 +912,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -972,7 +972,7 @@ describe("useTrueFoundryAgentMessages", () => {
         );
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.messages).toHaveLength(2));
         expect(collectPendingToolResponses(result.current.messages)).toHaveLength(1);
@@ -1000,7 +1000,7 @@ describe("useTrueFoundryAgentMessages", () => {
             );
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+                useAgentMessages({ server: mockServer, sessionId: "session-1" }),
             );
             await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -1051,7 +1051,7 @@ describe("useTrueFoundryAgentMessages", () => {
             );
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+                useAgentMessages({ server: mockServer, sessionId: "session-1" }),
             );
             await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
@@ -1085,7 +1085,7 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         const { result } = renderHook(() =>
-            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+            useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -1116,7 +1116,7 @@ describe("useTrueFoundryAgentMessages", () => {
                 .mockRejectedValue(new Error("Draft session creation failed"));
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({
+                useAgentMessages({
                     server: mockServer,
                     sessionId: undefined,
                     initializeSession,
@@ -1151,7 +1151,7 @@ describe("useTrueFoundryAgentMessages", () => {
             });
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({
+                useAgentMessages({
                     server: mockServer,
                     sessionId: "session-1",
                     onError,
@@ -1194,7 +1194,7 @@ describe("useTrueFoundryAgentMessages", () => {
             );
 
             const { result } = renderHook(() =>
-                useTrueFoundryAgentMessages({
+                useAgentMessages({
                     server: mockServer,
                     sessionId: "session-1",
                     onError,
