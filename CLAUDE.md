@@ -19,6 +19,8 @@ AgentChatServer (your backend or createTrueFoundryAgentUIServer)
 
 `truefoundry-gateway-sdk` is an optional peer (required only for the TrueFoundry plugin) providing `AgentSessionClient`/`TrueFoundryGateway` and gateway event/turn types — never redefine those shapes locally outside the plugin.
 
+Optional companion UI (separate npm package, not in this repo): [`@truefoundry/agent-ui-sdk`](https://www.npmjs.com/package/@truefoundry/agent-ui-sdk).
+
 ### External references
 
 - [assistant-ui `AssistantRuntime` API reference](https://www.assistant-ui.com/docs/api-reference/runtimes/assistant-runtime) — the interface `useAgentRuntime` implements (external-store runtime contract, thread-list runtime, etc.).
@@ -31,18 +33,17 @@ Run from the repo root:
 | Command | Description |
 |---------|-------------|
 | `pnpm install` | Install workspace deps |
-| `pnpm build` | Build `agent-ui-sdk` and its dependencies (`tsup → dist/`) |
+| `pnpm build` | Build `@truefoundry/assistant-ui-runtime` (`tsup → dist/`) |
 | `pnpm test` | Run the runtime package's vitest suite |
 | `pnpm typecheck` | Type-check all `packages/*` (`tsc --noEmit`) |
-| `pnpm dev` | Build, then start the Vite example at `http://localhost:5173` |
+| `pnpm dev` | Build the runtime package, then start the Vite example at `http://localhost:5173` |
 
-Scoped to one package (from repo root):
+Scoped filters (from repo root):
 
 ```bash
-pnpm --filter truefoundry-agents-assistant-ui-runtime test
-pnpm --filter @truefoundry/agent-ui-sdk test
-pnpm --filter @truefoundry/agent-ui-sdk build
-pnpm --filter @truefoundry/agent-ui-sdk typecheck
+pnpm --filter "@truefoundry/assistant-ui-runtime" test
+pnpm --filter "@truefoundry/assistant-ui-runtime" build
+pnpm --filter "@truefoundry/assistant-ui-runtime" typecheck
 pnpm --filter assistant-ui-vite dev
 ```
 
@@ -69,18 +70,8 @@ Full source map and invariants are documented in that package's [README](package
 - Two agent-source modes surface as two different thread-list adapters: `threadListAdapter.ts` (named/conversation sessions) vs `draft/draftThreadListAdapter.ts` (draft sessions).
 - `agentExtras.ts` / `hooks.ts` expose pending approvals, ask-user responses, and MCP-auth pauses as a typed "extras" escape hatch, readable from any render context including nested sub-agent (readonly) renderers.
 
-### `packages/agent-ui-sdk`
-
-Full details, including 8 worked override examples and known gaps, are in that package's [README](packages/agent-ui-sdk/README.md#architecture) — read it before touching UI here. Structure:
-
-- **Atoms** (`src/atoms/**`) — pure, stateless, prop-driven. Never import `@assistant-ui/*` or the runtime package; never call a runtime/data hook. Own all Tailwind styling.
-- **Containers** (`src/containers/**`) — stateful glue. Read assistant-ui primitives/hooks and TrueFoundry runtime hooks, derive plain data/callbacks, and resolve every atom via `useSlot("AtomName")` — never import an atom directly. Contain no styling of their own.
-- **Slot registry** (`src/theme/SlotsProvider.tsx`) — `AtomSlots` is augmented per-atom via declaration merging; `defaultSlots.ts` supplies this SDK's defaults. Consumers override via `<SlotsProvider overrides={{...}}>`, nestable, falling back to the default per-slot.
-- Caveat: not every slot declared in `AtomSlots` is actually resolved via `useSlot` by the shipped atoms — some low-level primitives (`Button`, `Tooltip*`, `Dialog*`, etc.) are imported directly by the atoms that use them. Check the README's "Good to know before you start swapping" section before assuming an override will take effect.
-- Tests render containers against a real in-memory assistant-ui runtime via `src/containers/RuntimeHarness.tsx` — no network calls, no real gateway.
-
 ### Build tooling notes
 
-- Both packages build with `tsup` to ESM-only `dist/` (gitignored); `truefoundry-gateway-sdk`'s ESM agent module is aliased/inlined at build and test time (see `tsup.config.ts` / `vitest.config.ts` in the runtime package) because that SDK ships a `.mjs` subpath that needs explicit resolution.
+- The runtime package builds with `tsup` to ESM-only `dist/` (gitignored). `truefoundry-gateway-sdk`'s ESM agent module may need explicit resolution at build/test time (see `tsup.config.ts` / `vitest.config.ts`) because that SDK ships a `.mjs` subpath.
 - The runtime package's `tsconfig.json` runs strict mode with `noUncheckedIndexedAccess` — respect that when indexing arrays/objects.
-- `pnpm build` at the repo root only builds `agent-ui-sdk^...` (i.e. its dependency chain); it does not build the example app itself, which is bundled by `next build`/`next dev`.
+- `pnpm build` at the repo root builds `@truefoundry/assistant-ui-runtime` only; examples are started via `pnpm dev` / package filters.

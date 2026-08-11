@@ -2,7 +2,7 @@
   "name": "truefoundry-agents-assistant-ui-runtime-repo",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter assistant-ui-vite^... build",
+    "build": "pnpm --filter \"@truefoundry/assistant-ui-runtime\" build",
     "test": "pnpm --filter \"@truefoundry/assistant-ui-runtime\" test",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
     "dev": "pnpm build && pnpm --filter assistant-ui-vite dev",

@@ -12,7 +12,6 @@ import {
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
-/** Pending tool approvals plus a respond action. */
 export const useApprovals = () => {
     const extras = agentExtras.use((e) => e, undefined);
 
@@ -29,7 +28,6 @@ export const useApprovals = () => {
     );
 };
 
-/** Pending ask-user tool responses plus a respond action. */
 export const useToolResponses = () => {
     const extras = agentExtras.use((e) => e, undefined);
 
@@ -46,7 +44,6 @@ export const useToolResponses = () => {
     );
 };
 
-/** Pending MCP OAuth plus a resume action. */
 export const useMcpAuth = () => {
     const extras = agentExtras.use((e) => e, undefined);
 
@@ -63,27 +60,23 @@ export const useMcpAuth = () => {
     );
 };
 
-/** Returns a function to respond to a tool approval from any render context. */
 export const useRespondToToolApproval = () => {
     const aui = useAui();
     return (response: RespondToToolApprovalOptions) =>
         agentExtras.get(aui).respondToToolApproval(response);
 };
 
-/** Returns a function to respond to a pending tool response from any render context. */
 export const useRespondToToolResponse = () => {
     const aui = useAui();
     return (response: RespondToToolResponseOptions) =>
         agentExtras.get(aui).respondToToolResponse(response);
 };
 
-/** Returns a function to resume after MCP OAuth from any render context. */
 export const useResumeMcpAuth = () => {
     const aui = useAui();
     return () => agentExtras.get(aui).resumeMcpAuth();
 };
 
-/** Current sandboxId for this session, if a sandbox has been created. */
 export const useSandboxId = (): string | undefined =>
     agentExtras.use((e) => e.sandboxId, undefined);
 
@@ -96,8 +89,8 @@ export const useTurnId = (): string | undefined =>
     );
 
 /**
- * Returns a function to download a file the current turn wrote to its sandbox. Must be called
- * from a message scope, since the artifact belongs to the turn that rendered it.
+ * Download a file the current turn wrote to its sandbox. Must be called from a
+ * message scope so the artifact is scoped to that turn.
  */
 export const useDownloadSandboxFile = () => {
     const aui = useAui();
@@ -112,19 +105,16 @@ export const useDownloadSandboxFile = () => {
     };
 };
 
-/** Returns a function to cancel the current run from any render context. */
 export const useCancel = () => {
     const aui = useAui();
     return () => agentExtras.get(aui).cancel();
 };
 
-/** Returns a function to reload (retry) the current session from any render context. */
 export const useReload = () => {
     const aui = useAui();
     return () => agentExtras.get(aui).reload();
 };
 
-/** Older history pagination state plus a load-more action for scroll-up. */
 export const useHistoryPagination = () => {
     const extras = agentExtras.use((e) => e, undefined);
 
@@ -142,13 +132,12 @@ export const useHistoryPagination = () => {
     );
 };
 
-/** Returns a function to reset (re-submit) a user turn from any render context. */
 export const useResetFromTurn = () => {
     const aui = useAui();
     return (turnId: string) => agentExtras.get(aui).resetFromTurn(turnId);
 };
 
-/** Current draft agent spec and sync state (draft mode only). */
+/** Draft agent spec and sync state (draft mode only). */
 export const useAgentSpec = () => {
     const extras = agentExtras.use((e) => e.draft, null);
 
@@ -158,10 +147,8 @@ export const useAgentSpec = () => {
     );
 };
 
-/** Returns a draft spec updater from any render context. */
 export const useUpdateAgentSpec = () => {
     const aui = useAui();
     return (update: Parameters<DraftRuntimeExtras["updateAgentSpec"]>[0]) =>
         agentExtras.get(aui).draft?.updateAgentSpec(update);
 };
-

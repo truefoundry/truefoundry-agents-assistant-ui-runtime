@@ -8,8 +8,8 @@ alwaysApply: false
 
 This package is the **sole owner** of server-port types (`AgentChatServer`,
 `AgentBuilderServer`, catalog ports, DTOs, and stream/session events in
-`events.ts`). Consumers such as `@truefoundry/trueforge-ui` must re-export these
-types — they must not fork a parallel `types.ts`.
+`events.ts`). Downstream host apps must re-export these types — they must not
+fork a parallel `types.ts`.
 
 Only declare types/fields the runtime or UI actually reads or writes.
 Everything else belongs on the host via `T extends Base` generics.
@@ -26,7 +26,7 @@ Everything else belongs on the host via `T extends Base` generics.
 - Compose via `AgentUIServerPort` (`chat & builder & { catalog? }`); settings use the nested `catalog` field. Host-facing alias: `AgentUIServer`.
 - Keep host-stable aliases (`ModelSelection`, `SandboxProvider*`, etc.) next to canonical names so UI re-exports stay thin.
 - Catalog FE bases encode UI display + CRUD ids only (`ModelEntry`, `ModelProviderBase`, `ToolBase`, `ConnectorBase`).
-- Harness / backend wire shapes are scratch-only in `src/harness.temp.ts` (not published); hosts own the adapter outside this repo.
+- Harness / backend wire shapes live outside this package; hosts own those adapters.
 - No dependency on `truefoundry-gateway-sdk` in `server/types.ts`.
 - Catalog DTO keys are camelCase (FE surface); host adapters map snake_case wire payloads.
 
@@ -46,5 +46,5 @@ export interface HostModelEntry extends ModelEntry {
 }
 
 // ❌ don't put gateway-only / harness wire fields on CatalogServer bases in server/types.ts
-// ❌ don't redefine these ports in trueforge-ui-sdk — re-export only
+// ❌ don't redefine these ports in a host SDK — re-export only
 ```

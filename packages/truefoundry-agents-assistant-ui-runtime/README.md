@@ -290,7 +290,7 @@ See the [plugin README](./src/plugins/truefoundry-agent-server-adapter/README.md
 
 ## Architecture (source map)
 
-For contributors working inside this package. Source lives in `src/`; the published entry point is `dist/index.js` (built by `tsup`).
+For contributors working inside this package. Source lives in `src/` (GitHub); the published package ships `dist/` built by `tsup`.
 
 | File | Responsibility |
 | ---- | -------------- |

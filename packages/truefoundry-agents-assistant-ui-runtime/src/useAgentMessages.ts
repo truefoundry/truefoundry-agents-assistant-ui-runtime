@@ -397,7 +397,7 @@ export function useAgentMessages({
                         replaceSessionSnapshot(prev, {
                             activeStream: {
                                 // Read from the ref so we always use the latest ID,
-                                // including any gateway ID that arrived after the RAf
+                                // including any gateway ID that arrived after the RAF
                                 // was scheduled.
                                 turnId: turnIdRef.current,
                                 update,

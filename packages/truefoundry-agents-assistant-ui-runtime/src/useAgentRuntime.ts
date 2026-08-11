@@ -298,7 +298,8 @@ export function useAgentRuntime(options: UseAgentRuntimeOptions) {
             agentName: namedAgentName!,
             listSessionsAgentId,
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Intentionally omit `agent`: draft uses getAgentSpec() via pendingAgentSpecRef;
+        // named identity is captured by namedAgentName.
     }, [agentMode, namedAgentName, listSessionsAgentId, server]);
 
     return useRemoteThreadListRuntime({

@@ -45,7 +45,7 @@
 
 ### Added
 
-- **Sole ownership of server-port types** — this package is the canonical home for `AgentChatServer` / `AgentBuilderServer` / catalog ports and DTOs. Hosts (e.g. trueforge-ui) should re-export, not fork.
+- **Sole ownership of server-port types** — this package is the canonical home for `AgentChatServer` / `AgentBuilderServer` / catalog ports and DTOs. Downstream hosts should re-export, not fork.
 - **`AgentUIServer`** — host-facing alias of `AgentUIServerPort`.
 - **Selector / compose aliases** — `ModelSelection`, `AgentSkill`, `ConnectorState`, `AgentLibraryEntry`, `SearchAgentsParams` (aliases of the `*SelectorEntry` / `SearchAgentSelectorParams` names).
 - **Root exports** for builder/catalog types previously internal to `server/` (`SaveAgentRequest`, `AgentBuilderCapabilitiesResponse`, `AuthenticateConnectorRequest`, `ConnectorAuthenticationResult`, mounts, selector entries, sandbox-provider aliases, etc.).

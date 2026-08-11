@@ -11,12 +11,15 @@ packages/
   truefoundry-agents-assistant-ui-runtime/   # Published as @truefoundry/assistant-ui-runtime
 examples/
   assistant-ui-vite/                         # Vite + React demo app
+  ink-cli/                                   # Terminal chat demo (Ink)
+  assistant-ui-react/                        # Additional React demo
 ```
 
 | Path | README |
 |------|--------|
 | `packages/truefoundry-agents-assistant-ui-runtime` | [Package docs](packages/truefoundry-agents-assistant-ui-runtime/README.md) — installation, API reference, hooks, architecture |
 | `examples/assistant-ui-vite` | [Example docs](examples/assistant-ui-vite/README.md) — running the demo locally |
+| `examples/ink-cli` | [CLI example](examples/ink-cli/README.md) — terminal chat via Ink |
 
 ## Quickstart (demo app)
 
@@ -82,4 +85,4 @@ Run from the repo root:
 
 ## License
 
-MIT
+[Apache-2.0](LICENSE)
