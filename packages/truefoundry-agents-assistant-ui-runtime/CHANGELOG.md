@@ -17,6 +17,7 @@
   - Consumer hooks drop the `TrueFoundry` prefix (`useApprovals`, `useToolResponses`, `useMcpAuth`, `useAgentSpec`, …)
   - Source files renamed to match (`useAgentRuntime.ts`, `agentExtras.ts`, `threadListAdapter.ts`, …)
   - No deprecation aliases — update imports for 0.2.0.
+- Optional peer `truefoundry-gateway-sdk` range is now `^0.4.0` (stable; was RC).
 
 ## 0.1.12
 

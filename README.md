@@ -86,3 +86,7 @@ Run from the repo root:
 ## License
 
 [Apache-2.0](LICENSE)
+
+## Contributing / security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md).

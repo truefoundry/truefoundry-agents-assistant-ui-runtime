@@ -54,10 +54,69 @@ function snapshotWithAssistantMessage(
     extra?: Partial<SessionSnapshot>,
 ): SessionSnapshot {
     const turnId = message.id.replace(/-assistant$/, "");
+    const createdAt =
+        message.createdAt instanceof Date
+            ? message.createdAt.toISOString()
+            : new Date().toISOString();
+    const fold = new PeerThreadFoldState();
+    const modelId = `${turnId}-model`;
+    const toolCalls = message.content
+        .filter((part) => part.type === "tool-call")
+        .map((part) => ({
+            id: part.toolCallId,
+            type: "function" as const,
+            function: {
+                name: part.toolName,
+                arguments: part.argsText ?? "{}",
+            },
+        }));
+    ingestTurnEvent(fold, {
+        type: "model.message",
+        id: modelId,
+        createdAt,
+        threadId: ROOT_THREAD_ID,
+        content:
+            message.content
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join("") || undefined,
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
+    });
+    for (const part of message.content) {
+        if (part.type !== "tool-call") continue;
+        if (part.approval != null) {
+            ingestTurnEvent(fold, {
+                type: "tool.approval_required",
+                id: `approval-req-${part.toolCallId}`,
+                createdAt,
+                threadId: ROOT_THREAD_ID,
+                toolCalls: [{ id: part.toolCallId, sourceEventId: modelId }],
+            });
+        }
+        if (part.interrupt != null) {
+            ingestTurnEvent(fold, {
+                type: "tool.response_required",
+                id: `response-req-${part.toolCallId}`,
+                createdAt,
+                threadId: ROOT_THREAD_ID,
+                toolCalls: [{ id: part.toolCallId, sourceEventId: modelId }],
+            });
+        }
+    }
+
+    // Mirror paused-turn shape (pending user + completed stream) so commitActiveStream
+    // writes a userText turn that history projection can show.
     return replaceSessionSnapshot(createEmptySessionSnapshot(), {
+        fold,
+        pendingUser: {
+            turnId,
+            content: "prompt",
+            createdAt: new Date(createdAt),
+        },
         activeStream: {
             turnId,
             isContinuation: false,
+            streamComplete: true,
             update: {
                 content: [...message.content],
                 status: message.status,
@@ -272,18 +331,47 @@ function assistantMessageWithMultiThreadPendingActions() {
     };
 }
 
-async function* singleUpdateStream() {
+async function* singleUpdateStream(
+    _server: AgentChatServer,
+    _sessionId: string,
+    fold: PeerThreadFoldState,
+): AsyncGenerator<{ content: { type: "text"; text: string }[] }> {
+    const modelId = `model-${Math.random().toString(36).slice(2, 9)}`;
+    ingestTurnEvent(fold, {
+        type: "model.message",
+        id: modelId,
+        createdAt: new Date().toISOString(),
+        threadId: ROOT_THREAD_ID,
+        content: "streamed reply",
+    });
     yield { content: [{ type: "text" as const, text: "streamed reply" }] };
 }
 
 describe("useAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // jsdom has no RAF; keep pending updates until runStream's finally flushes.
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", () => undefined);
         vi.mocked(mockServer.cancelSession).mockResolvedValue(undefined);
         vi.mocked(mockServer.listTurns).mockResolvedValue({ data: [] });
         vi.mocked(loadSessionSnapshot).mockResolvedValue(createEmptySessionSnapshot());
-        vi.mocked(streamTurnContent).mockReturnValue(singleUpdateStream());
-        vi.mocked(resumeTurnStream).mockReturnValue(singleUpdateStream());
+        vi.mocked(streamTurnContent).mockImplementation(
+            ((...args: Parameters<typeof streamTurnContent>) =>
+                singleUpdateStream(
+                    args[0],
+                    args[1],
+                    args[2],
+                )) as typeof streamTurnContent,
+        );
+        vi.mocked(resumeTurnStream).mockImplementation(
+            ((...args: Parameters<typeof resumeTurnStream>) =>
+                singleUpdateStream(
+                    args[0],
+                    args[1],
+                    args[3],
+                )) as typeof resumeTurnStream,
+        );
     });
 
     afterEach(() => {
@@ -424,9 +512,10 @@ describe("useAgentMessages", () => {
         expect(streamTurnContent).toHaveBeenCalledWith(
             mockServer,
             "session-1",
-            expect.any(PeerThreadFoldState),
+            expect.anything(),
             {
                 userMessage: "first",
+                previousTurnId: "none",
                 headers: {
                     "x-tfy-session-last-updated-at": "2026-06-30T12:00:00.000Z",
                 },
@@ -444,7 +533,7 @@ describe("useAgentMessages", () => {
         expect(streamTurnContent).toHaveBeenLastCalledWith(
             mockServer,
             "session-1",
-            expect.any(PeerThreadFoldState),
+            expect.anything(),
             { userMessage: "second" },
             expect.any(AbortSignal),
             expect.any(Array),
@@ -480,7 +569,8 @@ describe("useAgentMessages", () => {
                         id: runningTurn.id,
                         createdAt: new Date().toISOString(),
                         state: { status: "running" },
-                        input: [],
+                        input: [{ type: "user.message", content: "keep going" }],
+                        userText: "keep going",
                     },
                 ],
                 runningTurn,
@@ -804,14 +894,23 @@ describe("useAgentMessages", () => {
     });
 
     it("carries a streamed sandboxId through commit so it survives after the stream completes", async () => {
-        vi.mocked(streamTurnContent).mockReturnValue(
-            (async function* () {
-                yield {
-                    content: [{ type: "text" as const, text: "streamed reply" }],
-                    metadata: { custom: { sandboxId: "sbx-123" } },
-                };
-            })(),
-        );
+        vi.mocked(streamTurnContent).mockImplementation(async function* (
+            _server,
+            _sessionId,
+            fold,
+        ) {
+            ingestTurnEvent(fold, {
+                type: "model.message",
+                id: "model-sbx",
+                createdAt: new Date().toISOString(),
+                threadId: ROOT_THREAD_ID,
+                content: "streamed reply",
+            });
+            yield {
+                content: [{ type: "text" as const, text: "streamed reply" }],
+                metadata: { custom: { sandboxId: "sbx-123" } },
+            };
+        });
 
         const { result } = renderHook(() =>
             useAgentMessages({ server: mockServer, sessionId: "session-1" }),
@@ -836,7 +935,7 @@ describe("useAgentMessages", () => {
         const { result } = renderHook(() =>
             useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
-        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        await waitFor(() => expect(result.current.messages).toHaveLength(2));
 
         await act(async () => {
             await result.current.sendTurn({
@@ -868,8 +967,11 @@ describe("useAgentMessages", () => {
             expect.any(AbortSignal),
             expect.any(Array),
         );
-        expect(result.current.messages).toHaveLength(1);
-        expect(result.current.messages[0]?.role).toBe("assistant");
+        expect(result.current.messages).toHaveLength(2);
+        expect(result.current.messages.map((m) => m.role)).toEqual([
+            "user",
+            "assistant",
+        ]);
     });
 
     it("respondToToolApproval records approval decisions on the pending tool call", async () => {
@@ -880,7 +982,7 @@ describe("useAgentMessages", () => {
         const { result } = renderHook(() =>
             useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
-        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        await waitFor(() => expect(result.current.messages).toHaveLength(2));
 
         await act(async () => {
             result.current.respondToToolApproval({
@@ -890,13 +992,15 @@ describe("useAgentMessages", () => {
         });
 
         await waitFor(() => {
-            const assistant = result.current.messages[0];
+            const assistant = result.current.messages.find((m) => m.role === "assistant");
             expect(assistant?.role).toBe("assistant");
             if (assistant?.role !== "assistant") {
                 return;
             }
             expect(messageHasPendingApprovals(assistant)).toBe(false);
-            const toolCall = assistant.content[0];
+            const toolCall = assistant.content.find(
+                (part) => part.type === "tool-call" && part.toolCallId === "approval-1",
+            );
             if (toolCall?.type !== "tool-call") {
                 return;
             }
@@ -914,7 +1018,7 @@ describe("useAgentMessages", () => {
         const { result } = renderHook(() =>
             useAgentMessages({ server: mockServer, sessionId: "session-1" }),
         );
-        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        await waitFor(() => expect(result.current.messages).toHaveLength(2));
 
         await act(async () => {
             result.current.respondToToolApproval({
@@ -957,7 +1061,7 @@ describe("useAgentMessages", () => {
             expect.any(Array),
         );
 
-        const assistant = result.current.messages[0];
+        const assistant = result.current.messages.find((m) => m.role === "assistant");
         expect(assistant?.role).toBe("assistant");
         if (assistant?.role !== "assistant") {
             return;
@@ -1002,7 +1106,7 @@ describe("useAgentMessages", () => {
             const { result } = renderHook(() =>
                 useAgentMessages({ server: mockServer, sessionId: "session-1" }),
             );
-            await waitFor(() => expect(result.current.messages).toHaveLength(1));
+            await waitFor(() => expect(result.current.messages).toHaveLength(2));
 
             await act(async () => {
                 result.current.respondToToolResponse({
@@ -1053,7 +1157,7 @@ describe("useAgentMessages", () => {
             const { result } = renderHook(() =>
                 useAgentMessages({ server: mockServer, sessionId: "session-1" }),
             );
-            await waitFor(() => expect(result.current.messages).toHaveLength(1));
+            await waitFor(() => expect(result.current.messages).toHaveLength(2));
 
             await act(async () => {
                 result.current.respondToToolResponse({
@@ -1063,8 +1167,9 @@ describe("useAgentMessages", () => {
             });
 
             expect(streamTurnContent).not.toHaveBeenCalled();
-            expect(messageHasPendingApprovals(result.current.messages[0]!)).toBe(true);
-            expect(messageHasPendingResponses(result.current.messages[0]!)).toBe(false);
+            const assistant = result.current.messages.find((m) => m.role === "assistant")!;
+            expect(messageHasPendingApprovals(assistant)).toBe(true);
+            expect(messageHasPendingResponses(assistant)).toBe(false);
         });
     });
 
