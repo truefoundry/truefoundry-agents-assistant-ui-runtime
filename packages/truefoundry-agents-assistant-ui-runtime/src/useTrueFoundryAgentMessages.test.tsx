@@ -549,6 +549,40 @@ describe("useTrueFoundryAgentMessages", () => {
         expect(onError).toHaveBeenCalledWith(expect.any(TurnResumeUnsupportedError));
     });
 
+    it("clears the running state when cancelling a turn it could not resume", async () => {
+        const runningTurn = { id: "turn-running" } as Turn;
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                runningTurn,
+                unstable_resume: true,
+            }),
+        );
+        const serverWithoutSubscribe = {
+            cancelSession: vi.fn().mockResolvedValue(undefined),
+            listTurns: vi.fn().mockResolvedValue({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: serverWithoutSubscribe,
+                sessionId: "session-1",
+                onError: vi.fn(),
+            }),
+        );
+
+        await waitFor(() => expect(result.current.isRunning).toBe(true));
+
+        await act(async () => {
+            await result.current.cancel();
+        });
+
+        expect(serverWithoutSubscribe.cancelSession).toHaveBeenCalledWith({
+            sessionId: "session-1",
+        });
+        // No stream was attached, so nothing else would release the composer.
+        expect(result.current.isRunning).toBe(false);
+    });
+
     it("reports instead of resuming when resumeRun has no subscribeToTurn", async () => {
         const onError = vi.fn();
         const runningTurn = { id: "turn-running" } as Turn;

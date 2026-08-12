@@ -327,6 +327,7 @@ export function useTrueFoundryAgentMessages({
     const createdAtByMessageIdRef = useRef(new Map<string, Date>());
     const abortControllerRef = useRef<AbortController | null>(null);
     const activeRunRef = useRef<Promise<void> | null>(null);
+    const unattachedRunRef = useRef(false);
     const runningTurnRef = useRef<Turn | undefined>(undefined);
     const loadGenerationRef = useRef(0);
     const streamGenerationRef = useRef(0);
@@ -372,6 +373,7 @@ export function useTrueFoundryAgentMessages({
             const abortController = new AbortController();
             abortControllerRef.current = abortController;
             setIsRunning(true);
+            unattachedRunRef.current = false;
 
             const run = (async () => {
                 // Sub-agent turns can emit 100+ stream events per frame. Coalesce to one
@@ -517,6 +519,7 @@ export function useTrueFoundryAgentMessages({
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
         setIsRunning(false);
+        unattachedRunRef.current = false;
         abortControllerRef.current?.abort();
         loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
@@ -561,6 +564,7 @@ export function useTrueFoundryAgentMessages({
                 // loaded history as running and let the host explain the gap.
                 if (server.subscribeToTurn == null) {
                     setIsRunning(true);
+                    unattachedRunRef.current = true;
                     onErrorRef.current?.(new TurnResumeUnsupportedError());
                     return;
                 }
@@ -842,6 +846,12 @@ export function useTrueFoundryAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
+        // Nothing drained when the load could not attach a stream, so clear the
+        // running flag here or the composer stays blocked until a reload.
+        if (unattachedRunRef.current) {
+            unattachedRunRef.current = false;
+            setIsRunning(false);
+        }
     }, [server, sessionId]);
 
     const isRunningRef = useRef(isRunning);
