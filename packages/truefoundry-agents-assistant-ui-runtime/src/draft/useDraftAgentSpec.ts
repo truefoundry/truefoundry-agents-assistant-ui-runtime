@@ -227,7 +227,11 @@ export function useDraftAgentSpec({
             pendingFlushRef.current = undefined;
             inFlightFlushRef.current = undefined;
             localDirtyRef.current = false;
-            lastUpdatedAtRef.current = updatedAt;
+            // Keep the last successful sync timestamp when the caller omits
+            // updatedAt (e.g. a save that did not return sessionUpdatedAt).
+            if (updatedAt !== undefined) {
+                lastUpdatedAtRef.current = updatedAt;
+            }
             agentSpecRef.current = persistedSpec;
             setAgentSpec(persistedSpec);
             setSpecError(null);

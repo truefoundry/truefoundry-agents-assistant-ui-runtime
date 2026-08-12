@@ -218,4 +218,43 @@ describe("useDraftAgentSpec", () => {
             "2026-06-30T16:00:00.000Z",
         );
     });
+
+    it("preserves the last sync timestamp when adopt omits updatedAt", async () => {
+        const syncAgentSpec = vi
+            .fn()
+            .mockResolvedValue("2026-06-30T17:00:00.000Z");
+        const draftBridge: DraftSessionBridge = {
+            getDraftAgentSpec: vi.fn().mockResolvedValue(defaultAgentSpec),
+            syncAgentSpec,
+        };
+        const { result } = renderHook(() =>
+            useDraftAgentSpec({
+                draftSessionId: "draft-1",
+                draftBridge,
+                defaultAgentSpec,
+            }),
+        );
+        await flushMicrotasks();
+
+        act(() => {
+            result.current.updateAgentSpec({ instructions: "synced" });
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+        await flushMicrotasks();
+        expect(syncAgentSpec).toHaveBeenCalledOnce();
+
+        act(() => {
+            result.current.adoptAgentSpec({
+                agentSpec: {
+                    model: { name: "openai/gpt-5" },
+                },
+            });
+        });
+
+        await expect(result.current.takeTurnHeaderTimestamp()).resolves.toBe(
+            "2026-06-30T17:00:00.000Z",
+        );
+    });
 });
