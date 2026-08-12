@@ -47,6 +47,8 @@ vi.mock("./convertTurnMessages.js", async (importOriginal) => {
 const mockServer = {
     cancelSession: vi.fn().mockResolvedValue(undefined),
     listTurns: vi.fn(),
+    // Present so resume-capable paths are exercised; resumeTurnStream is mocked.
+    subscribeToTurn: vi.fn(),
 } as unknown as AgentChatServer;
 
 function snapshotWithAssistantMessage(
@@ -501,6 +503,119 @@ describe("useTrueFoundryAgentMessages", () => {
                 status: { type: "complete", reason: "stop" },
             }),
         );
+    });
+
+    it("shows loaded history as running when the server cannot resume the turn", async () => {
+        const onError = vi.fn();
+        const runningTurn = {
+            id: "turn-running",
+            input: [{ type: "user.message", content: "keep going" }],
+            createdAt: new Date().toISOString(),
+        } as Turn;
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                runningTurn,
+                unstable_resume: true,
+                pendingUser: {
+                    turnId: runningTurn.id,
+                    content: "keep going",
+                    createdAt: new Date(runningTurn.createdAt),
+                },
+            }),
+        );
+        const serverWithoutSubscribe = {
+            cancelSession: vi.fn().mockResolvedValue(undefined),
+            listTurns: vi.fn().mockResolvedValue({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: serverWithoutSubscribe,
+                sessionId: "session-1",
+                onError,
+            }),
+        );
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        expect(resumeTurnStream).not.toHaveBeenCalled();
+        // The turn keeps running server-side, so history renders with a
+        // pending indicator rather than an endless skeleton.
+        await waitFor(() => expect(result.current.isRunning).toBe(true));
+        expect(result.current.messages[0]).toMatchObject({
+            role: "user",
+            content: [{ type: "text", text: "keep going" }],
+        });
+        // Waiting, not failing: hosts render this as state, not an error.
+        expect(result.current.resumeUnavailable).toBe(true);
+        expect(onError).not.toHaveBeenCalled();
+    });
+
+    it("clears the running state when cancelling a turn it could not resume", async () => {
+        const runningTurn = { id: "turn-running" } as Turn;
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                runningTurn,
+                unstable_resume: true,
+            }),
+        );
+        const serverWithoutSubscribe = {
+            cancelSession: vi.fn().mockResolvedValue(undefined),
+            listTurns: vi.fn().mockResolvedValue({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: serverWithoutSubscribe,
+                sessionId: "session-1",
+                onError: vi.fn(),
+            }),
+        );
+
+        await waitFor(() => expect(result.current.isRunning).toBe(true));
+
+        await act(async () => {
+            await result.current.cancel();
+        });
+
+        expect(serverWithoutSubscribe.cancelSession).toHaveBeenCalledWith({
+            sessionId: "session-1",
+        });
+        // No stream was attached, so nothing else would release the composer.
+        expect(result.current.isRunning).toBe(false);
+        expect(result.current.resumeUnavailable).toBe(false);
+    });
+
+    it("stays in the waiting state instead of resuming when resumeRun has no subscribeToTurn", async () => {
+        const onError = vi.fn();
+        const runningTurn = { id: "turn-running" } as Turn;
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                runningTurn,
+                unstable_resume: true,
+            }),
+        );
+        const serverWithoutSubscribe = {
+            cancelSession: vi.fn().mockResolvedValue(undefined),
+            listTurns: vi.fn().mockResolvedValue({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({
+                server: serverWithoutSubscribe,
+                sessionId: "session-1",
+                onError,
+            }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        onError.mockClear();
+
+        await act(async () => {
+            await result.current.resumeRun();
+        });
+
+        expect(resumeTurnStream).not.toHaveBeenCalled();
+        expect(result.current.resumeUnavailable).toBe(true);
+        expect(onError).not.toHaveBeenCalled();
     });
 
     it("clears isLoading while a resumed turn is still streaming", async () => {

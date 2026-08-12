@@ -309,6 +309,7 @@ export function useTrueFoundryAgentMessages({
     );
     const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
+    const [resumeUnavailable, setResumeUnavailable] = useState(false);
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
@@ -326,12 +327,24 @@ export function useTrueFoundryAgentMessages({
     const createdAtByMessageIdRef = useRef(new Map<string, Date>());
     const abortControllerRef = useRef<AbortController | null>(null);
     const activeRunRef = useRef<Promise<void> | null>(null);
+    // Mirrors `resumeUnavailable` for `cancel`, which reads it outside render.
+    const resumeUnavailableRef = useRef(false);
     const runningTurnRef = useRef<Turn | undefined>(undefined);
     const loadGenerationRef = useRef(0);
     const streamGenerationRef = useRef(0);
     const lazilyCreatedSessionIdRef = useRef<string | undefined>(undefined);
     const initialLoadStartedForRef = useRef<string | undefined>(undefined);
     const skipInitialPromotionLoadForRef = useRef<string | undefined>(undefined);
+
+    /**
+     * A turn is running that this server cannot stream. Nothing will deliver its
+     * result to this client, so the UI shows a waiting state until the run is
+     * cancelled or the session is reloaded.
+     */
+    const markResumeUnavailable = useCallback((value: boolean) => {
+        resumeUnavailableRef.current = value;
+        setResumeUnavailable(value);
+    }, []);
 
     const projectOptions = useMemo(
         () => ({
@@ -371,6 +384,8 @@ export function useTrueFoundryAgentMessages({
             const abortController = new AbortController();
             abortControllerRef.current = abortController;
             setIsRunning(true);
+            // This stream's `finally` owns the running flag from here on.
+            markResumeUnavailable(false);
 
             const run = (async () => {
                 // Sub-agent turns can emit 100+ stream events per frame. Coalesce to one
@@ -516,6 +531,7 @@ export function useTrueFoundryAgentMessages({
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
         setIsRunning(false);
+        markResumeUnavailable(false);
         abortControllerRef.current?.abort();
         loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
@@ -554,6 +570,16 @@ export function useTrueFoundryAgentMessages({
 
             if (loadedSnapshot.runningTurn != null) {
                 const turn = loadedSnapshot.runningTurn;
+
+                // subscribeToTurn is optional, so a server can leave us without
+                // a reconnect path. The turn still runs on the backend: show the
+                // loaded history as running and let the host explain the gap.
+                if (server.subscribeToTurn == null) {
+                    setIsRunning(true);
+                    markResumeUnavailable(true);
+                    return;
+                }
+
                 const isContinuation = !extractTurnUserText(turn.input);
                 // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
                 // Use loadedSnapshot directly — snapshotRef.current still points at
@@ -831,7 +857,13 @@ export function useTrueFoundryAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [server, sessionId]);
+        // Nothing drained when the load could not attach a stream, so clear the
+        // running flag here or the composer stays blocked until a reload.
+        if (resumeUnavailableRef.current) {
+            markResumeUnavailable(false);
+            setIsRunning(false);
+        }
+    }, [server, sessionId, markResumeUnavailable]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -895,6 +927,10 @@ export function useTrueFoundryAgentMessages({
     const resumeRun = useCallback(async () => {
         const turn = runningTurnRef.current;
         if (turn == null) {
+            return;
+        }
+        if (server.subscribeToTurn == null) {
+            markResumeUnavailable(true);
             return;
         }
         // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
@@ -1066,6 +1102,7 @@ export function useTrueFoundryAgentMessages({
     return {
         messages,
         isRunning,
+        resumeUnavailable,
         isLoading,
         isLoadingOlderHistory,
         hasOlderHistory,

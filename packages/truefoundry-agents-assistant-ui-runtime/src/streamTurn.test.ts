@@ -357,6 +357,24 @@ describe("streamTurn", () => {
             expect(updates).toEqual([{ content: [{ type: "text", text: "resumed" }] }]);
         });
 
+        it("yields nothing when the server omits subscribeToTurn", async () => {
+            const cancelSession = vi.fn().mockResolvedValue(undefined);
+            const server = mockServer({ cancelSession });
+
+            const updates = await collectUpdates(
+                resumeTurnStream(
+                    server,
+                    SESSION_ID,
+                    "turn-1",
+                    new PeerThreadFoldState(),
+                    new AbortController().signal,
+                ),
+            );
+
+            expect(updates).toEqual([]);
+            expect(cancelSession).not.toHaveBeenCalled();
+        });
+
         it("returns early when aborted before streaming starts", async () => {
             const subscribeToTurn = vi.fn(async function* () {});
             const cancelSession = vi.fn().mockResolvedValue(undefined);
