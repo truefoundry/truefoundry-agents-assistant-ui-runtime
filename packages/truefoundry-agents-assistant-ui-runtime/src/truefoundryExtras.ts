@@ -22,6 +22,7 @@ export type TrueFoundryRuntimeExtras = {
     pendingApprovals: PendingApproval[];
     pendingToolResponses: PendingToolResponse[];
     pendingMcpAuth: { mcpServers: McpAuthRequiredEvent["mcpServers"] } | null;
+    resumeUnavailable: boolean;
     sandboxId: string | undefined;
     respondToToolApproval: (response: RespondToToolApprovalOptions) => void;
     respondToToolResponse: (response: RespondToToolResponseOptions) => void;

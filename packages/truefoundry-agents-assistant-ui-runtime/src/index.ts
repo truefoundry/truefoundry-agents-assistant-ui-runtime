@@ -55,6 +55,7 @@ export {
     useTrueFoundryResetFromTurn,
     useTrueFoundryReload,
     useTrueFoundryHistoryPagination,
+    useTrueFoundryResumeUnavailable,
 } from "./hooks.js";
 export {
     collectApprovalInputs,
@@ -71,10 +72,6 @@ export {
     messageHasPendingRequiredActions,
     findPausedAssistantMessage,
 } from "./requiredActionInputs.js";
-export {
-    TurnResumeUnsupportedError,
-    TURN_RESUME_UNSUPPORTED_ERROR_NAME,
-} from "./turnResumeUnsupportedError.js";
 export { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 export { getSession } from "./sessions.js";
 export { trueFoundryAttachmentAdapter } from "./attachmentAdapter.js";

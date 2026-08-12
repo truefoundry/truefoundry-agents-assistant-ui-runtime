@@ -18,7 +18,6 @@ import {
     type SessionSnapshot,
 } from "./sessionSnapshot.js";
 import { resumeTurnStream, streamTurnContent } from "./streamTurn.js";
-import { TurnResumeUnsupportedError } from "./turnResumeUnsupportedError.js";
 import {
     messageHasPendingApprovals,
     TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY,
@@ -546,7 +545,9 @@ describe("useTrueFoundryAgentMessages", () => {
             role: "user",
             content: [{ type: "text", text: "keep going" }],
         });
-        expect(onError).toHaveBeenCalledWith(expect.any(TurnResumeUnsupportedError));
+        // Waiting, not failing: hosts render this as state, not an error.
+        expect(result.current.resumeUnavailable).toBe(true);
+        expect(onError).not.toHaveBeenCalled();
     });
 
     it("clears the running state when cancelling a turn it could not resume", async () => {
@@ -581,9 +582,10 @@ describe("useTrueFoundryAgentMessages", () => {
         });
         // No stream was attached, so nothing else would release the composer.
         expect(result.current.isRunning).toBe(false);
+        expect(result.current.resumeUnavailable).toBe(false);
     });
 
-    it("reports instead of resuming when resumeRun has no subscribeToTurn", async () => {
+    it("stays in the waiting state instead of resuming when resumeRun has no subscribeToTurn", async () => {
         const onError = vi.fn();
         const runningTurn = { id: "turn-running" } as Turn;
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
@@ -612,7 +614,8 @@ describe("useTrueFoundryAgentMessages", () => {
         });
 
         expect(resumeTurnStream).not.toHaveBeenCalled();
-        expect(onError).toHaveBeenCalledWith(expect.any(TurnResumeUnsupportedError));
+        expect(result.current.resumeUnavailable).toBe(true);
+        expect(onError).not.toHaveBeenCalled();
     });
 
     it("clears isLoading while a resumed turn is still streaming", async () => {

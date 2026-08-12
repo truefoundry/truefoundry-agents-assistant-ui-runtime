@@ -51,7 +51,6 @@ import {
     TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY,
     type RespondToToolResponseOptions,
 } from "./toolResponse.js";
-import { TurnResumeUnsupportedError } from "./turnResumeUnsupportedError.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
 export type UseTrueFoundryAgentMessagesOptions = {
@@ -310,6 +309,7 @@ export function useTrueFoundryAgentMessages({
     );
     const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
+    const [resumeUnavailable, setResumeUnavailable] = useState(false);
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
@@ -327,13 +327,24 @@ export function useTrueFoundryAgentMessages({
     const createdAtByMessageIdRef = useRef(new Map<string, Date>());
     const abortControllerRef = useRef<AbortController | null>(null);
     const activeRunRef = useRef<Promise<void> | null>(null);
-    const unattachedRunRef = useRef(false);
+    // Mirrors `resumeUnavailable` for `cancel`, which reads it outside render.
+    const resumeUnavailableRef = useRef(false);
     const runningTurnRef = useRef<Turn | undefined>(undefined);
     const loadGenerationRef = useRef(0);
     const streamGenerationRef = useRef(0);
     const lazilyCreatedSessionIdRef = useRef<string | undefined>(undefined);
     const initialLoadStartedForRef = useRef<string | undefined>(undefined);
     const skipInitialPromotionLoadForRef = useRef<string | undefined>(undefined);
+
+    /**
+     * A turn is running that this server cannot stream. Nothing will deliver its
+     * result to this client, so the UI shows a waiting state until the run is
+     * cancelled or the session is reloaded.
+     */
+    const markResumeUnavailable = useCallback((value: boolean) => {
+        resumeUnavailableRef.current = value;
+        setResumeUnavailable(value);
+    }, []);
 
     const projectOptions = useMemo(
         () => ({
@@ -373,7 +384,8 @@ export function useTrueFoundryAgentMessages({
             const abortController = new AbortController();
             abortControllerRef.current = abortController;
             setIsRunning(true);
-            unattachedRunRef.current = false;
+            // This stream's `finally` owns the running flag from here on.
+            markResumeUnavailable(false);
 
             const run = (async () => {
                 // Sub-agent turns can emit 100+ stream events per frame. Coalesce to one
@@ -519,7 +531,7 @@ export function useTrueFoundryAgentMessages({
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
         setIsRunning(false);
-        unattachedRunRef.current = false;
+        markResumeUnavailable(false);
         abortControllerRef.current?.abort();
         loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
@@ -564,8 +576,7 @@ export function useTrueFoundryAgentMessages({
                 // loaded history as running and let the host explain the gap.
                 if (server.subscribeToTurn == null) {
                     setIsRunning(true);
-                    unattachedRunRef.current = true;
-                    onErrorRef.current?.(new TurnResumeUnsupportedError());
+                    markResumeUnavailable(true);
                     return;
                 }
 
@@ -848,11 +859,11 @@ export function useTrueFoundryAgentMessages({
         await activeRunRef.current?.catch(() => undefined);
         // Nothing drained when the load could not attach a stream, so clear the
         // running flag here or the composer stays blocked until a reload.
-        if (unattachedRunRef.current) {
-            unattachedRunRef.current = false;
+        if (resumeUnavailableRef.current) {
+            markResumeUnavailable(false);
             setIsRunning(false);
         }
-    }, [server, sessionId]);
+    }, [server, sessionId, markResumeUnavailable]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -919,7 +930,7 @@ export function useTrueFoundryAgentMessages({
             return;
         }
         if (server.subscribeToTurn == null) {
-            onErrorRef.current?.(new TurnResumeUnsupportedError());
+            markResumeUnavailable(true);
             return;
         }
         // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
@@ -1091,6 +1102,7 @@ export function useTrueFoundryAgentMessages({
     return {
         messages,
         isRunning,
+        resumeUnavailable,
         isLoading,
         isLoadingOlderHistory,
         hasOlderHistory,

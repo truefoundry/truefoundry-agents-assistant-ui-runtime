@@ -108,6 +108,7 @@ function useTrueFoundryAgentRuntimeImpl(
     const {
         messages,
         isRunning,
+        resumeUnavailable,
         isLoading,
         isLoadingOlderHistory,
         hasOlderHistory,
@@ -199,6 +200,7 @@ function useTrueFoundryAgentRuntimeImpl(
             pendingApprovals,
             pendingToolResponses,
             pendingMcpAuth,
+            resumeUnavailable,
             sandboxId,
             respondToToolApproval,
             respondToToolResponse,
