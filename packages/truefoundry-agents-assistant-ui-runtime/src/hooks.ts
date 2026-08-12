@@ -165,3 +165,18 @@ export const useTrueFoundryUpdateAgentSpec = () => {
         trueFoundryExtras.get(aui).draft?.updateAgentSpec(update);
 };
 
+/** Flushes any pending draft-spec synchronization before a coordinated write. */
+export const useTrueFoundryFlushAgentSpec = () => {
+    const aui = useAui();
+    return () =>
+        trueFoundryExtras.get(aui).draft?.flushAgentSpec() ?? Promise.resolve();
+};
+
+/** Adopts a spec already persisted by another server operation without syncing again. */
+export const useTrueFoundryAdoptAgentSpec = () => {
+    const aui = useAui();
+    return (
+        request: Parameters<TrueFoundryDraftRuntimeExtras["adoptAgentSpec"]>[0],
+    ) => trueFoundryExtras.get(aui).draft?.adoptAgentSpec(request);
+};
+

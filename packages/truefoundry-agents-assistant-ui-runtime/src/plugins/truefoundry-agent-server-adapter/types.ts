@@ -67,9 +67,9 @@ export interface TfyAgentSpec
     extends AgentSpec<
         TruefoundryGatewayApi.Model,
         TfySkillMount,
-        TfyMcpServerMount
+        TfyMcpServerMount,
+        TruefoundryGatewayApi.RuntimeConfig
     > {
-    config?: TruefoundryGatewayApi.RuntimeConfig;
     responseFormat?: TruefoundryGatewayApi.ResponseFormat;
     messages?: TruefoundryGatewayApi.AgentSpecUserMessage[];
 }

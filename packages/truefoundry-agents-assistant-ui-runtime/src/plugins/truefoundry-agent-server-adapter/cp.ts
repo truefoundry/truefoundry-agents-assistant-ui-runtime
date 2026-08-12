@@ -9,6 +9,7 @@ import type {
     AgentSelectorEntry,
     ConnectorSelectorEntry,
     ModelSelectorEntry,
+    SaveAgentRequest,
     SearchAgentSelectorParams,
     SkillSelectorEntry,
 } from "../../server/types.js";
@@ -595,7 +596,7 @@ export function buildSaveAgentManifest(
  */
 export async function saveAgent(
     opts: CpCredentials,
-    req: { agentName: string; agentSpec: TfyAgentSpec },
+    req: SaveAgentRequest<TfyAgentSpec>,
 ): Promise<unknown> {
     const manifest = buildSaveAgentManifest(req.agentName, req.agentSpec);
     return cpFetch(opts, "/api/svc/v1/agents", {

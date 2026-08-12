@@ -105,19 +105,31 @@ export interface Model {
   params?: ModelParams;
 }
 
+export interface AgentCapabilityConfig {
+  enabled?: boolean;
+}
+
+export interface AgentRuntimeConfig {
+  generativeUi?: AgentCapabilityConfig;
+  dynamicSubAgents?: AgentCapabilityConfig;
+  askUserQuestions?: AgentCapabilityConfig;
+}
+
 /**
 * SDK-owned agent definition — fields the FE reads/writes.
-* Host widens `model` / `skills` / `mcpServers` via type params, and adds
-* extra fields via `TSpec extends AgentSpec<...>`.
+* Host widens `model` / `skills` / `mcpServers` / `config` via type params,
+* and adds extra fields via `TSpec extends AgentSpec<...>`.
 */
 export interface AgentSpec<
   TModel extends Model = Model,
   TSkill extends SkillMount = SkillMount,
   TMcp extends McpServerMount = McpServerMount,
+  TConfig extends AgentRuntimeConfig = AgentRuntimeConfig,
 > {
   model: TModel;
   skills?: TSkill[];
   mcpServers?: TMcp[];
+  config?: TConfig;
   instructions?: string;
   variables?: Record<string, string>;
 }
@@ -329,6 +341,16 @@ export interface AgentChatServer<
 export interface SaveAgentRequest<TSpec extends AgentSpec = AgentSpec> {
   agentName: string;
   agentSpec: TSpec;
+  intent: "create" | "update";
+  /** Current mutable session to update atomically with the named agent. */
+  sessionId?: string;
+}
+
+export interface SaveAgentResult {
+  /** Immutable id allocated by the host registry. */
+  agentId?: string;
+  /** Timestamp returned when the active mutable session was updated. */
+  sessionUpdatedAt?: string;
 }
 
 /**
@@ -352,7 +374,7 @@ export interface AgentBuilderServer<
   TSkill extends SkillSelectorEntry = SkillSelectorEntry,
   TMcp extends ConnectorSelectorEntry = ConnectorSelectorEntry,
   TAgent extends AgentSelectorEntry = AgentSelectorEntry,
-  TSave = unknown,
+  TSave = SaveAgentResult,
   TCapabilities extends AgentBuilderCapabilitiesResponse = AgentBuilderCapabilitiesResponse,
 > {
   getCapabilities(): Promise<TCapabilities>;

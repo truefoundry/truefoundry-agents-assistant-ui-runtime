@@ -150,4 +150,72 @@ describe("useDraftAgentSpec", () => {
         expect(syncAgentSpec).toHaveBeenCalledOnce();
         expect(result.current.isSpecSyncing).toBe(false);
     });
+
+    it("flushes pending work before a coordinated save", async () => {
+        const syncAgentSpec = vi
+            .fn()
+            .mockResolvedValue("2026-06-30T15:00:00.000Z");
+        const draftBridge: DraftSessionBridge = {
+            getDraftAgentSpec: vi.fn().mockResolvedValue(defaultAgentSpec),
+            syncAgentSpec,
+        };
+        const { result } = renderHook(() =>
+            useDraftAgentSpec({
+                draftSessionId: "draft-1",
+                draftBridge,
+                defaultAgentSpec,
+            }),
+        );
+        await flushMicrotasks();
+
+        act(() => {
+            result.current.updateAgentSpec({ instructions: "latest draft" });
+        });
+        await act(async () => {
+            await result.current.flushAgentSpec();
+        });
+
+        expect(syncAgentSpec).toHaveBeenCalledWith("draft-1", {
+            model: defaultAgentSpec.model,
+            instructions: "latest draft",
+        });
+    });
+
+    it("adopts an atomically persisted spec without scheduling another sync", async () => {
+        const syncAgentSpec = vi.fn().mockResolvedValue("unused");
+        const draftBridge: DraftSessionBridge = {
+            getDraftAgentSpec: vi.fn().mockResolvedValue(defaultAgentSpec),
+            syncAgentSpec,
+        };
+        const { result } = renderHook(() =>
+            useDraftAgentSpec({
+                draftSessionId: "draft-1",
+                draftBridge,
+                defaultAgentSpec,
+            }),
+        );
+        await flushMicrotasks();
+
+        act(() => {
+            result.current.adoptAgentSpec({
+                agentSpec: {
+                    model: { name: "openai/gpt-5" },
+                    config: { generativeUi: { enabled: false } },
+                },
+                updatedAt: "2026-06-30T16:00:00.000Z",
+            });
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+
+        expect(result.current.agentSpec).toEqual({
+            model: { name: "openai/gpt-5" },
+            config: { generativeUi: { enabled: false } },
+        });
+        expect(syncAgentSpec).not.toHaveBeenCalled();
+        await expect(result.current.takeTurnHeaderTimestamp()).resolves.toBe(
+            "2026-06-30T16:00:00.000Z",
+        );
+    });
 });

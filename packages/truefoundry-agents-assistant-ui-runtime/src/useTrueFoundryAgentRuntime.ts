@@ -187,6 +187,8 @@ function useTrueFoundryAgentRuntimeImpl(
             isSpecSyncing: draftSpec.isSpecSyncing,
             specError: draftSpec.specError,
             updateAgentSpec: draftSpec.updateAgentSpec,
+            flushAgentSpec: draftSpec.flushAgentSpec,
+            adoptAgentSpec: draftSpec.adoptAgentSpec,
         };
     }, [agent.mode, draftSpec]);
 

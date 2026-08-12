@@ -23,6 +23,11 @@ export type UseDraftAgentSpecResult = {
     isSpecSyncing: boolean;
     specError: unknown | null;
     updateAgentSpec: (update: AgentSpecUpdate) => void;
+    flushAgentSpec: () => Promise<void>;
+    adoptAgentSpec: (request: {
+        agentSpec: AgentSpec;
+        updatedAt?: string;
+    }) => void;
     takeTurnHeaderTimestamp: () => Promise<string | undefined>;
 };
 
@@ -206,6 +211,31 @@ export function useDraftAgentSpec({
         }
     }, []);
 
+    const adoptAgentSpec = useCallback(
+        ({
+            agentSpec: persistedSpec,
+            updatedAt,
+        }: {
+            agentSpec: AgentSpec;
+            updatedAt?: string;
+        }) => {
+            if (syncTimeoutRef.current != null) {
+                clearTimeout(syncTimeoutRef.current);
+                syncTimeoutRef.current = undefined;
+            }
+            syncGenerationRef.current++;
+            pendingFlushRef.current = undefined;
+            inFlightFlushRef.current = undefined;
+            localDirtyRef.current = false;
+            lastUpdatedAtRef.current = updatedAt;
+            agentSpecRef.current = persistedSpec;
+            setAgentSpec(persistedSpec);
+            setSpecError(null);
+            setIsSpecSyncing(false);
+        },
+        [],
+    );
+
     const takeTurnHeaderTimestamp = useCallback(async () => {
         await flushPendingSpecSyncNow();
         const updatedAt = lastUpdatedAtRef.current;
@@ -245,6 +275,8 @@ export function useDraftAgentSpec({
             isSpecSyncing: enabled ? isSpecSyncing : false,
             specError: enabled ? specError : null,
             updateAgentSpec,
+            flushAgentSpec: flushPendingSpecSyncNow,
+            adoptAgentSpec,
             takeTurnHeaderTimestamp,
         }),
         [
@@ -254,6 +286,8 @@ export function useDraftAgentSpec({
             isSpecLoading,
             isSpecSyncing,
             specError,
+            flushPendingSpecSyncNow,
+            adoptAgentSpec,
             takeTurnHeaderTimestamp,
             updateAgentSpec,
         ],

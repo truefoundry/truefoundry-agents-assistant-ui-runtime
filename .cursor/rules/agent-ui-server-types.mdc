@@ -20,7 +20,7 @@ Everything else belongs on the host via `T extends Base` generics.
 
 - Base interfaces are FE-minimal (`AgentSpec`, `Session`, selector entries, turn DTOs, catalog settings rows).
 - Prefer generics on every extensible type / server port (`TSpec`, `TSession`, `TModel`, …) — do not hardcode host shapes.
-- Host-specific fields (`fqn`, `tfyMetadata`, `config`, pricing, `modelId`, `properties`, etc.) go on host types — never on the SDK base.
+- Host-specific fields (`fqn`, `tfyMetadata`, pricing, `modelId`, `properties`, etc.) go on host types — never on the SDK base. `AgentSpec.config` owns only capability branches shared UI reads; hosts widen it with the config generic.
 - Opaque mounts stay `object` (`SkillMount` / `McpServerMount`); hosts intersect concrete shapes.
 - Chat (`AgentChatServer`), builder (`AgentBuilderServer`), and catalog (`CatalogServer` / `ModelCatalogServer` / `ConnectorCatalogServer`) share this principle.
 - Compose via `AgentUIServerPort` (`chat & builder & { catalog? }`); settings use the nested `catalog` field. Host-facing alias: `AgentUIServer`.
@@ -33,10 +33,9 @@ Everything else belongs on the host via `T extends Base` generics.
 ## Host pattern (reference)
 
 ```typescript
-// ✅ host widens model/skills/mcp via AgentSpec type params + extra fields
+// ✅ host widens model/skills/mcp/config via AgentSpec type params + extra fields
 export interface TfyAgentSpec
-  extends AgentSpec<GatewayModel, TfySkillMount, TfyMcpServerMount> {
-  config?: TruefoundryGatewayApi.RuntimeConfig;
+  extends AgentSpec<GatewayModel, TfySkillMount, TfyMcpServerMount, TruefoundryGatewayApi.RuntimeConfig> {
   messages?: TruefoundryGatewayApi.AgentSpecUserMessage[];
 }
 
