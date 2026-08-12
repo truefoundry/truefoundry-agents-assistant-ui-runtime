@@ -16,14 +16,24 @@ import type {
 // ---------------------------------------------------------------------------
 // Catalog — selector rows (SDK-minimal; host extends via generics)
 // ---------------------------------------------------------------------------
+export interface ProviderEntry {
+  name: string;
+  logo?: string;
+}
+
+export interface ModelProperties {
+  reasoningEfforts?: string[];
+}
 
 /** Model selector row. Host extends for apiModel, modelId, pricing, etc. */
-export interface ModelSelectorEntry {
+export interface ModelSelectorEntry<
+  TProvider extends ProviderEntry = ProviderEntry,
+  TProperties extends ModelProperties = ModelProperties,
+> {
   name: string;
-  provider: string;
-  reasoningEfforts?: string[];
-  /** Provider logo URL from the model catalog; selector falls back to a monogram when omitted. */
-  providerLogo?: string;
+  id: string;
+  provider: TProvider;
+  properties: TProperties;
 }
 
 /** Skill selector row. Host extends for fqn, preload, etc. */
