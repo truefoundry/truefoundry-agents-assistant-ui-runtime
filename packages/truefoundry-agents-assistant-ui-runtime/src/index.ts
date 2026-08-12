@@ -25,7 +25,9 @@ export { createTrueFoundryOwnedSessionsThreadListAdapter } from "./truefoundryOw
 export { createDraftSessionBridge } from "./draft/draftSessionBridge.js";
 export type { DraftSessionBridge } from "./draft/draftSessionBridge.js";
 export {
+    useTrueFoundryAdoptAgentSpec,
     useTrueFoundryAgentSpec,
+    useTrueFoundryFlushAgentSpec,
     useTrueFoundryUpdateAgentSpec,
 } from "./hooks.js";
 export type { TrueFoundryDraftRuntimeExtras } from "./truefoundryExtras.js";
@@ -80,7 +82,10 @@ export type {
     AgentChatServer,
     AgentBuilderCapabilitiesResponse,
     AgentBuilderServer,
+    AgentCapabilityConfig,
+    AgentRuntimeConfig,
     SaveAgentRequest,
+    SaveAgentResult,
     Session,
     Turn,
     TurnState,

@@ -16,6 +16,11 @@ export type TrueFoundryDraftRuntimeExtras = {
     isSpecSyncing: boolean;
     specError: unknown | null;
     updateAgentSpec: (update: AgentSpecUpdate) => void;
+    flushAgentSpec: () => Promise<void>;
+    adoptAgentSpec: (request: {
+        agentSpec: AgentSpec;
+        updatedAt?: string;
+    }) => void;
 };
 
 export type TrueFoundryRuntimeExtras = {
@@ -48,6 +53,12 @@ export const EMPTY_DRAFT_EXTRAS: TrueFoundryDraftRuntimeExtras = {
     isSpecSyncing: false,
     specError: null,
     updateAgentSpec: () => {
+        throw new Error("Draft agent extras are only available in draft mode.");
+    },
+    flushAgentSpec: async () => {
+        throw new Error("Draft agent extras are only available in draft mode.");
+    },
+    adoptAgentSpec: () => {
         throw new Error("Draft agent extras are only available in draft mode.");
     },
 };
