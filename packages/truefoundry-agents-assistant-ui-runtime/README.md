@@ -249,6 +249,28 @@ const server: AgentChatServer = {
 
 `ListResult<T>` is `{ data: T[]; nextPageToken?: string }` — flat token-based pagination. Optional methods: `deleteSession`, `listTurnEvents`, `subscribeToTurn`, `downloadSandboxFile`.
 
+### Without `subscribeToTurn`
+
+`subscribeToTurn` is what lets the runtime re-attach to a turn that is still running after a refresh. When a server omits it and a session loads with a running turn, the runtime does **not** throw. It renders the loaded history, reports the thread as running (so your UI shows a pending indicator rather than an endless skeleton), and calls `onError` with a `TurnResumeUnsupportedError`. The turn keeps running on the backend — reload the session to pick up the result.
+
+```tsx
+import { TurnResumeUnsupportedError } from "@truefoundry/assistant-ui-runtime";
+
+const runtime = useTrueFoundryAgentRuntime({
+  server,
+  agentName,
+  onError: (error) => {
+    if (error instanceof TurnResumeUnsupportedError) {
+      showResumeUnavailableDialog();
+      return;
+    }
+    showToast(error);
+  },
+});
+```
+
+Match on `error.name === "TurnResumeUnsupportedError"` (exported as `TURN_RESUME_UNSUPPORTED_ERROR_NAME`) when you cannot import the class.
+
 ---
 
 ## TrueFoundry agent UI server plugin
@@ -281,6 +303,7 @@ See the [plugin README](./src/plugins/truefoundry-agent-server-adapter/README.md
 | `createTrueFoundryChatServer` | Function | Chat-only gateway → `AgentChatServer` |
 | `trueFoundryAttachmentAdapter` | Adapter | Opt-in composer attachments |
 | `trueFoundryExtras` | Namespace | Low-level extras access |
+| `TurnResumeUnsupportedError` | Class | Reported when a running turn cannot be streamed (no `subscribeToTurn`) |
 | `useTrueFoundryApprovals` / `ToolResponses` / `McpAuth` / … | Hooks | Pending state + actions |
 | `AgentChatServer`, `AgentBuilderServer`, `CatalogServer`, `Session`, `Turn`, … | Types | Server ports + DTOs |
 | `TfyAgentSpec`, `TfySession`, `isTfyToolInfo`, … | Types / guards | Gateway-concrete types from the plugin |

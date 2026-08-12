@@ -116,10 +116,10 @@ export async function* resumeTurnStream(
     afterSequenceNumber?: number,
     groupRootBaseline?: readonly string[],
 ): AsyncGenerator<TurnStreamUpdate> {
+    // Optional on custom backends. Callers detect the gap and report it, so an
+    // empty stream here is safer than throwing mid-render.
     if (server.subscribeToTurn == null) {
-        throw new Error(
-            "resumeTurnStream requires AgentChatServer.subscribeToTurn",
-        );
+        return;
     }
 
     const onAbort = () => {

@@ -51,6 +51,7 @@ import {
     TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY,
     type RespondToToolResponseOptions,
 } from "./toolResponse.js";
+import { TurnResumeUnsupportedError } from "./turnResumeUnsupportedError.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
 
 export type UseTrueFoundryAgentMessagesOptions = {
@@ -554,6 +555,16 @@ export function useTrueFoundryAgentMessages({
 
             if (loadedSnapshot.runningTurn != null) {
                 const turn = loadedSnapshot.runningTurn;
+
+                // subscribeToTurn is optional, so a server can leave us without
+                // a reconnect path. The turn still runs on the backend: show the
+                // loaded history as running and let the host explain the gap.
+                if (server.subscribeToTurn == null) {
+                    setIsRunning(true);
+                    onErrorRef.current?.(new TurnResumeUnsupportedError());
+                    return;
+                }
+
                 const isContinuation = !extractTurnUserText(turn.input);
                 // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
                 // Use loadedSnapshot directly — snapshotRef.current still points at
@@ -895,6 +906,10 @@ export function useTrueFoundryAgentMessages({
     const resumeRun = useCallback(async () => {
         const turn = runningTurnRef.current;
         if (turn == null) {
+            return;
+        }
+        if (server.subscribeToTurn == null) {
+            onErrorRef.current?.(new TurnResumeUnsupportedError());
             return;
         }
         // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
