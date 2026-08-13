@@ -2618,6 +2618,142 @@ describe("buildSnapshotFromSessionEvents", () => {
         }
     });
 
+    it("keeps an answered ask-user answered when the open tip finished before getTurn", async () => {
+        // The tip can complete between listEvents and getTurn. There is nothing
+        // left to resume, but its user.tool_response input never reached the
+        // fold via ingestion (no turn.done in the window), so it must still be
+        // applied — otherwise the answered prompt resurfaces as pending.
+        const finishedTip = {
+            id: "t-tip",
+            sessionId: SESSION_ID,
+            state: { status: "done", requiredActions: [], completedAt: createdAt },
+            input: [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "AI-native / LLM-powered SaaS",
+                },
+            ],
+            createdAt,
+        } as unknown as Turn;
+
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-pause",
+                    turnId: "t-pause",
+                    input: [{ type: "user.message", content: "please research" }],
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t-pause",
+                event: modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    content: "One calibration question:",
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Which direction should I focus on?",
+                                    options: [
+                                        "General B2B SaaS",
+                                        "AI-native / LLM-powered SaaS",
+                                    ],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d-pause",
+                    state: {
+                        status: "done",
+                        requiredActions: [
+                            {
+                                id: "resp-req-1",
+                                type: "tool.response_required",
+                                threadId: ROOT_THREAD_ID,
+                                createdAt,
+                                toolCalls: [
+                                    { id: "question-1", sourceEventId: "model-1" },
+                                ],
+                            },
+                        ],
+                        completedAt: createdAt,
+                    },
+                    createdAt,
+                } as unknown as TurnDoneEvent,
+            },
+            {
+                turnId: "t-tip",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-tip",
+                    turnId: "t-tip",
+                    previousTurnId: "t-pause",
+                    input: finishedTip.input,
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+        ];
+
+        const listTurns = vi.fn(async () => ({ data: [], nextPageToken: undefined }));
+        const getTurn = vi.fn(async () => finishedTip);
+        const server = {
+            listTurns,
+            getTurn,
+            listEvents: sessionEventsPage(items),
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const snapshot = await buildSnapshotFromSessionEvents(server, SESSION_ID);
+
+        expect(snapshot.runningTurn).toBeUndefined();
+        expect(snapshot.unstable_resume).toBeFalsy();
+
+        const messages = projectSessionMessages(snapshot);
+        expect(collectPendingToolResponses(messages)).toHaveLength(0);
+
+        const assistant = messages.find((message) => message.role === "assistant");
+        const toolCall = assistant?.content.find(
+            (part) => part.type === "tool-call" && part.toolCallId === "question-1",
+        );
+        expect(toolCall).toMatchObject({
+            type: "tool-call",
+            toolCallId: "question-1",
+            result: "AI-native / LLM-powered SaaS",
+        });
+        if (toolCall?.type === "tool-call") {
+            expect(toolCall.interrupt).toBeUndefined();
+        }
+    });
+
     it("loads only the newest event page and exposes an older-history cursor", async () => {
         const makeTurnItems = (id: string, text: string): SessionEventItem[] => [
             {
