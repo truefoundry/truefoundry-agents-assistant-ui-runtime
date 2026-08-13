@@ -516,9 +516,9 @@ function attachRunningTurn(
     if (runningTurn == null) {
         return snapshot;
     }
-    // Session-level history excludes the running turn. Apply continuation inputs
-    // from the turn listing so answered approvals / ask-user prompts are not
-    // restored as pending while reconnecting to that turn after a refresh.
+    // Open tip turns may already appear in session listEvents (incomplete —
+    // no turn.done). Apply their input so answered approvals / ask-user prompts
+    // are not restored as pending while reconnecting after a refresh.
     applyUserToolResponsesToFold(snapshot.fold, runningTurn.input ?? []);
     const pendingUserText = extractTurnUserText(runningTurn.input);
     return replaceSessionSnapshot(snapshot, {
@@ -538,12 +538,94 @@ function attachRunningTurn(
 }
 
 /**
+ * Last `turn.created` in ASC event order with no following `turn.done` — the
+ * open tip of the active branch in this window.
+ */
+function findOpenTurnCreated(
+    itemsAsc: readonly GatewaySessionEventItem[],
+): { turnId: string; event: TurnCreatedEvent } | undefined {
+    let open: { turnId: string; event: TurnCreatedEvent } | undefined;
+    for (const item of itemsAsc) {
+        if (item.event.type === "turn.created") {
+            open = { turnId: item.turnId, event: item.event };
+        } else if (item.event.type === "turn.done") {
+            open = undefined;
+        }
+    }
+    return open;
+}
+
+function turnFromCreatedEvent(options: {
+    sessionId: string;
+    turnId: string;
+    event: TurnCreatedEvent;
+}): Turn {
+    const { sessionId, turnId, event } = options;
+    return {
+        id: turnId,
+        sessionId,
+        state: { status: "running" },
+        createdAt: event.createdAt,
+        ...(event.input != null ? { input: event.input } : {}),
+        ...(event.previousTurnId === undefined
+            ? {}
+            : { previousTurnId: event.previousTurnId }),
+    };
+}
+
+/**
+ * Resolves the in-flight tip turn for resume/subscribe.
+ *
+ * Prefer an open tip from the events window (works when listTurns is
+ * oldest-first and when listEvents includes the running turn). Fall back to
+ * `listTurns({ limit: 1 })` for hosts that omit the running turn from
+ * listEvents and put the tip first.
+ */
+async function resolveRunningTurn(options: {
+    server: AgentChatServer;
+    sessionId: string;
+    itemsAsc: readonly GatewaySessionEventItem[];
+}): Promise<Turn | undefined> {
+    const { server, sessionId, itemsAsc } = options;
+    const open = findOpenTurnCreated(itemsAsc);
+    if (open != null) {
+        if (typeof server.getTurn === "function") {
+            try {
+                const turn = await server.getTurn({
+                    sessionId,
+                    turnId: open.turnId,
+                });
+                if (turn.state.status === "running") {
+                    return turn;
+                }
+                // Tip finished between listEvents and getTurn — nothing to resume.
+                return undefined;
+            } catch {
+                // getTurn failed; synthesize from the open turn.created below.
+            }
+        }
+        return turnFromCreatedEvent({
+            sessionId,
+            turnId: open.turnId,
+            event: open.event,
+        });
+    }
+
+    // Hosts that exclude the running turn from listEvents still surface it as
+    // the first row of listTurns when that API is tip-first.
+    const turnsPage = await server.listTurns({ sessionId, limit: 1 });
+    const tip = turnsPage.data[0] as Turn | undefined;
+    return tip?.state?.status === "running" ? tip : undefined;
+}
+
+/**
  * Builds a session snapshot using the session-level `listEvents` API.
  *
  * Loads the newest event page (extending only when a page boundary splits a
  * turn group), then leaves older pages for `prependOlderSessionHistory`.
- * Only `listTurns({ limit: 1 })` is called first to detect a currently-running
- * turn (the session-level API does not return events for the running turn).
+ * Detects a currently-running tip from an open `turn.created` in that window
+ * when present; otherwise falls back to `listTurns({ limit: 1 })` for hosts
+ * that omit the running turn from listEvents.
  *
  * `onProgress` is called after each complete turn is ingested so callers can
  * update the UI progressively while the processing loop runs.
@@ -553,12 +635,6 @@ export async function buildSnapshotFromSessionEvents(
     sessionId: string,
     onProgress?: (snap: SessionSnapshot) => void,
 ): Promise<SessionSnapshot> {
-    // Detect a running turn with a single listTurns page — do not drain pagination.
-    const turnsPage = await server.listTurns({ sessionId, limit: 1 });
-    const newestTurn = turnsPage.data[0] as Turn | undefined;
-    const runningTurn =
-        newestTurn?.state?.status === "running" ? newestTurn : undefined;
-
     const window = await fetchSessionEventsWindow(server, sessionId);
     const historyPagination: SessionHistoryPagination = {
         hasOlder: window.hasOlder,
@@ -575,6 +651,11 @@ export async function buildSnapshotFromSessionEvents(
         historyPagination,
     });
 
+    const runningTurn = await resolveRunningTurn({
+        server,
+        sessionId,
+        itemsAsc: window.itemsAsc,
+    });
     return attachRunningTurn(withHistory, runningTurn);
 }
 

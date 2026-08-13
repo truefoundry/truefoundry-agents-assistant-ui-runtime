@@ -2434,7 +2434,7 @@ describe("buildSnapshotFromSessionEvents", () => {
         expect(progressSnapshots).toEqual([1, 2]);
     });
 
-    it("only inspects the newest listTurns page for a running turn", async () => {
+    it("falls back to listTurns({ limit: 1 }) when listEvents omits the running tip", async () => {
         const listTurns = vi.fn(async () => ({
             data: [
                 {
@@ -2458,6 +2458,164 @@ describe("buildSnapshotFromSessionEvents", () => {
         expect(listTurns).toHaveBeenCalledWith({ sessionId: SESSION_ID, limit: 1 });
         expect(snapshot.runningTurn?.id).toBe("t-running");
         expect(snapshot.pendingUser?.content).toBe("now");
+    });
+
+    it("attaches an open tip from events when listTurns is oldest-first and clears answered ask-user", async () => {
+        // Trueforge listTurns is ASC: limit:1 returns the oldest done turn even
+        // while a later tip is still running. Tip detection must use the open
+        // turn.created in listEvents (which includes running turns).
+        const oldestDoneTurn = {
+            id: "t-pause",
+            sessionId: SESSION_ID,
+            state: {
+                status: "done",
+                requiredActions: [
+                    {
+                        id: "resp-req-1",
+                        type: "tool.response_required",
+                        threadId: ROOT_THREAD_ID,
+                        createdAt,
+                        toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                    },
+                ],
+                completedAt: createdAt,
+            },
+            input: [{ type: "user.message", content: "please research" }],
+            createdAt,
+        } as unknown as Turn;
+
+        const runningTip = {
+            id: "t-running",
+            sessionId: SESSION_ID,
+            state: { status: "running" },
+            input: [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "AI-native / LLM-powered SaaS",
+                },
+            ],
+            createdAt,
+        } as unknown as Turn;
+
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-pause",
+                    turnId: "t-pause",
+                    input: oldestDoneTurn.input,
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t-pause",
+                event: modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    content: "One calibration question:",
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Which direction should I focus on?",
+                                    options: [
+                                        "General B2B SaaS",
+                                        "AI-native / LLM-powered SaaS",
+                                    ],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d-pause",
+                    state: oldestDoneTurn.state as TurnDoneEvent["state"],
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+            {
+                turnId: "t-running",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-running",
+                    turnId: "t-running",
+                    previousTurnId: "t-pause",
+                    input: runningTip.input,
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t-running",
+                event: modelMessage({
+                    id: "model-2",
+                    threadId: ROOT_THREAD_ID,
+                    content: "Locked in — starting deep research.",
+                }),
+            },
+        ];
+
+        const listTurns = vi.fn(async () => ({
+            data: [oldestDoneTurn],
+            nextPageToken: "eyJvZmZzZXQiOjF9",
+        }));
+        const getTurn = vi.fn(async () => runningTip);
+        const server = {
+            listTurns,
+            getTurn,
+            listEvents: sessionEventsPage(items),
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const snapshot = await buildSnapshotFromSessionEvents(server, SESSION_ID);
+
+        expect(getTurn).toHaveBeenCalledWith({
+            sessionId: SESSION_ID,
+            turnId: "t-running",
+        });
+        expect(listTurns).not.toHaveBeenCalled();
+        expect(snapshot.runningTurn?.id).toBe("t-running");
+        expect(snapshot.unstable_resume).toBe(true);
+
+        const messages = projectSessionMessages(snapshot);
+        expect(collectPendingToolResponses(messages)).toHaveLength(0);
+
+        const assistant = messages.find((message) => message.role === "assistant");
+        expect(assistant).toBeDefined();
+        const toolCall = assistant?.content.find(
+            (part) => part.type === "tool-call" && part.toolCallId === "question-1",
+        );
+        expect(toolCall).toMatchObject({
+            type: "tool-call",
+            toolCallId: "question-1",
+            result: "AI-native / LLM-powered SaaS",
+        });
+        if (toolCall?.type === "tool-call") {
+            expect(toolCall.interrupt).toBeUndefined();
+        }
     });
 
     it("loads only the newest event page and exposes an older-history cursor", async () => {
