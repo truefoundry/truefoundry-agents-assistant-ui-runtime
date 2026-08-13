@@ -516,10 +516,6 @@ function attachRunningTurn(
     if (runningTurn == null) {
         return snapshot;
     }
-    // Session-level history excludes the running turn. Apply continuation inputs
-    // from the turn listing so answered approvals / ask-user prompts are not
-    // restored as pending while reconnecting to that turn after a refresh.
-    applyUserToolResponsesToFold(snapshot.fold, runningTurn.input ?? []);
     const pendingUserText = extractTurnUserText(runningTurn.input);
     return replaceSessionSnapshot(snapshot, {
         runningTurn,
@@ -538,12 +534,116 @@ function attachRunningTurn(
 }
 
 /**
+ * Last `turn.created` in ASC event order with no following `turn.done` — the
+ * open tip of the active branch in this window.
+ */
+function findOpenTurnCreated(
+    itemsAsc: readonly GatewaySessionEventItem[],
+): { turnId: string; event: TurnCreatedEvent } | undefined {
+    let open: { turnId: string; event: TurnCreatedEvent } | undefined;
+    for (const item of itemsAsc) {
+        if (item.event.type === "turn.created") {
+            open = { turnId: item.turnId, event: item.event };
+        } else if (item.event.type === "turn.done") {
+            open = undefined;
+        }
+    }
+    return open;
+}
+
+function turnFromCreatedEvent(options: {
+    sessionId: string;
+    turnId: string;
+    event: TurnCreatedEvent;
+}): Turn {
+    const { sessionId, turnId, event } = options;
+    return {
+        id: turnId,
+        sessionId,
+        state: { status: "running" },
+        createdAt: event.createdAt,
+        ...(event.input != null ? { input: event.input } : {}),
+        ...(event.previousTurnId === undefined
+            ? {}
+            : { previousTurnId: event.previousTurnId }),
+    };
+}
+
+type SessionTip = {
+    /** Turn to resume and subscribe to; absent once the tip has finished. */
+    runningTurn?: Turn;
+    /**
+     * Tip input that event ingestion could not apply, because it only folds a
+     * turn's input once that turn's `turn.done` arrives. Answered ask-user
+     * prompts and approvals live here, so this must be folded even when the tip
+     * is no longer running.
+     */
+    continuationInput: readonly TurnInputItem[];
+};
+
+/**
+ * Resolves the tip turn of the active branch for resume/subscribe.
+ *
+ * Prefer an open tip from the events window (works when listTurns is
+ * oldest-first and when listEvents includes the running turn). Fall back to
+ * `listTurns({ limit: 1 })` for hosts that omit the running turn from
+ * listEvents and put the tip first.
+ */
+async function resolveSessionTip(options: {
+    server: AgentChatServer;
+    sessionId: string;
+    itemsAsc: readonly GatewaySessionEventItem[];
+}): Promise<SessionTip> {
+    const { server, sessionId, itemsAsc } = options;
+    const open = findOpenTurnCreated(itemsAsc);
+    if (open != null) {
+        const continuationInput = open.event.input ?? [];
+        if (typeof server.getTurn === "function") {
+            try {
+                const turn = await server.getTurn({
+                    sessionId,
+                    turnId: open.turnId,
+                });
+                if (turn.state.status === "running") {
+                    return {
+                        runningTurn: turn,
+                        continuationInput: turn.input ?? continuationInput,
+                    };
+                }
+                // Tip finished between listEvents and getTurn: nothing to
+                // resume, but its answers still belong in the fold.
+                return { continuationInput: turn.input ?? continuationInput };
+            } catch {
+                // getTurn failed; synthesize from the open turn.created below.
+            }
+        }
+        return {
+            runningTurn: turnFromCreatedEvent({
+                sessionId,
+                turnId: open.turnId,
+                event: open.event,
+            }),
+            continuationInput,
+        };
+    }
+
+    // Hosts that exclude the running turn from listEvents still surface it as
+    // the first row of listTurns when that API is tip-first.
+    const turnsPage = await server.listTurns({ sessionId, limit: 1 });
+    const tip = turnsPage.data[0] as Turn | undefined;
+    return tip?.state?.status === "running"
+        ? { runningTurn: tip, continuationInput: tip.input ?? [] }
+        : { continuationInput: [] };
+}
+
+/**
  * Builds a session snapshot using the session-level `listEvents` API.
  *
  * Loads the newest event page (extending only when a page boundary splits a
  * turn group), then leaves older pages for `prependOlderSessionHistory`.
- * Only `listTurns({ limit: 1 })` is called first to detect a currently-running
- * turn (the session-level API does not return events for the running turn).
+ * Detects a currently-running tip from an open `turn.created` in that window
+ * when present; otherwise falls back to `listTurns({ limit: 1 })` for hosts
+ * that omit the running turn from listEvents.
  *
  * `onProgress` is called after each complete turn is ingested so callers can
  * update the UI progressively while the processing loop runs.
@@ -553,12 +653,6 @@ export async function buildSnapshotFromSessionEvents(
     sessionId: string,
     onProgress?: (snap: SessionSnapshot) => void,
 ): Promise<SessionSnapshot> {
-    // Detect a running turn with a single listTurns page — do not drain pagination.
-    const turnsPage = await server.listTurns({ sessionId, limit: 1 });
-    const newestTurn = turnsPage.data[0] as Turn | undefined;
-    const runningTurn =
-        newestTurn?.state?.status === "running" ? newestTurn : undefined;
-
     const window = await fetchSessionEventsWindow(server, sessionId);
     const historyPagination: SessionHistoryPagination = {
         hasOlder: window.hasOlder,
@@ -575,7 +669,16 @@ export async function buildSnapshotFromSessionEvents(
         historyPagination,
     });
 
-    return attachRunningTurn(withHistory, runningTurn);
+    const tip = await resolveSessionTip({
+        server,
+        sessionId,
+        itemsAsc: window.itemsAsc,
+    });
+    // The tip has no turn.done in this window, so ingestion never folded its
+    // input. Apply it here so answered approvals / ask-user prompts are not
+    // restored as pending after a refresh.
+    applyUserToolResponsesToFold(withHistory.fold, tip.continuationInput);
+    return attachRunningTurn(withHistory, tip.runningTurn);
 }
 
 /**
