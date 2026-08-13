@@ -47,6 +47,7 @@ vi.mock("./convertTurnMessages.js", async (importOriginal) => {
 const mockServer = {
     cancelSession: vi.fn().mockResolvedValue(undefined),
     listTurns: vi.fn(),
+    getTurn: vi.fn(),
     // Present so resume-capable paths are exercised; resumeTurnStream is mocked.
     subscribeToTurn: vi.fn(),
 } as unknown as AgentChatServer;
@@ -429,6 +430,7 @@ describe("useTrueFoundryAgentMessages", () => {
             expect.any(PeerThreadFoldState),
             {
                 userMessage: "first",
+                previousTurnId: "none",
                 headers: {
                     "x-tfy-session-last-updated-at": "2026-06-30T12:00:00.000Z",
                 },
@@ -689,21 +691,22 @@ describe("useTrueFoundryAgentMessages", () => {
 
     it("editFromTurn drops prior turns before showing the edited user message", async () => {
         const createdAt = new Date().toISOString();
+        const rootTurn = {
+            id: "turn-1",
+            sessionId: "session-1",
+            createdAt,
+            previousTurnId: null,
+            state: {
+                status: "done" as const,
+                requiredActions: [],
+                completedAt: createdAt,
+            },
+            input: [{ type: "user.message" as const, content: "Hello" }],
+        } as Turn;
         vi.mocked(mockServer.listTurns).mockResolvedValue({
-            data: [
-                {
-                    id: "turn-1",
-                    sessionId: "session-1",
-                    createdAt,
-                    state: {
-                        status: "done",
-                        requiredActions: [],
-                        completedAt: createdAt,
-                    },
-                    input: [{ type: "user.message", content: "Hello" }],
-                } as Turn,
-            ],
+            data: [rootTurn],
         });
+        vi.mocked(mockServer.getTurn).mockResolvedValue(rootTurn);
         const fold = new PeerThreadFoldState();
         ingestTurnEvent(fold, {
             type: "model.message",
@@ -805,21 +808,22 @@ describe("useTrueFoundryAgentMessages", () => {
         const onError = vi.fn();
         const original = snapshotWithUserTurn("Hello");
         vi.mocked(loadSessionSnapshot).mockResolvedValue(original);
+        const rootTurn = {
+            id: "turn-1",
+            sessionId: "session-1",
+            createdAt,
+            previousTurnId: null,
+            state: {
+                status: "done" as const,
+                requiredActions: [],
+                completedAt: createdAt,
+            },
+            input: [{ type: "user.message" as const, content: "Hello" }],
+        } as Turn;
         vi.mocked(mockServer.listTurns).mockResolvedValue({
-            data: [
-                {
-                    id: "turn-1",
-                    sessionId: "session-1",
-                    createdAt,
-                    state: {
-                        status: "done",
-                        requiredActions: [],
-                        completedAt: createdAt,
-                    },
-                    input: [{ type: "user.message", content: "Hello" }],
-                } as Turn,
-            ],
+            data: [rootTurn],
         });
+        vi.mocked(mockServer.getTurn).mockResolvedValue(rootTurn);
         vi.mocked(streamTurnContent).mockImplementation(async function* () {
             throw new Error("Turn preparation failed");
         });

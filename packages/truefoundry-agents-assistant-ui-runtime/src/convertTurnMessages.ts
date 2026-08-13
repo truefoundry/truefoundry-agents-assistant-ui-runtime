@@ -1443,17 +1443,43 @@ export async function resolveGatewayBranchPreviousTurnId(
     return turns[turnIndex - 1]?.id ?? "none";
 }
 
-/** Resolves `previousTurnId` by turn id so partial history windows stay correct. */
+/**
+ * Resolves `previousTurnId` for edit/retry of `turnId` from the turn's own
+ * parent pointer (`"none"` for roots). Independent of listTurns order.
+ */
 export async function resolveGatewayBranchPreviousTurnIdForTurn(
     server: AgentChatServer,
     sessionId: string,
     turnId: string,
 ): Promise<string> {
-    const turns = await listSessionTurnsOrdered(server, sessionId);
-    const turnIndex = turns.findIndex((turn) => turn.id === turnId);
-    return resolveGatewayBranchPreviousTurnId(server, sessionId, turnIndex, turns);
+    const turn = await server.getTurn({ sessionId, turnId });
+    return turn.previousTurnId ?? "none";
 }
 
+/**
+ * True when `listTurns` is newest-first (or timestamps are tied — legacy
+ * gateway pages). False for TrueForge-style oldest-first ASC pages.
+ */
+function listTurnsIsNewestFirst(turns: readonly Turn[]): boolean {
+    for (let i = 1; i < turns.length; i++) {
+        const newer = turns[i];
+        const older = turns[i - 1];
+        if (newer == null || older == null) {
+            continue;
+        }
+        const delta = Date.parse(newer.createdAt) - Date.parse(older.createdAt);
+        if (delta < 0) {
+            return true;
+        }
+        if (delta > 0) {
+            return false;
+        }
+    }
+    // Identical timestamps: keep prior reverse() behavior (gateway newest-first).
+    return turns.length > 1;
+}
+
+/** Oldest-first, whether the host's listTurns page is ASC or DESC. */
 async function listSessionTurnsOrdered(
     server: AgentChatServer,
     sessionId: string,
@@ -1464,7 +1490,9 @@ async function listSessionTurnsOrdered(
             ...(pageToken != null ? { pageToken } : {}),
         }),
     );
-    turns.reverse();
+    if (listTurnsIsNewestFirst(turns)) {
+        turns.reverse();
+    }
     return turns;
 }
 

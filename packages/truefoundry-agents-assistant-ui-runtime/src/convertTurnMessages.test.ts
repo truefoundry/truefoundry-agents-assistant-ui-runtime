@@ -18,6 +18,7 @@ import type {
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
 import {
+    buildSnapshotBeforeTurn,
     buildSnapshotBeforeTurnIndex,
     buildSnapshotFromSessionEvents,
     buildTurnAssistantContent,
@@ -28,6 +29,7 @@ import {
     prependOlderSessionHistory,
     projectSessionMessages,
     repositoryItemsFromMessages,
+    resolveGatewayBranchPreviousTurnIdForTurn,
     streamTurnEvents,
     turnStreamUpdateToAssistantMessage,
 } from "./convertTurnMessages.js";
@@ -135,22 +137,45 @@ function mockTurn(
     };
 }
 
+/** Mirror runtime listTurns normalization: ASC stays, DESC (or tied) reverses. */
+function toOldestFirstTurns(turns: TurnFixture[]): TurnFixture[] {
+    const chain = turns.filter((turn) => turn.state.status !== "running");
+    let newestFirst = chain.length > 1;
+    for (let i = 1; i < chain.length; i++) {
+        const newer = chain[i];
+        const older = chain[i - 1];
+        if (newer == null || older == null) {
+            continue;
+        }
+        const delta = Date.parse(newer.createdAt) - Date.parse(older.createdAt);
+        if (delta < 0) {
+            newestFirst = true;
+            break;
+        }
+        if (delta > 0) {
+            newestFirst = false;
+            break;
+        }
+    }
+    return newestFirst ? [...chain].reverse() : [...chain];
+}
+
 /**
- * Builds session-level event items from per-turn mocks — newest-first turns,
- * running turns excluded (matches session.listEvents API contract).
+ * Builds session-level event items from per-turn mocks — accepts ASC or DESC
+ * listTurns order; running turns excluded (matches session.listEvents).
  */
 function sessionEventItemsFromTurns(
-    turnsNewestFirst: TurnFixture[],
+    turns: TurnFixture[],
     lastTurnId?: string,
 ): SessionEventItem[] {
-    let chain = turnsNewestFirst.filter((turn) => turn.state.status !== "running");
+    let chain = toOldestFirstTurns(turns);
     if (lastTurnId != null) {
         const anchorIndex = chain.findIndex((turn) => turn.id === lastTurnId);
-        chain = anchorIndex === -1 ? [] : chain.slice(anchorIndex);
+        chain = anchorIndex === -1 ? [] : chain.slice(0, anchorIndex + 1);
     }
 
     const items: SessionEventItem[] = [];
-    for (const turn of [...chain].reverse()) {
+    for (const turn of chain) {
         items.push({
             turnId: turn.id,
             event: {
@@ -160,6 +185,9 @@ function sessionEventItemsFromTurns(
                 input: turn.input,
                 state: { status: "running" },
                 createdAt: turn.createdAt,
+                ...(turn.previousTurnId === undefined
+                    ? {}
+                    : { previousTurnId: turn.previousTurnId }),
             },
         });
         for (const event of turn.events) {
@@ -180,10 +208,18 @@ function sessionEventItemsFromTurns(
 
 function mockServerWithTurns(turns: TurnFixture[]): AgentChatServer {
     const eventsByTurnId = new Map(turns.map((turn) => [turn.id, turn.events]));
+    const turnsById = new Map(turns.map((turn) => [turn.id, turn]));
     return {
         listTurns: async ({ limit }: { limit?: number } = {}) => ({
             data: limit != null ? turns.slice(0, limit) : turns,
         }),
+        getTurn: async ({ turnId }: { turnId: string }) => {
+            const turn = turnsById.get(turnId);
+            if (turn == null) {
+                throw new Error(`Turn ${turnId} not found`);
+            }
+            return turn;
+        },
         listEvents: async (opts: { lastTurnId?: string } = {}) => {
             const items = sessionEventItemsFromTurns(turns, opts.lastTurnId);
             const newestFirst = [...items].reverse();
@@ -2871,6 +2907,93 @@ describe("buildSnapshotBeforeTurnIndex", () => {
         ]);
         const snapshot = await buildSnapshotBeforeTurnIndex(server, SESSION_ID, 0);
         expect(snapshot.turns).toHaveLength(0);
+    });
+
+    it("rewinds correctly when listTurns is oldest-first (TrueForge ASC)", async () => {
+        const t1 = mockTurn({
+            id: "t1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            input: [{ type: "user.message", content: "first" }],
+            events: [
+                modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
+            ],
+        });
+        const t2 = mockTurn({
+            id: "t2",
+            createdAt: "2026-01-01T00:01:00.000Z",
+            previousTurnId: "t1",
+            input: [{ type: "user.message", content: "second" }],
+            events: [
+                modelMessage({ id: "m2", threadId: ROOT_THREAD_ID, content: "reply 2" }),
+            ],
+        });
+        const t3 = mockTurn({
+            id: "t3",
+            createdAt: "2026-01-01T00:02:00.000Z",
+            previousTurnId: "t2",
+            input: [{ type: "user.message", content: "third" }],
+            events: [
+                modelMessage({ id: "m3", threadId: ROOT_THREAD_ID, content: "reply 3" }),
+            ],
+        });
+
+        // TrueForge listTurns is ASC (oldest-first).
+        const server = mockServerWithTurns([t1, t2, t3]);
+        const snapshot = await buildSnapshotBeforeTurn(server, SESSION_ID, "t3");
+
+        expect(snapshot.turns.map((turn) => turn.id)).toEqual(["t1", "t2"]);
+        expect(projectSessionMessages(snapshot).map((message) => message.id)).toEqual([
+            "t1-user",
+            "t1-assistant",
+            "t2-user",
+            "t2-assistant",
+        ]);
+    });
+});
+
+describe("resolveGatewayBranchPreviousTurnIdForTurn", () => {
+    it("uses the turn parent for subsequent turns and none for roots (ASC listTurns)", async () => {
+        const t1 = mockTurn({
+            id: "t1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            previousTurnId: null,
+        });
+        const t2 = mockTurn({
+            id: "t2",
+            createdAt: "2026-01-01T00:01:00.000Z",
+            previousTurnId: "t1",
+        });
+        const t3 = mockTurn({
+            id: "t3",
+            createdAt: "2026-01-01T00:02:00.000Z",
+            previousTurnId: "t2",
+        });
+        const server = mockServerWithTurns([t1, t2, t3]);
+
+        await expect(
+            resolveGatewayBranchPreviousTurnIdForTurn(server, SESSION_ID, "t1"),
+        ).resolves.toBe("none");
+        await expect(
+            resolveGatewayBranchPreviousTurnIdForTurn(server, SESSION_ID, "t3"),
+        ).resolves.toBe("t2");
+    });
+
+    it("uses the turn parent when listTurns is newest-first", async () => {
+        const t1 = mockTurn({
+            id: "t1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            previousTurnId: null,
+        });
+        const t2 = mockTurn({
+            id: "t2",
+            createdAt: "2026-01-01T00:01:00.000Z",
+            previousTurnId: "t1",
+        });
+        const server = mockServerWithTurns([t2, t1]);
+
+        await expect(
+            resolveGatewayBranchPreviousTurnIdForTurn(server, SESSION_ID, "t2"),
+        ).resolves.toBe("t1");
     });
 });
 
