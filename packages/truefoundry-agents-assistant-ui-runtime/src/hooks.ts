@@ -6,7 +6,8 @@ import { useAui, useAuiState } from "@assistant-ui/store";
 import type { TrueFoundryMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     EMPTY_DRAFT_EXTRAS,
-    trueFoundryExtras,
+    getTrueFoundryExtras,
+    useTrueFoundryRuntimeExtras,
     type TrueFoundryDraftRuntimeExtras,
 } from "./truefoundryExtras.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
@@ -14,7 +15,7 @@ import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
 /** Pending tool approvals plus a respond action. */
 export const useTrueFoundryApprovals = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+    const extras = useTrueFoundryRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -31,7 +32,7 @@ export const useTrueFoundryApprovals = () => {
 
 /** Pending ask-user tool responses plus a respond action. */
 export const useTrueFoundryToolResponses = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+    const extras = useTrueFoundryRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -48,7 +49,7 @@ export const useTrueFoundryToolResponses = () => {
 
 /** Pending MCP OAuth plus a resume action. */
 export const useTrueFoundryMcpAuth = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+    const extras = useTrueFoundryRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -67,25 +68,25 @@ export const useTrueFoundryMcpAuth = () => {
 export const useTrueFoundryRespondToToolApproval = () => {
     const aui = useAui();
     return (response: RespondToToolApprovalOptions) =>
-        trueFoundryExtras.get(aui).respondToToolApproval(response);
+        getTrueFoundryExtras(aui).respondToToolApproval(response);
 };
 
 /** Returns a function to respond to a pending tool response from any render context. */
 export const useTrueFoundryRespondToToolResponse = () => {
     const aui = useAui();
     return (response: RespondToToolResponseOptions) =>
-        trueFoundryExtras.get(aui).respondToToolResponse(response);
+        getTrueFoundryExtras(aui).respondToToolResponse(response);
 };
 
 /** Returns a function to resume after MCP OAuth from any render context. */
 export const useTrueFoundryResumeMcpAuth = () => {
     const aui = useAui();
-    return () => trueFoundryExtras.get(aui).resumeMcpAuth();
+    return () => getTrueFoundryExtras(aui).resumeMcpAuth();
 };
 
 /** Current sandboxId for this session, if a sandbox has been created. */
 export const useTrueFoundrySandboxId = (): string | undefined =>
-    trueFoundryExtras.use((e) => e.sandboxId, undefined);
+    useTrueFoundryRuntimeExtras()?.sandboxId;
 
 /** Turn that produced the message being rendered. Only defined inside a message scope. */
 export const useTrueFoundryTurnId = (): string | undefined =>
@@ -108,25 +109,25 @@ export const useTrueFoundryDownloadSandboxFile = () => {
                 "Downloading a sandbox file requires a message scope to resolve its turn.",
             );
         }
-        return trueFoundryExtras.get(aui).downloadSandboxFile({ turnId, path });
+        return getTrueFoundryExtras(aui).downloadSandboxFile({ turnId, path });
     };
 };
 
 /** Returns a function to cancel the current run from any render context. */
 export const useTrueFoundryCancel = () => {
     const aui = useAui();
-    return () => trueFoundryExtras.get(aui).cancel();
+    return () => getTrueFoundryExtras(aui).cancel();
 };
 
 /** Returns a function to reload (retry) the current session from any render context. */
 export const useTrueFoundryReload = () => {
     const aui = useAui();
-    return () => trueFoundryExtras.get(aui).reload();
+    return () => getTrueFoundryExtras(aui).reload();
 };
 
 /** Older history pagination state plus a load-more action for scroll-up. */
 export const useTrueFoundryHistoryPagination = () => {
-    const extras = trueFoundryExtras.use((e) => e, undefined);
+    const extras = useTrueFoundryRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -147,17 +148,17 @@ export const useTrueFoundryHistoryPagination = () => {
  * arrive in this client. Falls back to `false` on runtimes that predate the flag.
  */
 export const useTrueFoundryResumeUnavailable = () =>
-    trueFoundryExtras.use((e) => e.resumeUnavailable, false) ?? false;
+    useTrueFoundryRuntimeExtras()?.resumeUnavailable ?? false;
 
 /** Returns a function to reset (re-submit) a user turn from any render context. */
 export const useTrueFoundryResetFromTurn = () => {
     const aui = useAui();
-    return (turnId: string) => trueFoundryExtras.get(aui).resetFromTurn(turnId);
+    return (turnId: string) => getTrueFoundryExtras(aui).resetFromTurn(turnId);
 };
 
 /** Current draft agent spec and sync state (draft mode only). */
 export const useTrueFoundryAgentSpec = () => {
-    const extras = trueFoundryExtras.use((e) => e.draft, null);
+    const extras = useTrueFoundryRuntimeExtras()?.draft ?? null;
 
     return useMemo(
         () => ({ ...EMPTY_DRAFT_EXTRAS, ...extras }),
@@ -169,14 +170,14 @@ export const useTrueFoundryAgentSpec = () => {
 export const useTrueFoundryUpdateAgentSpec = () => {
     const aui = useAui();
     return (update: Parameters<TrueFoundryDraftRuntimeExtras["updateAgentSpec"]>[0]) =>
-        trueFoundryExtras.get(aui).draft?.updateAgentSpec(update);
+        getTrueFoundryExtras(aui).draft?.updateAgentSpec(update);
 };
 
 /** Flushes any pending draft-spec synchronization before a coordinated write. */
 export const useTrueFoundryFlushAgentSpec = () => {
     const aui = useAui();
     return () =>
-        trueFoundryExtras.get(aui).draft?.flushAgentSpec() ?? Promise.resolve();
+        getTrueFoundryExtras(aui).draft?.flushAgentSpec() ?? Promise.resolve();
 };
 
 /** Adopts a spec already persisted by another server operation without syncing again. */
@@ -184,6 +185,5 @@ export const useTrueFoundryAdoptAgentSpec = () => {
     const aui = useAui();
     return (
         request: Parameters<TrueFoundryDraftRuntimeExtras["adoptAgentSpec"]>[0],
-    ) => trueFoundryExtras.get(aui).draft?.adoptAgentSpec(request);
+    ) => getTrueFoundryExtras(aui).draft?.adoptAgentSpec(request);
 };
-

@@ -8,6 +8,8 @@ overrides:
   react: 19.2.7
   react-dom: 19.2.7
   truefoundry-gateway-sdk: 0.4.0-rc.6
+  '@truefoundry/assistant-ui-runtime': workspace:*
+  '@assistant-ui/store': 0.2.22
 
 importers:
 
@@ -17,19 +19,19 @@ importers:
     dependencies:
       '@assistant-ui/core':
         specifier: ^0.2.22
-        version: 0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+        version: 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
       '@assistant-ui/react':
         specifier: ^0.14.24
         version: 0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@assistant-ui/store':
-        specifier: ^0.2.19
-        version: 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
-      '@truefoundry/agent-ui-sdk':
-        specifier: 0.1.2
-        version: 0.1.2(@assistant-ui/core@0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7)))(@assistant-ui/react@0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+        specifier: 0.2.22
+        version: 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       '@truefoundry/assistant-ui-runtime':
         specifier: workspace:*
         version: link:../../packages/truefoundry-agents-assistant-ui-runtime
+      '@truefoundry/trueforge-ui':
+        specifier: 0.1.0-rc.1
+        version: 0.1.0-rc.1(@assistant-ui/core@0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7)))(@assistant-ui/react@0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -74,8 +76,8 @@ importers:
         specifier: ^0.0.29
         version: 0.0.29(@assistant-ui/react-ink@0.0.30(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
       '@assistant-ui/store':
-        specifier: ^0.2.19
-        version: 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
+        specifier: 0.2.22
+        version: 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       '@truefoundry/assistant-ui-runtime':
         specifier: workspace:*
         version: link:../../packages/truefoundry-agents-assistant-ui-runtime
@@ -108,7 +110,7 @@ importers:
         specifier: ^0.2.22
         version: 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
       '@assistant-ui/store':
-        specifier: ^0.2.21
+        specifier: 0.2.22
         version: 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
     devDependencies:
       '@testing-library/react':
@@ -166,7 +168,7 @@ packages:
   '@assistant-ui/core@0.2.23':
     resolution: {integrity: sha512-mD/sWrdH4SF1POxWE0Wn8jrxOSnuGOJfj8j5coDuEtdtoevQT3Z8LzD5mkd2UdyXHIkwFsMb3/vIL1kH8XKyGg==}
     peerDependencies:
-      '@assistant-ui/store': ^0.2.13
+      '@assistant-ui/store': 0.2.22
       '@assistant-ui/tap': ^0.9.0
       '@types/react': '*'
       assistant-cloud: ^0.1.31
@@ -220,16 +222,6 @@ packages:
       '@types/react':
         optional: true
       '@types/react-dom':
-        optional: true
-
-  '@assistant-ui/store@0.2.19':
-    resolution: {integrity: sha512-7GMEoK+H4iINquteLFXqqDB5SAzB19YHBy4KKQprxHseAtDrpkC8w9pTrPfJ1yLvbn3FqjXk645bCt5vDf1sTg==}
-    peerDependencies:
-      '@assistant-ui/tap': ^0.9.0
-      '@types/react': '*'
-      react: 19.2.7
-    peerDependenciesMeta:
-      '@types/react':
         optional: true
 
   '@assistant-ui/store@0.2.22':
@@ -1998,8 +1990,12 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@truefoundry/agent-ui-sdk@0.1.2':
-    resolution: {integrity: sha512-4QqQ+A2ctKr6F0SjY07T/c4Zbd1ggPyn0IHIiGqxhPpZT3CGyKRjLW+oyeHd+0qQenKgt9CPawX0J4VNSnU7hQ==}
+  '@truefoundry/trueforge-sdk@0.1.0-rc.1':
+    resolution: {integrity: sha512-5GhBVqegPVOdN49Q/S2uvQFL28cwqG5yjbklazTsZNWELbTtPX9hchetB54xW6Mr/uMHxOEWsOTJnYVHpZYX7Q==}
+    engines: {node: '>=18.0.0'}
+
+  '@truefoundry/trueforge-ui@0.1.0-rc.1':
+    resolution: {integrity: sha512-wuYQg3N1jU96kjRmVNPpYQ+r6/wsNWmO5X5BAV2b+fwGMky6X5jEj1oOTnMJzhFLwrsLVpIEvQQKPGfp7VJp9A==}
     peerDependencies:
       '@assistant-ui/core': ^0.2.22
       '@assistant-ui/react': ^0.14.24
@@ -2012,18 +2008,6 @@ packages:
       '@assistant-ui/react':
         optional: true
       '@types/react':
-        optional: true
-
-  '@truefoundry/assistant-ui-runtime@0.1.6':
-    resolution: {integrity: sha512-wmTh25em4b21kRbQKzr7ODQQYGeX81dszTjvv2AJfqfSIRbd6fWGWH8Y9uNm6RmVAfCQZOeMHQm1NzS4ICtc1w==}
-    peerDependencies:
-      '@types/react': '*'
-      react: 19.2.7
-      truefoundry-gateway-sdk: 0.4.0-rc.6
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      truefoundry-gateway-sdk:
         optional: true
 
   '@tybys/wasm-util@0.10.3':
@@ -3041,6 +3025,9 @@ packages:
   parse5@8.0.1:
     resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
 
+  partial-json@0.1.7:
+    resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
+
   patch-console@2.0.0:
     resolution: {integrity: sha512-0YNdUceMdaQwoKce1gatDScmMo5pu/tfABfnzEqeG0gtTmd7mh/WcwgUjtAeOU7N8nFFlbQBnFK2gXW5fGvmMA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -3820,21 +3807,6 @@ snapshots:
 
   '@asamuzakjp/nwsapi@2.3.9': {}
 
-  '@assistant-ui/core@0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))':
-    dependencies:
-      '@assistant-ui/store': 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
-      '@assistant-ui/tap': 0.9.3(@types/react@19.2.17)(react@19.2.7)
-      assistant-stream: 0.3.31
-      nanoid: 6.0.1
-    optionalDependencies:
-      '@types/react': 19.2.17
-      assistant-cloud: 0.1.34
-      react: 19.2.7
-      zustand: 5.0.14(@types/react@19.2.17)(react@19.2.7)
-    transitivePeerDependencies:
-      - ioredis
-      - redis
-
   '@assistant-ui/core@0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))':
     dependencies:
       '@assistant-ui/store': 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
@@ -3852,8 +3824,8 @@ snapshots:
 
   '@assistant-ui/react-ink-markdown@0.0.29(@assistant-ui/react-ink@0.0.30(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))':
     dependencies:
-      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
-      '@assistant-ui/store': 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
+      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+      '@assistant-ui/store': 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       ink: 7.1.0(@types/react@19.2.17)(react@19.2.7)
       markdansi: 0.3.2
       react: 19.2.7
@@ -3869,8 +3841,8 @@ snapshots:
 
   '@assistant-ui/react-ink@0.0.30(@types/react@19.2.17)(assistant-cloud@0.1.34)(ink@7.1.0(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
-      '@assistant-ui/store': 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
+      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+      '@assistant-ui/store': 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       '@assistant-ui/tap': 0.9.3(@types/react@19.2.17)(react@19.2.7)
       assistant-stream: 0.3.25
       diff: 9.0.0
@@ -3890,8 +3862,8 @@ snapshots:
 
   '@assistant-ui/react@0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
-      '@assistant-ui/store': 0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
+      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+      '@assistant-ui/store': 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
       '@assistant-ui/tap': 0.9.3(@types/react@19.2.17)(react@19.2.7)
       '@radix-ui/primitive': 1.1.4
       '@radix-ui/react-collection': 1.1.11(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -3919,14 +3891,6 @@ snapshots:
       - ioredis
       - redis
       - use-sync-external-store
-
-  '@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)':
-    dependencies:
-      '@assistant-ui/tap': 0.9.3(@types/react@19.2.17)(react@19.2.7)
-      react: 19.2.7
-      use-effect-event: 2.0.3(react@19.2.7)
-    optionalDependencies:
-      '@types/react': 19.2.17
 
   '@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)':
     dependencies:
@@ -5412,15 +5376,19 @@ snapshots:
       '@types/react': 19.2.17
       '@types/react-dom': 19.2.3(@types/react@19.2.17)
 
-  '@truefoundry/agent-ui-sdk@0.1.2(@assistant-ui/core@0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7)))(@assistant-ui/react@0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))':
+  '@truefoundry/trueforge-sdk@0.1.0-rc.1': {}
+
+  '@truefoundry/trueforge-ui@0.1.0-rc.1(@assistant-ui/core@0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7)))(@assistant-ui/react@0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))':
     dependencies:
       '@openuidev/react-headless': 0.9.4(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
       '@openuidev/react-lang': 0.2.9(react@19.2.7)(zod@4.4.3)
       '@openuidev/react-ui': 0.13.3(@openuidev/react-headless@0.9.4(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7)))(@openuidev/react-lang@0.2.9(react@19.2.7)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
-      '@truefoundry/assistant-ui-runtime': 0.1.6(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(truefoundry-gateway-sdk@0.4.0-rc.6)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+      '@truefoundry/assistant-ui-runtime': link:packages/truefoundry-agents-assistant-ui-runtime
+      '@truefoundry/trueforge-sdk': 0.1.0-rc.1
       clsx: 2.1.1
       lucide-react: 0.562.0(react@19.2.7)
       monaco-editor: 0.56.0
+      partial-json: 0.1.7
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       react-markdown: 10.1.0(@types/react@19.2.17)(react@19.2.7)
@@ -5430,32 +5398,13 @@ snapshots:
       truefoundry-gateway-sdk: 0.4.0-rc.6
       zod: 4.4.3
     optionalDependencies:
-      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.19(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
+      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
       '@assistant-ui/react': 0.14.26(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/react': 19.2.17
     transitivePeerDependencies:
-      - '@assistant-ui/tap'
       - '@modelcontextprotocol/sdk'
       - '@types/react-dom'
-      - assistant-cloud
-      - ioredis
-      - redis
       - supports-color
-      - zustand
-
-  '@truefoundry/assistant-ui-runtime@0.1.6(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(truefoundry-gateway-sdk@0.4.0-rc.6)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))':
-    dependencies:
-      '@assistant-ui/core': 0.2.23(@assistant-ui/store@0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7))(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(assistant-cloud@0.1.34)(react@19.2.7)(zustand@5.0.14(@types/react@19.2.17)(react@19.2.7))
-      '@assistant-ui/store': 0.2.22(@assistant-ui/tap@0.9.3(@types/react@19.2.17)(react@19.2.7))(@types/react@19.2.17)(react@19.2.7)
-      react: 19.2.7
-    optionalDependencies:
-      '@types/react': 19.2.17
-      truefoundry-gateway-sdk: 0.4.0-rc.6
-    transitivePeerDependencies:
-      - '@assistant-ui/tap'
-      - assistant-cloud
-      - ioredis
-      - redis
       - zustand
 
   '@tybys/wasm-util@0.10.3':
@@ -6726,6 +6675,8 @@ snapshots:
   parse5@8.0.1:
     dependencies:
       entities: 8.0.0
+
+  partial-json@0.1.7: {}
 
   patch-console@2.0.0: {}
 

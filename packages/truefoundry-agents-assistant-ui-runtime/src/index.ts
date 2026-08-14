@@ -42,7 +42,11 @@ export type {
 } from "./messageCustomMetadata.js";
 export type { PendingApproval, PendingToolResponse } from "./collectPending.js";
 export type { TrueFoundryRuntimeExtras } from "./truefoundryExtras.js";
-export { trueFoundryExtras } from "./truefoundryExtras.js";
+export {
+    trueFoundryExtras,
+    getTrueFoundryExtras,
+    tryGetTrueFoundryExtras,
+} from "./truefoundryExtras.js";
 export {
     useTrueFoundryApprovals,
     useTrueFoundryToolResponses,

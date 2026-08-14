@@ -89,7 +89,7 @@ Implemented against Control Plane HTTP (not the gateway SDK):
 
 | Method | CP path |
 | ------ | ------- |
-| `getModels` | `GET /api/svc/v1/llm-gateway/model/enabled` |
+| `getModels` | `GET /api/svc/v1/llm-gateway/model/enabled` (+ `GET /api/svc/v1/provider-accounts/providers` for `properties.reasoningEfforts`) |
 | `getSkills` | `GET /api/ml/v1/agent-skills?include_empty_agent_skills=false` |
 | `getMcp` | `GET /api/svc/v1/mcp-servers` |
 | `searchAgents` | `GET /api/svc/v1/agents?type=truefoundry-agent&…` |

@@ -163,7 +163,7 @@ const runtime = useTrueFoundryAgentRuntime({
 
 ## Runtime extras
 
-Typed escape hatch for adapter-specific state and actions (same pattern as `@assistant-ui/react-google-adk`). Use selector hooks for thread-level UI; use action hooks / `trueFoundryExtras.get(aui)` inside nested sub-agent renderers.
+Typed escape hatch for adapter-specific state and actions (same pattern as `@assistant-ui/react-google-adk`). Use selector hooks for thread-level UI; use action hooks / `trueFoundryExtras.get(aui)` / `getTrueFoundryExtras(aui)` inside nested sub-agent renderers (`PartPrimitive.Messages` is readonly and shadows `thread.extras` — get/use and the convenience hooks walk the parent AUI chain so approvals / ask-user still hit the root runtime).
 
 ### Approvals, ask-user, MCP auth
 
@@ -197,10 +197,12 @@ const { pending: mcp, resume } = useTrueFoundryMcpAuth();
 ### Low-level namespace
 
 ```tsx
-import { trueFoundryExtras } from "@truefoundry/assistant-ui-runtime";
+import { trueFoundryExtras, getTrueFoundryExtras } from "@truefoundry/assistant-ui-runtime";
 
+// get/use walk Object.create(parent) AUI clients — safe inside nested sub-agent UI.
 const extras = trueFoundryExtras.use();
 const pending = trueFoundryExtras.use((e) => e.pendingApprovals, []);
+const rootExtras = getTrueFoundryExtras(aui); // same walk as trueFoundryExtras.get
 ```
 
 ---
