@@ -10,7 +10,7 @@ import type {
   ActionRequiredEvent,
   SessionEventItem,
   TurnEvent,
-  TurnStreamData
+  TurnStreamData,
 } from "./events.js";
 
 // ---------------------------------------------------------------------------
@@ -74,19 +74,19 @@ export type SearchAgentSelectorParams = {
 // ---------------------------------------------------------------------------
 
 /**
-* Mounts written to AgentSpec.skills[] / AgentSpec.mcpServers[].
-*
-* These are opaque to the runtime — it stores and forwards them but never reads
-* a field, and the backend owns the shape (the gateway identifies a skill by
-* `fqn`, with no `id` or `name` anywhere). So the base constrains only that a
-* mount is an object; hosts intersect their concrete mount type over it, as
-* `TfySkillMount` / `TfyMcpServerMount` do in the gateway adapter.
-*
-* Naming a field here would not just be unread, it would be wrong: a base with
-* required fields rejects the backend's own payloads, and one with only optional
-* fields is a weak type, which TypeScript rejects for a source that shares no
-* property with it — the gateway's registry skill shares none.
-*/
+ * Mounts written to AgentSpec.skills[] / AgentSpec.mcpServers[].
+ *
+ * These are opaque to the runtime — it stores and forwards them but never reads
+ * a field, and the backend owns the shape (the gateway identifies a skill by
+ * `fqn`, with no `id` or `name` anywhere). So the base constrains only that a
+ * mount is an object; hosts intersect their concrete mount type over it, as
+ * `TfySkillMount` / `TfyMcpServerMount` do in the gateway adapter.
+ *
+ * Naming a field here would not just be unread, it would be wrong: a base with
+ * required fields rejects the backend's own payloads, and one with only optional
+ * fields is a weak type, which TypeScript rejects for a source that shares no
+ * property with it — the gateway's registry skill shares none.
+ */
 export type SkillMount = object;
 
 export type McpServerMount = object;
@@ -116,10 +116,10 @@ export interface AgentRuntimeConfig {
 }
 
 /**
-* SDK-owned agent definition — fields the FE reads/writes.
-* Host widens `model` / `skills` / `mcpServers` / `config` via type params,
-* and adds extra fields via `TSpec extends AgentSpec<...>`.
-*/
+ * SDK-owned agent definition — fields the FE reads/writes.
+ * Host widens `model` / `skills` / `mcpServers` / `config` via type params,
+ * and adds extra fields via `TSpec extends AgentSpec<...>`.
+ */
 export interface AgentSpec<
   TModel extends Model = Model,
   TSkill extends SkillMount = SkillMount,
@@ -193,7 +193,10 @@ export type PreviousTurnIdInput = "auto" | "none" | string;
 
 export type UserMessageContent =
   | string
-  | Array<{ type: "text"; text: string } | { type: "file"; name: string; data: string }>;
+  | Array<
+      | { type: "text"; text: string }
+      | { type: "file"; name: string; data: string }
+    >;
 
 export interface UserMessage {
   type: "user.message";
@@ -265,11 +268,11 @@ export interface Turn {
 // ---------------------------------------------------------------------------
 
 /**
-* Chat / session port — the runtime calls these.
-*
-* All session ops are flat (sessionId param). No gateway client dependency.
-* `createTrueFoundryServer` is one possible implementation (TFY adapter).
-*/
+ * Chat / session port — the runtime calls these.
+ *
+ * All session ops are flat (sessionId param). No gateway client dependency.
+ * `createTrueFoundryServer` is one possible implementation (TFY adapter).
+ */
 export interface AgentChatServer<
   TSpec extends AgentSpec = AgentSpec,
   TSession extends Session<TSpec> = Session<TSpec>,
@@ -284,44 +287,44 @@ export interface AgentChatServer<
   updateSession(req: TUpdate): Promise<TSession>;
 
   createTurn(req: {
-      sessionId: string;
-      input?: TurnInputItem[];
-      previousTurnId?: PreviousTurnIdInput;
-      abortSignal?: AbortSignal;
-      headers?: Record<string, string>;
+    sessionId: string;
+    input?: TurnInputItem[];
+    previousTurnId?: PreviousTurnIdInput;
+    abortSignal?: AbortSignal;
+    headers?: Record<string, string>;
   }): AsyncIterable<TurnStreamData>;
 
   cancelSession(req: { sessionId: string }): Promise<void>;
   deleteSession?(req: { sessionId: string }): Promise<void>;
 
   listTurns(req: {
-      sessionId: string;
-      limit?: number;
-      pageToken?: string;
-      order?: ListSessionsOrder;
+    sessionId: string;
+    limit?: number;
+    pageToken?: string;
+    order?: ListSessionsOrder;
   }): Promise<ListResult<TTurn>>;
   getTurn(req: { sessionId: string; turnId: string }): Promise<TTurn>;
   listEvents(req: {
-      sessionId: string;
-      pageToken?: string;
-      lastTurnId?: string;
-      limit?: number;
+    sessionId: string;
+    pageToken?: string;
+    lastTurnId?: string;
+    limit?: number;
   }): Promise<ListResult<SessionEventItem>>;
 
   /** Optional per-turn event listing (hydrate in-flight turn content). */
   listTurnEvents?(req: {
-      sessionId: string;
-      turnId: string;
-      limit?: number;
-      pageToken?: string;
-      order?: ListSessionsOrder;
+    sessionId: string;
+    turnId: string;
+    limit?: number;
+    pageToken?: string;
+    order?: ListSessionsOrder;
   }): Promise<ListResult<TurnEvent>>;
 
   subscribeToTurn?(req: {
-      sessionId: string;
-      turnId: string;
-      afterSequenceNumber?: number;
-      abortSignal?: AbortSignal;
+    sessionId: string;
+    turnId: string;
+    afterSequenceNumber?: number;
+    abortSignal?: AbortSignal;
   }): AsyncIterable<TurnStreamData>;
 
   /**
@@ -330,10 +333,10 @@ export interface AgentChatServer<
    * directly use `sandboxId`.
    */
   downloadSandboxFile?(req: {
-      sessionId: string;
-      turnId: string;
-      sandboxId: string;
-      path: string;
+    sessionId: string;
+    turnId: string;
+    sandboxId: string;
+    path: string;
   }): Promise<Blob>;
 }
 
@@ -365,9 +368,9 @@ export interface AgentBuilderCapabilitiesResponse {
 }
 
 /**
-* Builder catalog + persist port — atoms call these.
-* Passed separately from the runtime's chat server.
-*/
+ * Builder catalog + persist port — atoms call these.
+ * Passed separately from the runtime's chat server.
+ */
 export interface AgentBuilderServer<
   TSpec extends AgentSpec = AgentSpec,
   TModel extends ModelSelectorEntry = ModelSelectorEntry,
@@ -375,7 +378,8 @@ export interface AgentBuilderServer<
   TMcp extends ConnectorSelectorEntry = ConnectorSelectorEntry,
   TAgent extends AgentSelectorEntry = AgentSelectorEntry,
   TSave = SaveAgentResult,
-  TCapabilities extends AgentBuilderCapabilitiesResponse = AgentBuilderCapabilitiesResponse,
+  TCapabilities extends AgentBuilderCapabilitiesResponse =
+    AgentBuilderCapabilitiesResponse,
 > {
   getCapabilities(): Promise<TCapabilities>;
   getModels(): Promise<TModel[]>;
@@ -391,28 +395,30 @@ export interface AgentBuilderServer<
 // ---------------------------------------------------------------------------
 
 /**
-* Provider type id. Reserved literal: `"custom"` for user-defined providers;
-* any other string is a builtin (e.g. `"openai"`, `"anthropic"`).
-*
-* Note: `string | "custom"` is useless in TypeScript (`"custom"` ⊆ `string`),
-* so this stays `string` and `"custom"` is a documented convention.
-*/
+ * Provider type id. Reserved literal: `"custom"` for user-defined providers;
+ * any other string is a builtin (e.g. `"openai"`, `"anthropic"`).
+ *
+ * Note: `string | "custom"` is useless in TypeScript (`"custom"` ⊆ `string`),
+ * so this stays `string` and `"custom"` is a documented convention.
+ */
 export type ProviderType = string;
 
 /**
-* Model row — form "Model ID" + "Display name".
-* Host extends for properties, etc.
-*/
+ * Model row — form "Model ID" + "Display name".
+ * Host extends for properties, etc.
+ */
 export interface ModelEntry {
   id: string;
   name: string;
 }
 
 /**
-* Write config for create/update (custom form + catalog "Save key").
-* Host extends. `baseUrl` present iff `type === "custom"`.
-*/
-export interface ModelProviderConfigBase<TModel extends ModelEntry = ModelEntry> {
+ * Write config for create/update (custom form + catalog "Save key").
+ * Host extends. `baseUrl` present iff `type === "custom"`.
+ */
+export interface ModelProviderConfigBase<
+  TModel extends ModelEntry = ModelEntry,
+> {
   type: ProviderType;
   name: string;
   /** Present iff `type === "custom"`. */
@@ -422,9 +428,9 @@ export interface ModelProviderConfigBase<TModel extends ModelEntry = ModelEntry>
 }
 
 /**
-* Configured provider card (list/read). No raw `apiKey`.
-* Host extends for apiKeySet, timestamps, etc.
-*/
+ * Configured provider card (list/read). No raw `apiKey`.
+ * Host extends for apiKeySet, timestamps, etc.
+ */
 export interface ModelProviderBase<TModel extends ModelEntry = ModelEntry> {
   id: string;
   type: ProviderType;
@@ -435,11 +441,13 @@ export interface ModelProviderBase<TModel extends ModelEntry = ModelEntry> {
 }
 
 /**
-* Discovery-only catalog provider (AVAILABLE list).
-* `type` must not be `"custom"` — custom providers use the custom form.
-* Host extends for richer model rows.
-*/
-export interface ModelProviderCatalogEntry<TModel extends ModelEntry = ModelEntry> {
+ * Discovery-only catalog provider (AVAILABLE list).
+ * `type` must not be `"custom"` — custom providers use the custom form.
+ * Host extends for richer model rows.
+ */
+export interface ModelProviderCatalogEntry<
+  TModel extends ModelEntry = ModelEntry,
+> {
   type: ProviderType;
   name: string;
   models: TModel[];
@@ -458,9 +466,12 @@ export type UpdateModelProviderRequest<TModel extends ModelEntry = ModelEntry> =
 export interface ModelCatalogServer<
   TModel extends ModelEntry = ModelEntry,
   TProvider extends ModelProviderBase<TModel> = ModelProviderBase<TModel>,
-  TCatalogProvider extends ModelProviderCatalogEntry<TModel> = ModelProviderCatalogEntry<TModel>,
-  TCreate extends CreateModelProviderRequest<TModel> = CreateModelProviderRequest<TModel>,
-  TUpdate extends UpdateModelProviderRequest<TModel> = UpdateModelProviderRequest<TModel>,
+  TCatalogProvider extends ModelProviderCatalogEntry<TModel> =
+    ModelProviderCatalogEntry<TModel>,
+  TCreate extends CreateModelProviderRequest<TModel> =
+    CreateModelProviderRequest<TModel>,
+  TUpdate extends UpdateModelProviderRequest<TModel> =
+    UpdateModelProviderRequest<TModel>,
 > {
   getModelProviderCatalog(): Promise<TCatalogProvider[]>;
   listModelProviders(): Promise<TProvider[]>;
@@ -506,8 +517,8 @@ export type ConnectorAuthPublic =
   | ConnectorAuthPublicNone;
 
 /**
-* MCP / connector create-edit config. Host extends for extra fields, etc.
-*/
+ * MCP / connector create-edit config. Host extends for extra fields, etc.
+ */
 export interface ConnectorConfigBase<
   TAuth extends ConnectorAuth = ConnectorAuth,
 > {
@@ -547,12 +558,14 @@ export interface ConnectorCatalogEntry<
 }
 
 /** Create connector — no `id`; server assigns it. Host extends. */
-export type CreateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
-  ConnectorConfigBase<TAuth>;
+export type CreateConnectorRequest<
+  TAuth extends ConnectorAuth = ConnectorAuth,
+> = ConnectorConfigBase<TAuth>;
 
 /** Update connector — `id` required. Host extends. */
-export type UpdateConnectorRequest<TAuth extends ConnectorAuth = ConnectorAuth> =
-  ConnectorConfigBase<TAuth> & { id: string };
+export type UpdateConnectorRequest<
+  TAuth extends ConnectorAuth = ConnectorAuth,
+> = ConnectorConfigBase<TAuth> & { id: string };
 
 export interface AuthenticateConnectorRequest {
   id: string;
@@ -664,7 +677,6 @@ export interface SkillCatalogServer<
 
 /** Mutable sandbox provider settings shared by catalog rows, create, and update. */
 export interface SandboxConfig {
-  snapshotName: string;
   execTimeoutMs: number;
   autoStopIntervalInMinutes: number;
   autoArchiveIntervalInMinutes: number;
@@ -686,6 +698,18 @@ export interface SandboxBase extends SandboxConfig {
   name: string;
   catalogId: string;
   isConnected: boolean;
+}
+
+export type SandboxSnapshotSyncStatus = {
+  status: "pending" | "ready" | "failed";
+  statusReason?: string | null;
+};
+
+export interface SandboxProviderListEntry<
+  TSandbox extends SandboxBase = SandboxBase,
+> {
+  data: TSandbox;
+  snapshotSyncStatus: SandboxSnapshotSyncStatus;
 }
 
 export interface CreateSandboxRequest extends SandboxConfig {
@@ -714,9 +738,11 @@ export interface SandboxCatalogServer<
   TCatalogEntry extends SandboxCatalogEntry = SandboxCatalogEntry,
   TCreate extends CreateSandboxRequest = CreateSandboxRequest,
   TUpdate extends UpdateSandboxRequest = UpdateSandboxRequest,
+  TListEntry extends SandboxProviderListEntry<TProvider> =
+    SandboxProviderListEntry<TProvider>,
 > {
   getSandboxProviderCatalog(): Promise<TCatalogEntry[]>;
-  listSandboxProviders(req?: { query?: string }): Promise<TProvider[]>;
+  listSandboxes(req?: { query?: string }): Promise<TListEntry[]>;
   createSandboxProvider(req: TCreate): Promise<TProvider>;
   updateSandboxProvider(req: TUpdate): Promise<TProvider>;
   deleteSandboxProvider?(req: { id: string }): Promise<void>;
@@ -730,10 +756,10 @@ export type AgentLibraryEntry = AgentSelectorEntry;
 export type SearchAgentsParams = SearchAgentSelectorParams;
 
 /**
-* Settings management aggregate — modelCatalog + connectorCatalog + optional
-* skill and sandbox catalogs.
-* Hosts may pass the whole object to an app shell, or a focused sub-port to a page.
-*/
+ * Settings management aggregate — modelCatalog + connectorCatalog + optional
+ * skill and sandbox catalogs.
+ * Hosts may pass the whole object to an app shell, or a focused sub-port to a page.
+ */
 export interface CatalogServer<
   TModelCatalog extends ModelCatalogServer = ModelCatalogServer,
   TConnectorCatalog extends ConnectorCatalogServer = ConnectorCatalogServer,
