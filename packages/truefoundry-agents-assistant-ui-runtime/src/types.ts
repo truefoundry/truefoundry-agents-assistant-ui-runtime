@@ -28,7 +28,6 @@ type TrueFoundryAgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
     threadId?: string | undefined;
     onThreadIdChange?: ((threadId: string | undefined) => void) | undefined;
     onError?: ((error: unknown) => void) | undefined;
-    listEventsConcurrency?: number | undefined;
     /**
      * Optional filter forwarded to `listSessions({ agentId })`.
      * Omit for all chats; hosts that key agents by name pass that name as the id.

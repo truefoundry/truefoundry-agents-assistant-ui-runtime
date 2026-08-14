@@ -49,7 +49,6 @@ function useTrueFoundryAgentRuntimeImpl(
         agent,
         adapters,
         onError,
-        listEventsConcurrency,
         ...sharedOptions
     } = options;
 
@@ -126,7 +125,6 @@ function useTrueFoundryAgentRuntimeImpl(
         sessionId,
         isMain,
         isInitialSession,
-        listEventsConcurrency,
         onError,
         initializeSession,
         getTurnHeaders: agent.mode === "draft" ? getTurnHeaders : undefined,
