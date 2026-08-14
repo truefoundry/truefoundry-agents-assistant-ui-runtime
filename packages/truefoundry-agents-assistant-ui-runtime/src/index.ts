@@ -129,6 +129,8 @@ export type {
     SandboxConfig,
     SandboxCatalogEntry,
     SandboxBase,
+    SandboxSnapshotSyncStatus,
+    SandboxProviderListEntry,
     CreateSandboxRequest,
     UpdateSandboxRequest,
     SandboxCatalogServer,

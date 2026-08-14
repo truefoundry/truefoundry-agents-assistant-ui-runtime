@@ -580,7 +580,6 @@ export interface SkillCatalogServer<
 
 /** Mutable sandbox settings shared by catalog rows, create, and update. */
 export interface SandboxConfig {
-    snapshotName: string;
     execTimeoutMs: number;
     autoStopIntervalInMinutes: number;
     autoArchiveIntervalInMinutes: number;
@@ -593,11 +592,23 @@ export interface SandboxCatalogEntry extends SandboxConfig {
     type: string;
 }
 
-export interface SandboxBase {
+export interface SandboxBase extends SandboxConfig {
     id: string;
     name: string;
     catalogId: string;
     isConnected: boolean;
+}
+
+export type SandboxSnapshotSyncStatus = {
+    status: "pending" | "ready" | "failed";
+    statusReason?: string | null;
+};
+
+export interface SandboxProviderListEntry<
+    TSandbox extends SandboxBase = SandboxBase,
+> {
+    data: TSandbox;
+    snapshotSyncStatus: SandboxSnapshotSyncStatus;
 }
 
 export interface CreateSandboxRequest extends SandboxConfig {
@@ -618,9 +629,11 @@ export interface SandboxCatalogServer<
     TCatalogEntry extends SandboxCatalogEntry = SandboxCatalogEntry,
     TCreate extends CreateSandboxRequest = CreateSandboxRequest,
     TUpdate extends UpdateSandboxRequest = UpdateSandboxRequest,
+    TListEntry extends SandboxProviderListEntry<TSandbox> =
+        SandboxProviderListEntry<TSandbox>,
 > {
     getSandboxCatalog(): Promise<TCatalogEntry[]>;
-    listSandboxes(req?: { query?: string }): Promise<TSandbox[]>;
+    listSandboxes(req?: { query?: string }): Promise<TListEntry[]>;
     createSandbox(req: TCreate): Promise<TSandbox>;
     updateSandbox(req: TUpdate): Promise<TSandbox>;
     deleteSandbox(req: { id: string }): Promise<void>;
