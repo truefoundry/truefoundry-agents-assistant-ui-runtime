@@ -523,6 +523,7 @@ export interface ConnectorConfigBase<
   TAuth extends ConnectorAuth = ConnectorAuth,
 > {
   name: string;
+  description: string;
   url: string;
   auth: TAuth;
 }
