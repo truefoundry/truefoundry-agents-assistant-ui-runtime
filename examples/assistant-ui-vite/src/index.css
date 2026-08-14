@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "@truefoundry/agent-ui-sdk/styles.css";
+/* Optional — TrueforgeUI / ThemeProvider also inject styles at runtime. */
+@import "@truefoundry/trueforge-ui/styles.css";
 
 :root {
   --radius: 0.625rem;

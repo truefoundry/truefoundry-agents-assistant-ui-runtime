@@ -150,7 +150,7 @@ describe("normalizeEnabledModels", () => {
         expect(rows).toEqual([
             {
                 id: "openai-main/gpt-4.1",
-                name: "gpt-4.1",
+                name: "openai-main/gpt-4.1",
                 provider: { name: "openai" },
                 properties: {},
                 apiModel: "openai-main/gpt-4.1",
@@ -159,7 +159,7 @@ describe("normalizeEnabledModels", () => {
             },
             {
                 id: "anthropic-prod/claude-sonnet-4-6",
-                name: "claude-sonnet-4-6",
+                name: "anthropic-prod/claude-sonnet-4-6",
                 provider: { name: "anthropic" },
                 properties: {},
                 apiModel: "anthropic-prod/claude-sonnet-4-6",
@@ -186,7 +186,7 @@ describe("normalizeEnabledModels", () => {
         expect(rows).toEqual([
             {
                 id: "virtual-main/router",
-                name: "router",
+                name: "virtual-main/router",
                 provider: { name: "virtual-model" },
                 properties: {},
                 apiModel: "virtual-main/router",

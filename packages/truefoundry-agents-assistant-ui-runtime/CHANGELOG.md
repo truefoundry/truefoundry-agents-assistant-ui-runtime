@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.18
+
+### Added
+
+- **`getModels` reasoning efforts** — `listEnabledModels` also fetches `/api/svc/v1/provider-accounts/providers` and sets `properties.reasoningEfforts` for thinking-capable models (same visibility rules as ai.tf: skip exact `openai` slug, require `thinking: true`, honor `removeParams`).
+
+### Fixed
+
+- **Extras ancestor walk vs RootAssistantClient** — `tryGetTrueFoundryExtras` / `useTrueFoundryRuntimeExtras` try/catch Proxy gets when walking `Object.create(parent)` AUI clients, so hitting the store’s RootAssistantClient prototype no longer throws `The current scope does not have a "subscribe" property`. `trueFoundryExtras.get` / `.use` use the same walk (no nested-UI footgun).
+- **`getModels` latency** — enabled-models and provider-metadata CP fetches run in parallel; providers soft-fails without blocking the model list.
+- **Model selector `name` is model_fqn** — `normalizeEnabledModels` sets `ModelSelectorEntry.name` (and `id`) to `model_fqn`, so trueforge-ui’s DraftModelSelector writes `AgentSpec.model.name` as `account/model-id` instead of the short CP display label.
+- **Gateway mount sanitization** — `normalizeMcpMount` / `normalizeSkillMount` rebuild allowlisted registry/git/inline shapes instead of blind-passthrough, so FE `id` / display `name` / registry `url` never leak onto draft create/update. Registry MCP mounts default `enableTools` to `["@all"]` when missing (narrow lists still preserved).
+
 ## 0.1.12
 
 ### Breaking

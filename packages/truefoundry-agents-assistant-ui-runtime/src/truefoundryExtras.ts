@@ -1,4 +1,9 @@
+"use client";
+
 import { createRuntimeExtras } from "@assistant-ui/core/internal";
+import type { AssistantClient } from "@assistant-ui/store";
+import { useAui } from "@assistant-ui/store";
+import { useCallback, useSyncExternalStore } from "react";
 import type { McpAuthRequiredEvent } from "./server/index.js";
 
 import type { AgentSpec } from "./server/types.js";
@@ -42,7 +47,7 @@ export type TrueFoundryRuntimeExtras = {
     draft: TrueFoundryDraftRuntimeExtras | null;
 };
 
-export const trueFoundryExtras = createRuntimeExtras<TrueFoundryRuntimeExtras>(
+const extrasBrand = createRuntimeExtras<TrueFoundryRuntimeExtras>(
     "useTrueFoundryAgentRuntime",
 );
 
@@ -61,4 +66,134 @@ export const EMPTY_DRAFT_EXTRAS: TrueFoundryDraftRuntimeExtras = {
     adoptAgentSpec: () => {
         throw new Error("Draft agent extras are only available in draft mode.");
     },
+};
+
+type SubscribeFn = (onStoreChange: () => void) => () => void;
+
+/**
+ * Walk `Object.create(parent)` AUI clients. Stops before leaving the chain.
+ * Callers must try/catch RootAssistantClient proxy gets (it throws on any
+ * missing accessor such as `subscribe` / `thread`).
+ */
+function walkAssistantClientAncestors(
+    client: AssistantClient,
+    visit: (current: object) => "continue" | "stop",
+): void {
+    let current: object | null = client;
+    const seen = new Set<object>();
+    while (current != null && !seen.has(current)) {
+        seen.add(current);
+        if (visit(current) === "stop") return;
+        const parent = Object.getPrototypeOf(current);
+        if (parent == null || parent === Object.prototype) {
+            return;
+        }
+        current = parent;
+    }
+}
+
+/**
+ * `PartPrimitive.Messages` wraps sub-agent threads in `ReadonlyThreadProvider`,
+ * which shadows `thread` (and therefore `thread.extras`) with a readonly client
+ * that has no TrueFoundry extras. Nested AUI clients are `Object.create(parent)`,
+ * so walk the prototype chain to reach the root runtime extras.
+ */
+export function tryGetTrueFoundryExtras(
+    client: AssistantClient,
+): TrueFoundryRuntimeExtras | undefined {
+    let found: TrueFoundryRuntimeExtras | undefined;
+    walkAssistantClientAncestors(client, (current) => {
+        try {
+            const thread = (current as AssistantClient).thread;
+            if (typeof thread === "function") {
+                const extras = extrasBrand.tryGet(thread().getState().extras);
+                if (extras != null) {
+                    found = extras;
+                    return "stop";
+                }
+            }
+        } catch {
+            // Nested/readonly clients may lack thread; RootAssistantClient proxy
+            // throws on missing scope accessors ("thread" / "subscribe").
+        }
+        return "continue";
+    });
+    return found;
+}
+
+export function getTrueFoundryExtras(client: AssistantClient): TrueFoundryRuntimeExtras {
+    const extras = tryGetTrueFoundryExtras(client);
+    if (extras == null) {
+        throw new Error(
+            "The current thread is not backed by the useTrueFoundryAgentRuntime runtime.",
+        );
+    }
+    return extras;
+}
+
+function subscribeClientChain(client: AssistantClient): SubscribeFn {
+    return (onStoreChange) => {
+        const unsubs: Array<() => void> = [];
+        walkAssistantClientAncestors(client, (current) => {
+            try {
+                const subscribe = (current as { subscribe?: SubscribeFn }).subscribe;
+                if (typeof subscribe === "function") {
+                    unsubs.push(subscribe(onStoreChange));
+                }
+                return "continue";
+            } catch {
+                // RootAssistantClient proxy — no further usable ancestors.
+                return "stop";
+            }
+        });
+        return () => {
+            for (const unsub of unsubs) {
+                unsub();
+            }
+        };
+    };
+}
+
+/**
+ * Resolves TrueFoundry extras from the nearest ancestor runtime, including
+ * inside nested readonly sub-agent renderers (`PartPrimitive.Messages`).
+ */
+export function useTrueFoundryRuntimeExtras(): TrueFoundryRuntimeExtras | undefined {
+    const aui = useAui();
+    const subscribe = useCallback(subscribeClientChain(aui), [aui]);
+    const getSnapshot = useCallback(() => tryGetTrueFoundryExtras(aui), [aui]);
+    return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+function useTrueFoundryExtrasApi(): TrueFoundryRuntimeExtras;
+function useTrueFoundryExtrasApi<S>(select: (extras: TrueFoundryRuntimeExtras) => S): S;
+function useTrueFoundryExtrasApi<S>(
+    select: (extras: TrueFoundryRuntimeExtras) => S,
+    fallback: S,
+): S;
+function useTrueFoundryExtrasApi<S>(
+    select?: (extras: TrueFoundryRuntimeExtras) => S,
+    fallback?: S,
+): TrueFoundryRuntimeExtras | S {
+    const extras = useTrueFoundryRuntimeExtras();
+    const hasFallback = arguments.length >= 2;
+    if (extras == null) {
+        if (hasFallback) return fallback as S;
+        throw new Error(
+            "The current thread is not backed by the useTrueFoundryAgentRuntime runtime.",
+        );
+    }
+    return select != null ? select(extras) : extras;
+}
+
+/**
+ * Brand + provide/tryGet from assistant-ui; get/use walk ancestor AUI clients so
+ * nested readonly sub-agent threads still resolve root TrueFoundry extras.
+ */
+export const trueFoundryExtras = {
+    provide: extrasBrand.provide,
+    is: extrasBrand.is,
+    tryGet: extrasBrand.tryGet,
+    get: getTrueFoundryExtras,
+    use: useTrueFoundryExtrasApi,
 };

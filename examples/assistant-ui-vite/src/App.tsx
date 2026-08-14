@@ -1,10 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  TrueFoundryAssistantUI,
-  type TrueFoundryServer,
-} from "@truefoundry/agent-ui-sdk";
+import { useMemo } from "react";
+import { TrueforgeUI } from "@truefoundry/trueforge-ui";
 
-import { getAgentUIServer } from "./lib/agentClient";
 import { loadCredentials, type GatewayCredentials } from "./lib/credentials";
 
 function MissingConfig() {
@@ -46,48 +42,24 @@ function MissingConfig() {
 }
 
 function AppContent({ credentials }: { credentials: GatewayCredentials }) {
-  const [server, setServer] = useState<TrueFoundryServer | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-    void getAgentUIServer(credentials)
-      .then((s) => {
-        if (!cancelled) setServer(s);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [credentials]);
-
-  if (error != null) {
-    return (
-      <div className="flex min-h-full items-center justify-center p-6">
-        <p className="max-w-md text-sm text-destructive">{error}</p>
-      </div>
-    );
-  }
-
-  if (server == null) {
-    return (
-      <div className="flex min-h-full items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Connecting…</p>
-      </div>
-    );
-  }
-
   return (
     <div className="h-dvh">
-      <TrueFoundryAssistantUI
-        server={server}
+      <TrueforgeUI
+        server={{
+          type: "truefoundry",
+          apiKey: credentials.apiKey,
+          controlPlaneURL: credentials.cpURL,
+          ...(credentials.gatewayURL != null
+            ? { gatewayPlaneURL: credentials.gatewayURL }
+            : {}),
+        }}
         {...(credentials.agentName != null
-          ? { agentName: credentials.agentName }
+          ? {
+              agentConfig: {
+                mode: "SingleAgent" as const,
+                name: credentials.agentName,
+              },
+            }
           : {})}
         layout="sidebar"
         className="h-full"

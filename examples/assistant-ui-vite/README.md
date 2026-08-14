@@ -1,14 +1,14 @@
 # assistant-ui-vite
 
 Standalone Vite + React example that wires `@truefoundry/assistant-ui-runtime` to
-[`@truefoundry/agent-ui-sdk`](https://www.npmjs.com/package/@truefoundry/agent-ui-sdk)
-(`^0.1.2`) for the chat UI.
+[`@truefoundry/trueforge-ui`](https://www.npmjs.com/package/@truefoundry/trueforge-ui)
+(`0.1.0-rc.1`) for the chat UI.
 
 ## Features
 
 - Credentials from `.env` (Vite `import.meta.env`)
-- `createTrueFoundryAgentUIServer` → full pack (gateway chat + CP builder)
-- Optional `agentName` — omit to unlock Agents Library / draft builder
+- Built-in `TrueforgeUI` TrueFoundry server (`type: "truefoundry"` → CP + gateway pack)
+- Optional `agentName` → `agentConfig={{ mode: "SingleAgent", name }}`; omit for Agents Library / draft
 - Vite dev proxy for Control Plane paths (avoids browser CORS)
 - Built-in history pagination via the SDK's `HistoryLoaderContainer`
 
@@ -36,7 +36,7 @@ When `VITE_TFY_GATEWAY_URL` is omitted, the factory calls `GET {cp}/api/svc/v1/s
 
 ### CORS / Vite proxy
 
-In **dev**, the client uses a same-origin `cpURL` (`""`). Vite proxies:
+In **dev**, the client uses a same-origin `controlPlaneURL` (`""`). Vite proxies:
 
 - `/api/svc` → `VITE_TFY_CP_URL`
 - `/api/ml` → `VITE_TFY_CP_URL`
@@ -69,9 +69,10 @@ pnpm --filter assistant-ui-vite preview
 
 ```
 .env → import.meta.env
-  → createTrueFoundryAgentUIServer({ apiKey, cpURL, gatewayURL? })
-  → TrueFoundryAssistantUI (layout=sidebar; agentName optional)
+  → TrueforgeUI server={{ type: "truefoundry", apiKey, controlPlaneURL, gatewayPlaneURL? }}
+  → (internally) createTrueFoundryAgentUIServer → sidebar layout
 ```
 
-Design tokens live in `src/index.css` as CSS variables; the SDK stylesheet is
-imported with `@import "@truefoundry/agent-ui-sdk/styles.css"`.
+Design tokens live in `src/index.css` as CSS variables. The SDK stylesheet is
+optional for client-only apps (`ThemeProvider` injects it); this example still
+imports `@truefoundry/trueforge-ui/styles.css` for an explicit load order.
