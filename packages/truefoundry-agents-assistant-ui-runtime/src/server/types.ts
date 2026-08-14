@@ -742,7 +742,7 @@ export interface SandboxCatalogServer<
     SandboxProviderListEntry<TProvider>,
 > {
   getSandboxProviderCatalog(): Promise<TCatalogEntry[]>;
-  listSandboxes(req?: { query?: string }): Promise<TListEntry[]>;
+  listSandboxProviders(req?: { query?: string }): Promise<TListEntry[]>;
   createSandboxProvider(req: TCreate): Promise<TProvider>;
   updateSandboxProvider(req: TUpdate): Promise<TProvider>;
   deleteSandboxProvider?(req: { id: string }): Promise<void>;
