@@ -1379,68 +1379,25 @@ export async function buildSnapshotFromSession(
     });
 }
 
-/** Rebuilds session state from turns strictly before `beforeTurnId` (excludes that turn). */
-export async function buildSnapshotBeforeTurn(
+/**
+ * Rebuilds the conversation through `anchorTurnId`, including that turn.
+ * The server follows parent links from the anchor, so turns from abandoned
+ * branches are excluded. A null anchor represents an empty conversation.
+ */
+export async function buildSnapshotThroughTurn(
     server: AgentChatServer,
     sessionId: string,
-    beforeTurnId: string,
-    concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
+    anchorTurnId: string | null,
 ): Promise<SessionSnapshot> {
-    const turns = await listSessionTurnsOrdered(server, sessionId);
-
-    const beforeIndex = turns.findIndex((turn) => turn.id === beforeTurnId);
-    if (beforeIndex === -1) {
-        throw new Error(`Turn ${beforeTurnId} not found in session`);
-    }
-
-    return buildSnapshotBeforeTurnIndex(
-        server,
-        sessionId,
-        beforeIndex,
-        concurrency,
-        turns,
-    );
-}
-
-/** Rebuilds session state from the first `turnIndex` turns (excludes that turn). */
-export async function buildSnapshotBeforeTurnIndex(
-    server: AgentChatServer,
-    sessionId: string,
-    turnIndex: number,
-    _concurrency: number = DEFAULT_LIST_EVENTS_CONCURRENCY,
-    orderedTurns?: Turn[],
-): Promise<SessionSnapshot> {
-    if (turnIndex <= 0) {
+    if (anchorTurnId == null) {
         return createEmptySessionSnapshot();
     }
-
-    const turns = orderedTurns ?? (await listSessionTurnsOrdered(server, sessionId));
-    const turnsToInclude = turns.slice(0, turnIndex);
-    const lastTurnId = turnsToInclude.at(-1)?.id;
-    if (lastTurnId == null) {
-        return createEmptySessionSnapshot();
-    }
-
-    // Anchor the session events window at the newest included turn so the
-    // ancestor chain matches `[turns[0], …, turns[turnIndex - 1]]`.
-    const items = await fetchAllSessionEvents(server, sessionId, { lastTurnId });
+    const items = await fetchAllSessionEvents(server, sessionId, {
+        lastTurnId: anchorTurnId,
+    });
     const snapshot = createEmptySessionSnapshot();
     ingestSessionEventsIntoSnapshot(snapshot, items);
     return snapshot;
-}
-
-/** Turn id to branch from when resubmitting at `turnIndex` (`"none"` for first turn). */
-export async function resolveGatewayBranchPreviousTurnId(
-    server: AgentChatServer,
-    sessionId: string,
-    turnIndex: number,
-    orderedTurns?: Turn[],
-): Promise<string> {
-    if (turnIndex <= 0) {
-        return "none";
-    }
-    const turns = orderedTurns ?? (await listSessionTurnsOrdered(server, sessionId));
-    return turns[turnIndex - 1]?.id ?? "none";
 }
 
 /**
@@ -1454,46 +1411,6 @@ export async function resolveGatewayBranchPreviousTurnIdForTurn(
 ): Promise<string> {
     const turn = await server.getTurn({ sessionId, turnId });
     return turn.previousTurnId ?? "none";
-}
-
-/**
- * True when `listTurns` is newest-first (or timestamps are tied — legacy
- * gateway pages). False for TrueForge-style oldest-first ASC pages.
- */
-function listTurnsIsNewestFirst(turns: readonly Turn[]): boolean {
-    for (let i = 1; i < turns.length; i++) {
-        const newer = turns[i];
-        const older = turns[i - 1];
-        if (newer == null || older == null) {
-            continue;
-        }
-        const delta = Date.parse(newer.createdAt) - Date.parse(older.createdAt);
-        if (delta < 0) {
-            return true;
-        }
-        if (delta > 0) {
-            return false;
-        }
-    }
-    // Identical timestamps: keep prior reverse() behavior (gateway newest-first).
-    return turns.length > 1;
-}
-
-/** Oldest-first, whether the host's listTurns page is ASC or DESC. */
-async function listSessionTurnsOrdered(
-    server: AgentChatServer,
-    sessionId: string,
-): Promise<Turn[]> {
-    const turns = await drainListPages((pageToken) =>
-        server.listTurns({
-            sessionId,
-            ...(pageToken != null ? { pageToken } : {}),
-        }),
-    );
-    if (listTurnsIsNewestFirst(turns)) {
-        turns.reverse();
-    }
-    return turns;
 }
 
 export async function buildTurnAssistantContent(

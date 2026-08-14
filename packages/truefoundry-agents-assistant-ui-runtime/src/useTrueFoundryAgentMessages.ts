@@ -15,7 +15,7 @@ import type { AgentChatServer } from "./server/types.js";
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
     buildEditedUserMessageContent,
-    buildSnapshotBeforeTurn,
+    buildSnapshotThroughTurn,
     computeGroupRootBaseline,
     extractTurnUserMessageContent,
     prependOlderSessionHistory,
@@ -60,7 +60,6 @@ export type UseTrueFoundryAgentMessagesOptions = {
     isMain?: boolean | undefined;
     /** URL-selected session may load before the thread list marks it as main. */
     isInitialSession?: boolean | undefined;
-    listEventsConcurrency?: number | undefined;
     onError?: ((error: unknown) => void) | undefined;
     initializeSession?: () => Promise<{
         remoteId: string;
@@ -293,7 +292,6 @@ export function useTrueFoundryAgentMessages({
     sessionId,
     isMain,
     isInitialSession,
-    listEventsConcurrency,
     onError,
     initializeSession,
     resolveConversationSessionId,
@@ -975,11 +973,12 @@ export function useTrueFoundryAgentMessages({
                     conversationSessionId,
                     turnId,
                 );
-                rewound = await buildSnapshotBeforeTurn(
+                // Rewind to the exact parent used for the new branch. Using the
+                // previous item from listTurns could select an abandoned branch.
+                rewound = await buildSnapshotThroughTurn(
                     server,
                     conversationSessionId,
-                    turnId,
-                    listEventsConcurrency,
+                    previousTurnId === "none" ? null : previousTurnId,
                 );
                 createdAtByMessageIdRef.current = new Map();
                 // Keep the ref aligned before awaiting sendTurn so any intermediate
@@ -1000,13 +999,7 @@ export function useTrueFoundryAgentMessages({
                 branchRollbackSnapshot: committed,
             });
         },
-        [
-            cancel,
-            server,
-            listEventsConcurrency,
-            sendTurn,
-            sessionId,
-        ],
+        [cancel, server, sendTurn, sessionId],
     );
 
     const resetFromTurn = useCallback(
