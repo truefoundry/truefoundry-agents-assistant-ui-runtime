@@ -49,7 +49,6 @@ function useAgentRuntimeImpl(
         agent,
         adapters,
         onError,
-        listEventsConcurrency,
         ...sharedOptions
     } = options;
 
@@ -108,6 +107,7 @@ function useAgentRuntimeImpl(
     const {
         messages,
         isRunning,
+        resumeUnavailable,
         isLoading,
         isLoadingOlderHistory,
         hasOlderHistory,
@@ -125,7 +125,6 @@ function useAgentRuntimeImpl(
         sessionId,
         isMain,
         isInitialSession,
-        listEventsConcurrency,
         onError,
         initializeSession,
         getTurnHeaders: agent.mode === "draft" ? getTurnHeaders : undefined,
@@ -187,6 +186,8 @@ function useAgentRuntimeImpl(
             isSpecSyncing: draftSpec.isSpecSyncing,
             specError: draftSpec.specError,
             updateAgentSpec: draftSpec.updateAgentSpec,
+            flushAgentSpec: draftSpec.flushAgentSpec,
+            adoptAgentSpec: draftSpec.adoptAgentSpec,
         };
     }, [agent.mode, draftSpec]);
 
@@ -199,6 +200,7 @@ function useAgentRuntimeImpl(
             pendingApprovals,
             pendingToolResponses,
             pendingMcpAuth,
+            resumeUnavailable,
             sandboxId,
             respondToToolApproval,
             respondToToolResponse,

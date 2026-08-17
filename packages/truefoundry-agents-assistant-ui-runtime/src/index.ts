@@ -25,7 +25,9 @@ export { createOwnedSessionsThreadListAdapter } from "./ownedSessionsThreadListA
 export { createDraftSessionBridge } from "./draft/draftSessionBridge.js";
 export type { DraftSessionBridge } from "./draft/draftSessionBridge.js";
 export {
+    useAdoptAgentSpec,
     useAgentSpec,
+    useFlushAgentSpec,
     useUpdateAgentSpec,
 } from "./hooks.js";
 export type { DraftRuntimeExtras } from "./agentExtras.js";
@@ -40,7 +42,11 @@ export type {
 } from "./messageCustomMetadata.js";
 export type { PendingApproval, PendingToolResponse } from "./collectPending.js";
 export type { AgentRuntimeExtras } from "./agentExtras.js";
-export { agentExtras } from "./agentExtras.js";
+export {
+    agentExtras,
+    getAgentExtras,
+    tryGetAgentExtras,
+} from "./agentExtras.js";
 export {
     useApprovals,
     useToolResponses,
@@ -55,6 +61,7 @@ export {
     useResetFromTurn,
     useReload,
     useHistoryPagination,
+    useResumeUnavailable,
 } from "./hooks.js";
 export {
     collectApprovalInputs,
@@ -79,7 +86,10 @@ export type {
     AgentChatServer,
     AgentBuilderCapabilitiesResponse,
     AgentBuilderServer,
+    AgentCapabilityConfig,
+    AgentRuntimeConfig,
     SaveAgentRequest,
+    SaveAgentResult,
     Session,
     Turn,
     TurnState,
@@ -137,6 +147,8 @@ export type {
     SandboxConfig,
     SandboxCatalogEntry,
     SandboxBase,
+    SandboxSnapshotSyncStatus,
+    SandboxProviderListEntry,
     CreateSandboxRequest,
     UpdateSandboxRequest,
     SandboxProviderConfig,
@@ -148,6 +160,8 @@ export type {
     CatalogServer,
     AgentUIServerPort,
     AgentUIServer,
+    ProviderEntry,
+    ModelProperties,
     ModelSelectorEntry,
     SkillSelectorEntry,
     ConnectorSelectorEntry,

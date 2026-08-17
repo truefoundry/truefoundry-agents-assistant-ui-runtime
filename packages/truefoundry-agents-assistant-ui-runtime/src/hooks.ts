@@ -6,14 +6,15 @@ import { useAui, useAuiState } from "@assistant-ui/store";
 import type { AgentMessageCustomMetadata } from "./messageCustomMetadata.js";
 import {
     EMPTY_DRAFT_EXTRAS,
-    agentExtras,
+    getAgentExtras,
+    useAgentRuntimeExtras,
     type DraftRuntimeExtras,
 } from "./agentExtras.js";
 import type { RespondToToolApprovalOptions } from "./toolApproval.js";
 import type { RespondToToolResponseOptions } from "./toolResponse.js";
 
 export const useApprovals = () => {
-    const extras = agentExtras.use((e) => e, undefined);
+    const extras = useAgentRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -29,7 +30,7 @@ export const useApprovals = () => {
 };
 
 export const useToolResponses = () => {
-    const extras = agentExtras.use((e) => e, undefined);
+    const extras = useAgentRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -45,7 +46,7 @@ export const useToolResponses = () => {
 };
 
 export const useMcpAuth = () => {
-    const extras = agentExtras.use((e) => e, undefined);
+    const extras = useAgentRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -63,22 +64,22 @@ export const useMcpAuth = () => {
 export const useRespondToToolApproval = () => {
     const aui = useAui();
     return (response: RespondToToolApprovalOptions) =>
-        agentExtras.get(aui).respondToToolApproval(response);
+        getAgentExtras(aui).respondToToolApproval(response);
 };
 
 export const useRespondToToolResponse = () => {
     const aui = useAui();
     return (response: RespondToToolResponseOptions) =>
-        agentExtras.get(aui).respondToToolResponse(response);
+        getAgentExtras(aui).respondToToolResponse(response);
 };
 
 export const useResumeMcpAuth = () => {
     const aui = useAui();
-    return () => agentExtras.get(aui).resumeMcpAuth();
+    return () => getAgentExtras(aui).resumeMcpAuth();
 };
 
 export const useSandboxId = (): string | undefined =>
-    agentExtras.use((e) => e.sandboxId, undefined);
+    useAgentRuntimeExtras()?.sandboxId;
 
 /** Turn that produced the message being rendered. Only defined inside a message scope. */
 export const useTurnId = (): string | undefined =>
@@ -101,22 +102,22 @@ export const useDownloadSandboxFile = () => {
                 "Downloading a sandbox file requires a message scope to resolve its turn.",
             );
         }
-        return agentExtras.get(aui).downloadSandboxFile({ turnId, path });
+        return getAgentExtras(aui).downloadSandboxFile({ turnId, path });
     };
 };
 
 export const useCancel = () => {
     const aui = useAui();
-    return () => agentExtras.get(aui).cancel();
+    return () => getAgentExtras(aui).cancel();
 };
 
 export const useReload = () => {
     const aui = useAui();
-    return () => agentExtras.get(aui).reload();
+    return () => getAgentExtras(aui).reload();
 };
 
 export const useHistoryPagination = () => {
-    const extras = agentExtras.use((e) => e, undefined);
+    const extras = useAgentRuntimeExtras();
 
     return useMemo(
         () => ({
@@ -132,14 +133,21 @@ export const useHistoryPagination = () => {
     );
 };
 
+/**
+ * True while a turn runs that this server cannot stream, so its result will not
+ * arrive in this client. Falls back to `false` on runtimes that predate the flag.
+ */
+export const useResumeUnavailable = () =>
+    useAgentRuntimeExtras()?.resumeUnavailable ?? false;
+
 export const useResetFromTurn = () => {
     const aui = useAui();
-    return (turnId: string) => agentExtras.get(aui).resetFromTurn(turnId);
+    return (turnId: string) => getAgentExtras(aui).resetFromTurn(turnId);
 };
 
 /** Draft agent spec and sync state (draft mode only). */
 export const useAgentSpec = () => {
-    const extras = agentExtras.use((e) => e.draft, null);
+    const extras = useAgentRuntimeExtras()?.draft ?? null;
 
     return useMemo(
         () => ({ ...EMPTY_DRAFT_EXTRAS, ...extras }),
@@ -150,5 +158,19 @@ export const useAgentSpec = () => {
 export const useUpdateAgentSpec = () => {
     const aui = useAui();
     return (update: Parameters<DraftRuntimeExtras["updateAgentSpec"]>[0]) =>
-        agentExtras.get(aui).draft?.updateAgentSpec(update);
+        getAgentExtras(aui).draft?.updateAgentSpec(update);
+};
+
+/** Flushes any pending draft-spec synchronization before a coordinated write. */
+export const useFlushAgentSpec = () => {
+    const aui = useAui();
+    return () => getAgentExtras(aui).draft?.flushAgentSpec() ?? Promise.resolve();
+};
+
+/** Adopts a spec already persisted by another server operation without syncing again. */
+export const useAdoptAgentSpec = () => {
+    const aui = useAui();
+    return (
+        request: Parameters<DraftRuntimeExtras["adoptAgentSpec"]>[0],
+    ) => getAgentExtras(aui).draft?.adoptAgentSpec(request);
 };

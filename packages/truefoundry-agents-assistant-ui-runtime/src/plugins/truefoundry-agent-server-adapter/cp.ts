@@ -9,9 +9,15 @@ import type {
     AgentSelectorEntry,
     ConnectorSelectorEntry,
     ModelSelectorEntry,
+    SaveAgentRequest,
     SearchAgentSelectorParams,
     SkillSelectorEntry,
 } from "../../server/types.js";
+import {
+    buildMetadataMap,
+    metadataKey,
+    reasoningEffortsForModel,
+} from "./modelReasoningEffort.js";
 import { normalizeAgentSpecForGateway } from "./normalizeAgentSpec.js";
 import type { TfyAgentSpec } from "./types.js";
 
@@ -20,11 +26,14 @@ import type { TfyAgentSpec } from "./types.js";
 // ---------------------------------------------------------------------------
 
 export interface TfyModelSelectorEntry extends ModelSelectorEntry {
-    /** Write into AgentSpec.model.name (model_fqn). */
+    /**
+     * model_fqn for AgentSpec.model.name.
+     * Same value as {@link ModelSelectorEntry.name} / `id` — trueforge-ui writes
+     * `name` into the spec; keep this alias for hosts that still read `apiModel`.
+     */
     apiModel: string;
     modelId: string;
     providerAccount?: string;
-    id?: string;
 }
 
 export interface TfySkillSelectorEntry extends SkillSelectorEntry {
@@ -158,22 +167,24 @@ function isChatModel(row: RawEnabledModel): boolean {
 
 function toModelEntry(row: RawEnabledModel): TfyModelSelectorEntry | null {
     if (!isChatModel(row)) return null;
+    // Gateway AgentSpec.model.name must be model_fqn (e.g. account/model-id).
+    // trueforge-ui DraftModelSelector writes ModelSelectorEntry.name into that
+    // field, so `name` is the FQN — not the CP short display label.
     const apiModel = row.model_fqn ?? row.id;
-    const name = row.name;
-    if (apiModel == null || apiModel === "" || name == null || name === "") {
+    if (apiModel == null || apiModel === "") {
         return null;
     }
-    const provider = row.provider ?? "unknown";
-    const modelId = row.model_id ?? name;
+    const modelId = row.model_id ?? row.name ?? apiModel;
     return {
-        name,
-        provider,
+        id: apiModel,
+        name: apiModel,
+        provider: { name: row.provider ?? "unknown" },
+        properties: {},
         apiModel,
         modelId,
         ...(row.provider_account_name != null
             ? { providerAccount: row.provider_account_name }
             : {}),
-        id: apiModel,
     };
 }
 
@@ -219,14 +230,44 @@ export function normalizeEnabledModels(raw: unknown): TfyModelSelectorEntry[] {
     return out;
 }
 
+/**
+ * Attach `properties.reasoningEfforts` from provider-account metadata when the
+ * model supports thinking. Pure — used by {@link listEnabledModels} and tests.
+ */
+export function enrichModelsWithReasoningEfforts(
+    models: TfyModelSelectorEntry[],
+    providerMetadataRaw: unknown,
+): TfyModelSelectorEntry[] {
+    const map = buildMetadataMap(providerMetadataRaw);
+    if (map.size === 0) return models;
+    return models.map((model) => {
+        const meta = map.get(metadataKey(model.provider.name, model.modelId));
+        const reasoningEfforts = reasoningEffortsForModel(
+            meta,
+            model.provider.name,
+        );
+        if (reasoningEfforts == null) return model;
+        return {
+            ...model,
+            properties: { ...model.properties, reasoningEfforts },
+        };
+    });
+}
+
 export async function listEnabledModels(
     opts: CpCredentials,
 ): Promise<TfyModelSelectorEntry[]> {
-    const raw = await cpFetch<unknown>(
-        opts,
-        "/api/svc/v1/llm-gateway/model/enabled",
-    );
-    return normalizeEnabledModels(raw);
+    // Parallel: providers is enrichment-only; soft-fail keeps models usable.
+    const [raw, providers] = await Promise.all([
+        cpFetch<unknown>(opts, "/api/svc/v1/llm-gateway/model/enabled"),
+        cpFetch<unknown>(
+            opts,
+            "/api/svc/v1/provider-accounts/providers",
+        ).catch(() => null),
+    ]);
+    const models = normalizeEnabledModels(raw);
+    if (providers == null) return models;
+    return enrichModelsWithReasoningEfforts(models, providers);
 }
 
 // ---------------------------------------------------------------------------
@@ -596,7 +637,7 @@ export function buildSaveAgentManifest(
  */
 export async function saveAgent(
     opts: CpCredentials,
-    req: { agentName: string; agentSpec: TfyAgentSpec },
+    req: SaveAgentRequest<TfyAgentSpec>,
 ): Promise<unknown> {
     const manifest = buildSaveAgentManifest(req.agentName, req.agentSpec);
     return cpFetch(opts, "/api/svc/v1/agents", {

@@ -18,8 +18,8 @@ import type {
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
 import {
-    buildSnapshotBeforeTurnIndex,
     buildSnapshotFromSessionEvents,
+    buildSnapshotThroughTurn,
     buildTurnAssistantContent,
     buildUserMessageContent,
     buildUserMessageFromTurnInput,
@@ -28,6 +28,7 @@ import {
     prependOlderSessionHistory,
     projectSessionMessages,
     repositoryItemsFromMessages,
+    resolveGatewayBranchPreviousTurnIdForTurn,
     streamTurnEvents,
     turnStreamUpdateToAssistantMessage,
 } from "./convertTurnMessages.js";
@@ -135,22 +136,68 @@ function mockTurn(
     };
 }
 
+/** Mirror runtime listTurns normalization: ASC stays, DESC (or tied) reverses. */
+function toOldestFirstTurns(turns: TurnFixture[]): TurnFixture[] {
+    const chain = turns.filter((turn) => turn.state.status !== "running");
+    let newestFirst = chain.length > 1;
+    for (let i = 1; i < chain.length; i++) {
+        const newer = chain[i];
+        const older = chain[i - 1];
+        if (newer == null || older == null) {
+            continue;
+        }
+        const delta = Date.parse(newer.createdAt) - Date.parse(older.createdAt);
+        if (delta < 0) {
+            newestFirst = true;
+            break;
+        }
+        if (delta > 0) {
+            newestFirst = false;
+            break;
+        }
+    }
+    return newestFirst ? [...chain].reverse() : [...chain];
+}
+
+/** Mirrors the host's ancestor walk: parent pointers only, sibling branches excluded. */
+function ancestorChainFromTurns(
+    turns: TurnFixture[],
+    anchorTurnId: string,
+): TurnFixture[] {
+    const turnsById = new Map(turns.map((turn) => [turn.id, turn]));
+    const chain: TurnFixture[] = [];
+    const seen = new Set<string>();
+    let cursor: string | null | undefined = anchorTurnId;
+    while (cursor != null && !seen.has(cursor)) {
+        seen.add(cursor);
+        const turn = turnsById.get(cursor);
+        if (turn == null) {
+            break;
+        }
+        if (turn.state.status !== "running") {
+            chain.unshift(turn);
+        }
+        cursor = turn.previousTurnId;
+    }
+    return chain;
+}
+
 /**
- * Builds session-level event items from per-turn mocks — newest-first turns,
- * running turns excluded (matches session.listEvents API contract).
+ * Builds session-level event items from per-turn mocks — accepts ASC or DESC
+ * listTurns order; running turns excluded (matches session.listEvents). An
+ * anchor selects that turn's ancestor chain, not a chronological prefix.
  */
 function sessionEventItemsFromTurns(
-    turnsNewestFirst: TurnFixture[],
+    turns: TurnFixture[],
     lastTurnId?: string,
 ): SessionEventItem[] {
-    let chain = turnsNewestFirst.filter((turn) => turn.state.status !== "running");
-    if (lastTurnId != null) {
-        const anchorIndex = chain.findIndex((turn) => turn.id === lastTurnId);
-        chain = anchorIndex === -1 ? [] : chain.slice(anchorIndex);
-    }
+    const chain =
+        lastTurnId == null
+            ? toOldestFirstTurns(turns)
+            : ancestorChainFromTurns(turns, lastTurnId);
 
     const items: SessionEventItem[] = [];
-    for (const turn of [...chain].reverse()) {
+    for (const turn of chain) {
         items.push({
             turnId: turn.id,
             event: {
@@ -160,6 +207,9 @@ function sessionEventItemsFromTurns(
                 input: turn.input,
                 state: { status: "running" },
                 createdAt: turn.createdAt,
+                ...(turn.previousTurnId === undefined
+                    ? {}
+                    : { previousTurnId: turn.previousTurnId }),
             },
         });
         for (const event of turn.events) {
@@ -180,10 +230,18 @@ function sessionEventItemsFromTurns(
 
 function mockServerWithTurns(turns: TurnFixture[]): AgentChatServer {
     const eventsByTurnId = new Map(turns.map((turn) => [turn.id, turn.events]));
+    const turnsById = new Map(turns.map((turn) => [turn.id, turn]));
     return {
         listTurns: async ({ limit }: { limit?: number } = {}) => ({
             data: limit != null ? turns.slice(0, limit) : turns,
         }),
+        getTurn: async ({ turnId }: { turnId: string }) => {
+            const turn = turnsById.get(turnId);
+            if (turn == null) {
+                throw new Error(`Turn ${turnId} not found`);
+            }
+            return turn;
+        },
         listEvents: async (opts: { lastTurnId?: string } = {}) => {
             const items = sessionEventItemsFromTurns(turns, opts.lastTurnId);
             const newestFirst = [...items].reverse();
@@ -2434,7 +2492,7 @@ describe("buildSnapshotFromSessionEvents", () => {
         expect(progressSnapshots).toEqual([1, 2]);
     });
 
-    it("only inspects the newest listTurns page for a running turn", async () => {
+    it("falls back to listTurns({ limit: 1 }) when listEvents omits the running tip", async () => {
         const listTurns = vi.fn(async () => ({
             data: [
                 {
@@ -2458,6 +2516,300 @@ describe("buildSnapshotFromSessionEvents", () => {
         expect(listTurns).toHaveBeenCalledWith({ sessionId: SESSION_ID, limit: 1 });
         expect(snapshot.runningTurn?.id).toBe("t-running");
         expect(snapshot.pendingUser?.content).toBe("now");
+    });
+
+    it("attaches an open tip from events when listTurns is oldest-first and clears answered ask-user", async () => {
+        // Trueforge listTurns is ASC: limit:1 returns the oldest done turn even
+        // while a later tip is still running. Tip detection must use the open
+        // turn.created in listEvents (which includes running turns).
+        const oldestDoneTurn = {
+            id: "t-pause",
+            sessionId: SESSION_ID,
+            state: {
+                status: "done",
+                requiredActions: [
+                    {
+                        id: "resp-req-1",
+                        type: "tool.response_required",
+                        threadId: ROOT_THREAD_ID,
+                        createdAt,
+                        toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                    },
+                ],
+                completedAt: createdAt,
+            },
+            input: [{ type: "user.message", content: "please research" }],
+            createdAt,
+        } as unknown as Turn;
+
+        const runningTip = {
+            id: "t-running",
+            sessionId: SESSION_ID,
+            state: { status: "running" },
+            input: [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "AI-native / LLM-powered SaaS",
+                },
+            ],
+            createdAt,
+        } as unknown as Turn;
+
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-pause",
+                    turnId: "t-pause",
+                    input: oldestDoneTurn.input,
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t-pause",
+                event: modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    content: "One calibration question:",
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Which direction should I focus on?",
+                                    options: [
+                                        "General B2B SaaS",
+                                        "AI-native / LLM-powered SaaS",
+                                    ],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d-pause",
+                    state: oldestDoneTurn.state as TurnDoneEvent["state"],
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+            {
+                turnId: "t-running",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-running",
+                    turnId: "t-running",
+                    previousTurnId: "t-pause",
+                    input: runningTip.input,
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t-running",
+                event: modelMessage({
+                    id: "model-2",
+                    threadId: ROOT_THREAD_ID,
+                    content: "Locked in — starting deep research.",
+                }),
+            },
+        ];
+
+        const listTurns = vi.fn(async () => ({
+            data: [oldestDoneTurn],
+            nextPageToken: "eyJvZmZzZXQiOjF9",
+        }));
+        const getTurn = vi.fn(async () => runningTip);
+        const server = {
+            listTurns,
+            getTurn,
+            listEvents: sessionEventsPage(items),
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const snapshot = await buildSnapshotFromSessionEvents(server, SESSION_ID);
+
+        expect(getTurn).toHaveBeenCalledWith({
+            sessionId: SESSION_ID,
+            turnId: "t-running",
+        });
+        expect(listTurns).not.toHaveBeenCalled();
+        expect(snapshot.runningTurn?.id).toBe("t-running");
+        expect(snapshot.unstable_resume).toBe(true);
+
+        const messages = projectSessionMessages(snapshot);
+        expect(collectPendingToolResponses(messages)).toHaveLength(0);
+
+        const assistant = messages.find((message) => message.role === "assistant");
+        expect(assistant).toBeDefined();
+        const toolCall = assistant?.content.find(
+            (part) => part.type === "tool-call" && part.toolCallId === "question-1",
+        );
+        expect(toolCall).toMatchObject({
+            type: "tool-call",
+            toolCallId: "question-1",
+            result: "AI-native / LLM-powered SaaS",
+        });
+        if (toolCall?.type === "tool-call") {
+            expect(toolCall.interrupt).toBeUndefined();
+        }
+    });
+
+    it("keeps an answered ask-user answered when the open tip finished before getTurn", async () => {
+        // The tip can complete between listEvents and getTurn. There is nothing
+        // left to resume, but its user.tool_response input never reached the
+        // fold via ingestion (no turn.done in the window), so it must still be
+        // applied — otherwise the answered prompt resurfaces as pending.
+        const finishedTip = {
+            id: "t-tip",
+            sessionId: SESSION_ID,
+            state: { status: "done", requiredActions: [], completedAt: createdAt },
+            input: [
+                {
+                    type: "user.tool_response",
+                    threadId: ROOT_THREAD_ID,
+                    toolCallId: "question-1",
+                    content: "AI-native / LLM-powered SaaS",
+                },
+            ],
+            createdAt,
+        } as unknown as Turn;
+
+        const items: SessionEventItem[] = [
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-pause",
+                    turnId: "t-pause",
+                    input: [{ type: "user.message", content: "please research" }],
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            {
+                turnId: "t-pause",
+                event: modelMessage({
+                    id: "model-1",
+                    threadId: ROOT_THREAD_ID,
+                    content: "One calibration question:",
+                    toolCalls: [
+                        {
+                            id: "question-1",
+                            type: "function",
+                            function: {
+                                name: "ask_user_question",
+                                arguments: JSON.stringify({
+                                    question: "Which direction should I focus on?",
+                                    options: [
+                                        "General B2B SaaS",
+                                        "AI-native / LLM-powered SaaS",
+                                    ],
+                                }),
+                            },
+                            toolInfo: {
+                                type: "truefoundry-system",
+                                name: "ask_user_question",
+                            },
+                        },
+                    ],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: responseRequired({
+                    id: "resp-req-1",
+                    threadId: ROOT_THREAD_ID,
+                    toolCalls: [{ id: "question-1", sourceEventId: "model-1" }],
+                }),
+            },
+            {
+                turnId: "t-pause",
+                event: {
+                    type: "turn.done",
+                    id: "evt-d-pause",
+                    state: {
+                        status: "done",
+                        requiredActions: [
+                            {
+                                id: "resp-req-1",
+                                type: "tool.response_required",
+                                threadId: ROOT_THREAD_ID,
+                                createdAt,
+                                toolCalls: [
+                                    { id: "question-1", sourceEventId: "model-1" },
+                                ],
+                            },
+                        ],
+                        completedAt: createdAt,
+                    },
+                    createdAt,
+                } as unknown as TurnDoneEvent,
+            },
+            {
+                turnId: "t-tip",
+                event: {
+                    type: "turn.created",
+                    id: "evt-c-tip",
+                    turnId: "t-tip",
+                    previousTurnId: "t-pause",
+                    input: finishedTip.input,
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+        ];
+
+        const listTurns = vi.fn(async () => ({ data: [], nextPageToken: undefined }));
+        const getTurn = vi.fn(async () => finishedTip);
+        const server = {
+            listTurns,
+            getTurn,
+            listEvents: sessionEventsPage(items),
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const snapshot = await buildSnapshotFromSessionEvents(server, SESSION_ID);
+
+        expect(snapshot.runningTurn).toBeUndefined();
+        expect(snapshot.unstable_resume).toBeFalsy();
+
+        const messages = projectSessionMessages(snapshot);
+        expect(collectPendingToolResponses(messages)).toHaveLength(0);
+
+        const assistant = messages.find((message) => message.role === "assistant");
+        const toolCall = assistant?.content.find(
+            (part) => part.type === "tool-call" && part.toolCallId === "question-1",
+        );
+        expect(toolCall).toMatchObject({
+            type: "tool-call",
+            toolCallId: "question-1",
+            result: "AI-native / LLM-powered SaaS",
+        });
+        if (toolCall?.type === "tool-call") {
+            expect(toolCall.interrupt).toBeUndefined();
+        }
     });
 
     it("loads only the newest event page and exposes an older-history cursor", async () => {
@@ -2530,40 +2882,46 @@ describe("buildSnapshotFromSessionEvents", () => {
     });
 });
 
-describe("buildSnapshotBeforeTurnIndex", () => {
-    it("rewinds via session.listEvents({ lastTurnId }) excluding the branch turn", async () => {
-        const t1 = mockTurn({
-            id: "t1",
-            createdAt,
-            input: [{ type: "user.message", content: "first" }],
-            events: [
-                modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
+describe("buildSnapshotThroughTurn", () => {
+    /** Linear session t1 -> t2 -> t3, oldest-first. */
+    function linearTurns(): TurnFixture[] {
+        return [
+            mockTurn({
+                id: "t1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                previousTurnId: null,
+                input: [{ type: "user.message", content: "first" }],
+                events: [
+                    modelMessage({ id: "m1", threadId: ROOT_THREAD_ID, content: "reply 1" }),
                 ],
-        });
-        const t2 = mockTurn({
-            id: "t2",
-            createdAt,
-            input: [{ type: "user.message", content: "second" }],
-            events: [
-                modelMessage({ id: "m2", threadId: ROOT_THREAD_ID, content: "reply 2" }),
+            }),
+            mockTurn({
+                id: "t2",
+                createdAt: "2026-01-01T00:01:00.000Z",
+                previousTurnId: "t1",
+                input: [{ type: "user.message", content: "second" }],
+                events: [
+                    modelMessage({ id: "m2", threadId: ROOT_THREAD_ID, content: "reply 2" }),
                 ],
-        });
-        const t3 = mockTurn({
-            id: "t3",
-            createdAt,
-            input: [{ type: "user.message", content: "third" }],
-            events: [
-                modelMessage({ id: "m3", threadId: ROOT_THREAD_ID, content: "reply 3" }),
+            }),
+            mockTurn({
+                id: "t3",
+                createdAt: "2026-01-01T00:02:00.000Z",
+                previousTurnId: "t2",
+                input: [{ type: "user.message", content: "third" }],
+                events: [
+                    modelMessage({ id: "m3", threadId: ROOT_THREAD_ID, content: "reply 3" }),
                 ],
-        });
+            }),
+        ];
+    }
 
-        // listTurns is newest-first.
-        const server = mockServerWithTurns([t3, t2, t1]);
-        const snapshot = await buildSnapshotBeforeTurnIndex(server, SESSION_ID, 2);
+    it("rewinds to the anchor's ancestor chain, inclusive", async () => {
+        const server = mockServerWithTurns(linearTurns());
+        const snapshot = await buildSnapshotThroughTurn(server, SESSION_ID, "t2");
 
         expect(snapshot.turns.map((turn) => turn.id)).toEqual(["t1", "t2"]);
-        const messages = projectSessionMessages(snapshot);
-        expect(messages.map((message) => message.id)).toEqual([
+        expect(projectSessionMessages(snapshot).map((message) => message.id)).toEqual([
             "t1-user",
             "t1-assistant",
             "t2-user",
@@ -2571,12 +2929,116 @@ describe("buildSnapshotBeforeTurnIndex", () => {
         ]);
     });
 
-    it("returns an empty snapshot when branching from the first turn", async () => {
-        const server = mockServerWithTurns([
-            mockTurn({ id: "t1", createdAt }),
-        ]);
-        const snapshot = await buildSnapshotBeforeTurnIndex(server, SESSION_ID, 0);
+    it("returns an empty snapshot for a null anchor (branching from a root turn)", async () => {
+        const server = mockServerWithTurns(linearTurns());
+        const snapshot = await buildSnapshotThroughTurn(server, SESSION_ID, null);
         expect(snapshot.turns).toHaveLength(0);
+    });
+
+    it("ignores listTurns page order", async () => {
+        const asc = linearTurns();
+        const ascSnapshot = await buildSnapshotThroughTurn(
+            mockServerWithTurns(asc),
+            SESSION_ID,
+            "t2",
+        );
+        const descSnapshot = await buildSnapshotThroughTurn(
+            mockServerWithTurns([...asc].reverse()),
+            SESSION_ID,
+            "t2",
+        );
+
+        expect(descSnapshot.turns.map((turn) => turn.id)).toEqual(
+            ascSnapshot.turns.map((turn) => turn.id),
+        );
+        expect(descSnapshot.turns.map((turn) => turn.id)).toEqual(["t1", "t2"]);
+    });
+
+    it("drops sibling turns left behind by an earlier rerun", async () => {
+        // m2/m3 were rerun once already: t2/t3 are orphans, t2p/t3p are live.
+        const [t1, t2, t3] = linearTurns();
+        const t2p = mockTurn({
+            id: "t2p",
+            createdAt: "2026-01-01T00:03:00.000Z",
+            previousTurnId: "t1",
+            input: [{ type: "user.message", content: "second again" }],
+            events: [
+                modelMessage({ id: "m2p", threadId: ROOT_THREAD_ID, content: "reply 2p" }),
+            ],
+        });
+        const t3p = mockTurn({
+            id: "t3p",
+            createdAt: "2026-01-01T00:04:00.000Z",
+            previousTurnId: "t2p",
+            input: [{ type: "user.message", content: "third again" }],
+            events: [
+                modelMessage({ id: "m3p", threadId: ROOT_THREAD_ID, content: "reply 3p" }),
+            ],
+        });
+        const server = mockServerWithTurns([t1!, t2!, t3!, t2p, t3p]);
+
+        // Rerunning the middle live turn rewinds to its parent, not to the
+        // chronologically preceding turn (t3), whose chain still holds t2/t3.
+        const previousTurnId = await resolveGatewayBranchPreviousTurnIdForTurn(
+            server,
+            SESSION_ID,
+            "t2p",
+        );
+        expect(previousTurnId).toBe("t1");
+
+        const snapshot = await buildSnapshotThroughTurn(server, SESSION_ID, previousTurnId);
+        expect(snapshot.turns.map((turn) => turn.id)).toEqual(["t1"]);
+
+        // The orphan chain is still reachable, so the assertion above is not
+        // passing by accident.
+        const orphanSnapshot = await buildSnapshotThroughTurn(server, SESSION_ID, "t3");
+        expect(orphanSnapshot.turns.map((turn) => turn.id)).toEqual(["t1", "t2", "t3"]);
+    });
+});
+
+describe("resolveGatewayBranchPreviousTurnIdForTurn", () => {
+    it("uses the turn parent for subsequent turns and none for roots (ASC listTurns)", async () => {
+        const t1 = mockTurn({
+            id: "t1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            previousTurnId: null,
+        });
+        const t2 = mockTurn({
+            id: "t2",
+            createdAt: "2026-01-01T00:01:00.000Z",
+            previousTurnId: "t1",
+        });
+        const t3 = mockTurn({
+            id: "t3",
+            createdAt: "2026-01-01T00:02:00.000Z",
+            previousTurnId: "t2",
+        });
+        const server = mockServerWithTurns([t1, t2, t3]);
+
+        await expect(
+            resolveGatewayBranchPreviousTurnIdForTurn(server, SESSION_ID, "t1"),
+        ).resolves.toBe("none");
+        await expect(
+            resolveGatewayBranchPreviousTurnIdForTurn(server, SESSION_ID, "t3"),
+        ).resolves.toBe("t2");
+    });
+
+    it("uses the turn parent when listTurns is newest-first", async () => {
+        const t1 = mockTurn({
+            id: "t1",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            previousTurnId: null,
+        });
+        const t2 = mockTurn({
+            id: "t2",
+            createdAt: "2026-01-01T00:01:00.000Z",
+            previousTurnId: "t1",
+        });
+        const server = mockServerWithTurns([t2, t1]);
+
+        await expect(
+            resolveGatewayBranchPreviousTurnIdForTurn(server, SESSION_ID, "t2"),
+        ).resolves.toBe("t1");
     });
 });
 

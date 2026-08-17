@@ -15,7 +15,7 @@ import type { AgentChatServer } from "./server/types.js";
 import { ROOT_THREAD_ID } from "./constants.js";
 import {
     buildEditedUserMessageContent,
-    buildSnapshotBeforeTurn,
+    buildSnapshotThroughTurn,
     computeGroupRootBaseline,
     extractTurnUserMessageContent,
     prependOlderSessionHistory,
@@ -60,7 +60,6 @@ export type UseAgentMessagesOptions = {
     isMain?: boolean | undefined;
     /** URL-selected session may load before the thread list marks it as main. */
     isInitialSession?: boolean | undefined;
-    listEventsConcurrency?: number | undefined;
     onError?: ((error: unknown) => void) | undefined;
     initializeSession?: () => Promise<{
         remoteId: string;
@@ -293,7 +292,6 @@ export function useAgentMessages({
     sessionId,
     isMain,
     isInitialSession,
-    listEventsConcurrency,
     onError,
     initializeSession,
     resolveConversationSessionId,
@@ -309,6 +307,7 @@ export function useAgentMessages({
     );
     const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
     const [loadRetryTrigger, setLoadRetryTrigger] = useState(0);
+    const [resumeUnavailable, setResumeUnavailable] = useState(false);
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
@@ -326,12 +325,24 @@ export function useAgentMessages({
     const createdAtByMessageIdRef = useRef(new Map<string, Date>());
     const abortControllerRef = useRef<AbortController | null>(null);
     const activeRunRef = useRef<Promise<void> | null>(null);
+    // Mirrors `resumeUnavailable` for `cancel`, which reads it outside render.
+    const resumeUnavailableRef = useRef(false);
     const runningTurnRef = useRef<Turn | undefined>(undefined);
     const loadGenerationRef = useRef(0);
     const streamGenerationRef = useRef(0);
     const lazilyCreatedSessionIdRef = useRef<string | undefined>(undefined);
     const initialLoadStartedForRef = useRef<string | undefined>(undefined);
     const skipInitialPromotionLoadForRef = useRef<string | undefined>(undefined);
+
+    /**
+     * A turn is running that this server cannot stream. Nothing will deliver its
+     * result to this client, so the UI shows a waiting state until the run is
+     * cancelled or the session is reloaded.
+     */
+    const markResumeUnavailable = useCallback((value: boolean) => {
+        resumeUnavailableRef.current = value;
+        setResumeUnavailable(value);
+    }, []);
 
     const projectOptions = useMemo(
         () => ({
@@ -371,6 +382,8 @@ export function useAgentMessages({
             const abortController = new AbortController();
             abortControllerRef.current = abortController;
             setIsRunning(true);
+            // This stream's `finally` owns the running flag from here on.
+            markResumeUnavailable(false);
 
             const run = (async () => {
                 // Sub-agent turns can emit 100+ stream events per frame. Coalesce to one
@@ -516,6 +529,7 @@ export function useAgentMessages({
         const generation = ++loadGenerationRef.current;
         ++streamGenerationRef.current;
         setIsRunning(false);
+        markResumeUnavailable(false);
         abortControllerRef.current?.abort();
         loadOlderInflightRef.current = null;
         createdAtByMessageIdRef.current = new Map();
@@ -554,6 +568,16 @@ export function useAgentMessages({
 
             if (loadedSnapshot.runningTurn != null) {
                 const turn = loadedSnapshot.runningTurn;
+
+                // subscribeToTurn is optional, so a server can leave us without
+                // a reconnect path. The turn still runs on the backend: show the
+                // loaded history as running and let the host explain the gap.
+                if (server.subscribeToTurn == null) {
+                    setIsRunning(true);
+                    markResumeUnavailable(true);
+                    return;
+                }
+
                 const isContinuation = !extractTurnUserText(turn.input);
                 // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
                 // Use loadedSnapshot directly — snapshotRef.current still points at
@@ -831,7 +855,13 @@ export function useAgentMessages({
         // reconcile is needed here — the cancelled turn is terminal and local
         // state reconciles against the event log on the next session load.
         await activeRunRef.current?.catch(() => undefined);
-    }, [server, sessionId]);
+        // Nothing drained when the load could not attach a stream, so clear the
+        // running flag here or the composer stays blocked until a reload.
+        if (resumeUnavailableRef.current) {
+            markResumeUnavailable(false);
+            setIsRunning(false);
+        }
+    }, [server, sessionId, markResumeUnavailable]);
 
     const isRunningRef = useRef(isRunning);
     isRunningRef.current = isRunning;
@@ -897,6 +927,10 @@ export function useAgentMessages({
         if (turn == null) {
             return;
         }
+        if (server.subscribeToTurn == null) {
+            markResumeUnavailable(true);
+            return;
+        }
         // TODO: pass afterSequenceNumber once stream ingestion tracks sequence numbers.
         await runStream(
             (signal) =>
@@ -939,11 +973,12 @@ export function useAgentMessages({
                     conversationSessionId,
                     turnId,
                 );
-                rewound = await buildSnapshotBeforeTurn(
+                // Rewind to the exact parent used for the new branch. Using the
+                // previous item from listTurns could select an abandoned branch.
+                rewound = await buildSnapshotThroughTurn(
                     server,
                     conversationSessionId,
-                    turnId,
-                    listEventsConcurrency,
+                    previousTurnId === "none" ? null : previousTurnId,
                 );
                 createdAtByMessageIdRef.current = new Map();
                 // Keep the ref aligned before awaiting sendTurn so any intermediate
@@ -964,13 +999,7 @@ export function useAgentMessages({
                 branchRollbackSnapshot: committed,
             });
         },
-        [
-            cancel,
-            server,
-            listEventsConcurrency,
-            sendTurn,
-            sessionId,
-        ],
+        [cancel, server, sendTurn, sessionId],
     );
 
     const resetFromTurn = useCallback(
@@ -1066,6 +1095,7 @@ export function useAgentMessages({
     return {
         messages,
         isRunning,
+        resumeUnavailable,
         isLoading,
         isLoadingOlderHistory,
         hasOlderHistory,

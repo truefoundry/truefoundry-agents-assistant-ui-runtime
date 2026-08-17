@@ -163,7 +163,7 @@ const runtime = useAgentRuntime({
 
 ## Runtime extras
 
-Typed escape hatch for adapter-specific state and actions (same pattern as `@assistant-ui/react-google-adk`). Use selector hooks for thread-level UI; use action hooks / `agentExtras.get(aui)` inside nested sub-agent renderers.
+Typed escape hatch for adapter-specific state and actions (same pattern as `@assistant-ui/react-google-adk`). Use selector hooks for thread-level UI; use action hooks / `agentExtras.get(aui)` / `getAgentExtras(aui)` inside nested sub-agent renderers (`PartPrimitive.Messages` is readonly and shadows `thread.extras` — get/use and the convenience hooks walk the parent AUI chain so approvals / ask-user still hit the root runtime).
 
 ### Approvals, ask-user, MCP auth
 
@@ -197,10 +197,12 @@ const { pending: mcp, resume } = useMcpAuth();
 ### Low-level namespace
 
 ```tsx
-import { agentExtras } from "@truefoundry/assistant-ui-runtime";
+import { agentExtras, getAgentExtras } from "@truefoundry/assistant-ui-runtime";
 
+// get/use walk Object.create(parent) AUI clients — safe inside nested sub-agent UI.
 const extras = agentExtras.use();
 const pending = agentExtras.use((e) => e.pendingApprovals, []);
+const rootExtras = getAgentExtras(aui); // same walk as agentExtras.get
 ```
 
 ---
@@ -248,6 +250,16 @@ const server: AgentChatServer = {
 ```
 
 `ListResult<T>` is `{ data: T[]; nextPageToken?: string }` — flat token-based pagination. Optional methods: `deleteSession`, `listTurnEvents`, `subscribeToTurn`, `downloadSandboxFile`.
+
+### Without `subscribeToTurn`
+
+`subscribeToTurn` is what lets the runtime re-attach to a turn that is still running after a refresh. When a server omits it and a session loads with a running turn, the runtime does **not** throw. It renders the loaded history and reports the thread as running, while `useResumeUnavailable()` returns `true`. The turn keeps running on the backend — reload the session to pick up the result.
+
+```tsx
+import { useResumeUnavailable } from "@truefoundry/assistant-ui-runtime";
+
+const resumeUnavailable = useResumeUnavailable();
+```
 
 ---
 

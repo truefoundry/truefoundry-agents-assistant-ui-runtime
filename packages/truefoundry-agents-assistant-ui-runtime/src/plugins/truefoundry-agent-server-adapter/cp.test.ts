@@ -149,20 +149,22 @@ describe("normalizeEnabledModels", () => {
 
         expect(rows).toEqual([
             {
-                name: "gpt-4.1",
-                provider: "openai",
+                id: "openai-main/gpt-4.1",
+                name: "openai-main/gpt-4.1",
+                provider: { name: "openai" },
+                properties: {},
                 apiModel: "openai-main/gpt-4.1",
                 modelId: "gpt-4.1",
                 providerAccount: "openai-main",
-                id: "openai-main/gpt-4.1",
             },
             {
-                name: "claude-sonnet-4-6",
-                provider: "anthropic",
+                id: "anthropic-prod/claude-sonnet-4-6",
+                name: "anthropic-prod/claude-sonnet-4-6",
+                provider: { name: "anthropic" },
+                properties: {},
                 apiModel: "anthropic-prod/claude-sonnet-4-6",
                 modelId: "claude-sonnet-4-6",
                 providerAccount: "anthropic-prod",
-                id: "anthropic-prod/claude-sonnet-4-6",
             },
         ]);
     });
@@ -183,12 +185,13 @@ describe("normalizeEnabledModels", () => {
 
         expect(rows).toEqual([
             {
-                name: "router",
-                provider: "virtual-model",
+                id: "virtual-main/router",
+                name: "virtual-main/router",
+                provider: { name: "virtual-model" },
+                properties: {},
                 apiModel: "virtual-main/router",
                 modelId: "router",
                 providerAccount: "virtual-main",
-                id: "virtual-main/router",
             },
         ]);
     });
@@ -578,6 +581,7 @@ describe("saveAgent", () => {
             {
                 agentName: "my-agent",
                 agentSpec: { model: { name: "openai-main/gpt-4.1" } },
+                intent: "create",
             },
         );
 

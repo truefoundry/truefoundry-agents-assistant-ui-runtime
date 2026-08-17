@@ -13,7 +13,9 @@
     "overrides": {
       "react": "19.2.7",
       "react-dom": "19.2.7",
-      "truefoundry-gateway-sdk": "0.4.0"
+      "truefoundry-gateway-sdk": "0.4.0",
+      "@truefoundry/assistant-ui-runtime": "workspace:*",
+      "@assistant-ui/store": "0.2.22"
     }
   }
 }
