@@ -32,7 +32,6 @@ export type CreateTrueFoundryChatServerOptions = {
     /** Optional override — otherwise constructed from apiKey/baseUrl. */
     client?: AgentSessionClient;
     privateClient?: PrivateAgentSessionClient;
-    deleteSession?: (req: { sessionId: string }) => Promise<void>;
 };
 
 /**
@@ -285,15 +284,6 @@ export function createTrueFoundryChatServer<
 
         async cancelSession({ sessionId }) {
             await (await getSessionObj(sessionId)).cancel();
-        },
-
-        async deleteSession({ sessionId }) {
-            if (opts.deleteSession == null) {
-                throw new Error(
-                    "deleteSession is not on the gateway SDK. Pass deleteSession to createTrueFoundryChatServer.",
-                );
-            }
-            await opts.deleteSession({ sessionId });
         },
 
         // The runtime's signature offers `order`, but the gateway's listTurns

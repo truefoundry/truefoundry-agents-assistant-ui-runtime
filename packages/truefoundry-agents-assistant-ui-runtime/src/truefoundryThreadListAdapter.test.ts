@@ -49,13 +49,11 @@ describe("createTrueFoundryThreadListAdapter", () => {
 
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
+                agentId: "my-agent",
                 limit: 20,
                 pageToken: undefined,
                 startTimestamp: expect.any(String),
             }),
-        );
-        expect(listSessions).toHaveBeenCalledWith(
-            expect.not.objectContaining({ agentId: expect.anything() }),
         );
         expect(result.threads).toEqual([
             {
