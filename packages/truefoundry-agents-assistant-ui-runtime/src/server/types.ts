@@ -571,7 +571,7 @@ export type UpdateConnectorRequest<
 export interface AuthenticateConnectorRequest {
   id: string;
   /** OAuth callback page owned by the host application. */
-  redirectURL?: string;
+  returnTo?: string;
 }
 
 export interface ConnectorAuthenticationResult<
