@@ -482,7 +482,7 @@ export function useAgentMessages({
                 });
             return run;
         },
-        [onError],
+        [markResumeUnavailable],
     );
 
     const load = useCallback(async () => {

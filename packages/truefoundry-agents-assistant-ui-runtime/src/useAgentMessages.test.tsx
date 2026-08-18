@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ThreadMessage } from "@assistant-ui/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentChatServer, Turn } from "./server/index.js";
 
@@ -353,9 +353,6 @@ async function* singleUpdateStream(
 describe("useAgentMessages", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // jsdom has no RAF; keep pending updates until runStream's finally flushes.
-        vi.stubGlobal("requestAnimationFrame", () => 1);
-        vi.stubGlobal("cancelAnimationFrame", () => undefined);
         vi.mocked(mockServer.cancelSession).mockResolvedValue(undefined);
         vi.mocked(mockServer.listTurns).mockResolvedValue({ data: [] });
         vi.mocked(loadSessionSnapshot).mockResolvedValue(createEmptySessionSnapshot());
@@ -378,6 +375,7 @@ describe("useAgentMessages", () => {
     });
 
     afterEach(() => {
+        cleanup();
         vi.unstubAllGlobals();
     });
 
@@ -649,6 +647,7 @@ describe("useAgentMessages", () => {
                 unstable_resume: true,
             }),
         );
+        const onError = vi.fn();
         const serverWithoutSubscribe = {
             cancelSession: vi.fn().mockResolvedValue(undefined),
             listTurns: vi.fn().mockResolvedValue({ data: [] }),
@@ -658,7 +657,7 @@ describe("useAgentMessages", () => {
             useAgentMessages({
                 server: serverWithoutSubscribe,
                 sessionId: "session-1",
-                onError: vi.fn(),
+                onError,
             }),
         );
 
