@@ -118,7 +118,6 @@ const server = createTrueFoundryChatServer({
 | `baseUrl` | `string` | ✅ | Gateway base URL |
 | `client` | `AgentSessionClient` | — | Override the named-session client |
 | `privateClient` | `PrivateAgentSessionClient` | — | Override the draft/private client |
-| `deleteSession` | `(req: { sessionId: string }) => Promise<void>` | — | Optional delete hook |
 
 ```tsx
 const { client, privateClient } = server.getGatewayClients();
