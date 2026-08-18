@@ -49,12 +49,12 @@ describe("createThreadListAdapter", () => {
 
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
-                agentId: "my-agent",
                 limit: 20,
                 pageToken: undefined,
                 startTimestamp: expect.any(String),
             }),
         );
+        expect(listSessions.mock.calls[0]?.[0]).not.toHaveProperty("agentId");
         expect(result.threads).toEqual([
             {
                 status: "regular",
