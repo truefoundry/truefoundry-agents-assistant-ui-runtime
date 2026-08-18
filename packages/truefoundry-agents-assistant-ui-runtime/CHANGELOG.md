@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.21
+
+### Fixed
+
+- **`listEvents` page size** — `SESSION_EVENTS_PAGE_SIZE` lowered from 100 to 25 so session history pagination matches harness `PAGE_LIMIT` (default = max = 25). Sending `limit=100` against that max returns 400.
+
 ## 0.1.18
 
 ### Added
