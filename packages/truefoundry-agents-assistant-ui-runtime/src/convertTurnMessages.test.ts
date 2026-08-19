@@ -1505,7 +1505,7 @@ describe("convertTurnMessages", () => {
             );
         });
 
-        it("defers mcp auth until stream end and appends auth links", async () => {
+        it("defers mcp auth until stream end and appends auth prompt", async () => {
             const foldState = new PeerThreadFoldState();
             const updates = await collectStream(
                 streamTurnEvents(
@@ -1542,7 +1542,7 @@ describe("convertTurnMessages", () => {
             });
             expect(updates[1]?.content.at(-1)).toMatchObject({
                 type: "text",
-                text: expect.stringContaining("Authorize github"),
+                text: expect.stringContaining("Connect"),
             });
         });
 
