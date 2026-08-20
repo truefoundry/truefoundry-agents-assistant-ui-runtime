@@ -630,6 +630,79 @@ describe("convertTurnMessages", () => {
             });
         });
 
+        it("stamps turnId without sandboxId when history omits sandbox.created (reused sandbox outside window)", async () => {
+            const result = await convertTurnsToThreadMessages(
+                mockServerWithTurns([
+                    mockTurn({
+                        id: "turn-tip",
+                        createdAt,
+                        input: [{ type: "user.message", content: "download please" }],
+                        events: [
+                            modelMessage({
+                                id: "m-tip",
+                                threadId: ROOT_THREAD_ID,
+                                content: "here is the file",
+                            }),
+                        ],
+                    }),
+                ]),
+                SESSION_ID,
+            );
+
+            expect(result.messages[1]).toMatchObject({
+                role: "assistant",
+                metadata: { custom: { turnId: "turn-tip" } },
+            });
+            expect(
+                (result.messages[1]?.metadata.custom as { sandboxId?: string }).sandboxId,
+            ).toBeUndefined();
+        });
+
+        it("propagates sandboxId onto later turns that reuse the sandbox without emitting sandbox.created", async () => {
+            const createTurn = mockTurn({
+                id: "turn-1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                previousTurnId: null,
+                input: [{ type: "user.message", content: "create file" }],
+                events: [
+                    sandboxCreated({ id: "sandbox-evt", sandboxId: "sbx-123" }),
+                    modelMessage({
+                        id: "m1",
+                        threadId: ROOT_THREAD_ID,
+                        content: "created",
+                    }),
+                ],
+            });
+            const reuseTurn = mockTurn({
+                id: "turn-2",
+                createdAt: "2026-01-01T00:01:00.000Z",
+                previousTurnId: "turn-1",
+                input: [{ type: "user.message", content: "download it" }],
+                events: [
+                    modelMessage({
+                        id: "m2",
+                        threadId: ROOT_THREAD_ID,
+                        content: "ready",
+                    }),
+                ],
+            });
+
+            // Newest-first listTurns order (tip first).
+            const result = await convertTurnsToThreadMessages(
+                mockServerWithTurns([reuseTurn, createTurn]),
+                SESSION_ID,
+            );
+
+            const tipAssistant = result.messages.find(
+                (message) =>
+                    message.role === "assistant" &&
+                    (message.metadata.custom as { turnId?: string }).turnId === "turn-2",
+            );
+            expect(tipAssistant).toMatchObject({
+                metadata: { custom: { sandboxId: "sbx-123", turnId: "turn-2" } },
+            });
+        });
+
         it("returns runningTurn and unstable_resume for an in-flight turn", async () => {
             const runningTurn = mockTurn({
                 id: "turn-running",
@@ -2879,6 +2952,95 @@ describe("buildSnapshotFromSessionEvents", () => {
         const withAll = await prependOlderSessionHistory(server, SESSION_ID, withOlder);
         expect(withAll.turns.map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
         expect(withAll.historyPagination?.hasOlder).toBe(false);
+    });
+
+    it("backfills sandboxId onto tip turns after older history reveals sandbox.created", async () => {
+        const makeTurnItems = (
+            id: string,
+            text: string,
+            options?: { sandboxId?: string },
+        ): SessionEventItem[] => [
+            {
+                turnId: id,
+                event: {
+                    type: "turn.created",
+                    id: `evt-c-${id}`,
+                    turnId: id,
+                    input: [{ type: "user.message", content: text }],
+                    state: { status: "running" },
+                    createdAt,
+                },
+            },
+            ...(options?.sandboxId != null
+                ? [
+                      {
+                          turnId: id,
+                          event: sandboxCreated({
+                              id: `sandbox-${id}`,
+                              sandboxId: options.sandboxId,
+                          }),
+                      } satisfies SessionEventItem,
+                  ]
+                : [
+                      {
+                          turnId: id,
+                          event: modelMessage({
+                              id: `m-${id}-pad`,
+                              threadId: ROOT_THREAD_ID,
+                              content: "…",
+                          }),
+                      } satisfies SessionEventItem,
+                  ]),
+            {
+                turnId: id,
+                event: modelMessage({
+                    id: `m-${id}`,
+                    threadId: ROOT_THREAD_ID,
+                    content: `reply ${text}`,
+                }),
+            },
+            {
+                turnId: id,
+                event: {
+                    type: "turn.done",
+                    id: `evt-d-${id}`,
+                    state: { status: "done", requiredActions: [], completedAt: createdAt },
+                    createdAt,
+                } as TurnDoneEvent,
+            },
+        ];
+
+        // 4 events per turn; pageSize 4 → tip-only first page (no sandbox.created).
+        const items = [
+            ...makeTurnItems("t1", "create", { sandboxId: "sbx-123" }),
+            ...makeTurnItems("t2", "reuse"),
+        ];
+        const listEvents = sessionEventsPage(items, { pageSize: 4 });
+        const server = {
+            listTurns: async () => ({ data: [] }),
+            listEvents,
+            listTurnEvents: async () => ({ data: [] }),
+        } as unknown as AgentChatServer;
+
+        const tipOnly = await buildSnapshotFromSessionEvents(server, SESSION_ID);
+        expect(tipOnly.turns.map((t) => t.id)).toEqual(["t2"]);
+        expect(tipOnly.turns[0]?.sandboxId).toBeUndefined();
+        const tipMessages = projectSessionMessages(tipOnly);
+        expect(tipMessages.at(-1)).toMatchObject({
+            role: "assistant",
+            metadata: { custom: { turnId: "t2" } },
+        });
+        expect(
+            (tipMessages.at(-1)?.metadata.custom as { sandboxId?: string }).sandboxId,
+        ).toBeUndefined();
+
+        const withCreate = await prependOlderSessionHistory(server, SESSION_ID, tipOnly);
+        expect(withCreate.turns.map((t) => t.id)).toEqual(["t1", "t2"]);
+        expect(withCreate.turns.map((t) => t.sandboxId)).toEqual(["sbx-123", "sbx-123"]);
+        expect(projectSessionMessages(withCreate).at(-1)).toMatchObject({
+            role: "assistant",
+            metadata: { custom: { sandboxId: "sbx-123", turnId: "t2" } },
+        });
     });
 });
 

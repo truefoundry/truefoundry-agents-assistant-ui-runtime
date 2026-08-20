@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Sandbox artifact download after resume** — `downloadSandboxFile` no longer hard-requires extras `sandboxId` from `deriveSandboxId`. Turn-scoped hosts resolve the sandbox from `(sessionId, turnId)`; `sandboxId` is optional on the request and only passed when history/live stream recovered it. Resume hydration also forward-propagates a session-scoped `sandboxId` across turns in the loaded window (and backfills tip turns when older pages reveal `sandbox.created`).
+
 ## 0.1.18
 
 ### Added
