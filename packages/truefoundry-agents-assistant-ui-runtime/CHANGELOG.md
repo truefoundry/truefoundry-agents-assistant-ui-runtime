@@ -52,7 +52,7 @@
   Implement both on every catalog adapter.
 
 - **`authenticateConnector` request/return changed**  
-  Request is `AuthenticateConnectorRequest` (`id` + optional `redirectURL`). Return is `TConnector | ConnectorAuthenticationResult<TConnector>` — either an authenticated connector (or one carrying `auth.authUrl`) or a result with `authorization_endpoint` for the popup flow.
+  Request is `AuthenticateConnectorRequest` (`id` + optional `returnTo`). Return is `TConnector | ConnectorAuthenticationResult<TConnector>` — either an authenticated connector (or one carrying `auth.authUrl`) or a result with `authorization_endpoint` for the popup flow.
 
 - **`ConnectorAuthPublicOAuth.authUrl` is optional**  
   Public dcr rows may omit `authUrl` when auth is started via `authorization_endpoint` instead. (Supersedes the 0.1.8 note that public dcr required `authUrl`.)
