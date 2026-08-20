@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AgentChatServer, Session } from "./server/index.js";
 
-import { createTrueFoundryOwnedSessionsThreadListAdapter } from "./truefoundryOwnedSessionsThreadListAdapter.js";
+import { createOwnedSessionsThreadListAdapter } from "./ownedSessionsThreadListAdapter.js";
 
 function mockNamedSession(id: string, title: string, updatedAt: string): Session {
     return {
@@ -34,7 +34,7 @@ function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
     return partial as AgentChatServer;
 }
 
-describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
+describe("createOwnedSessionsThreadListAdapter", () => {
     it("lists owned sessions (named + draft) with pagination cursor", async () => {
         const listSessions = vi.fn().mockResolvedValue({
             data: [
@@ -45,7 +45,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
         });
         const server = mockServer({ listSessions, getSession: vi.fn() });
 
-        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({ server });
+        const adapter = createOwnedSessionsThreadListAdapter({ server });
         const result = await adapter.list();
 
         expect(listSessions).toHaveBeenCalledWith(
@@ -78,7 +78,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
         const listSessions = vi.fn().mockResolvedValue({ data: [] });
         const server = mockServer({ listSessions, getSession: vi.fn() });
 
-        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({
+        const adapter = createOwnedSessionsThreadListAdapter({
             server,
             listSessionsAgentId: "agent-x",
         });
@@ -95,7 +95,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
         });
         const server = mockServer({ listSessions, getSession: vi.fn() });
 
-        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({ server });
+        const adapter = createOwnedSessionsThreadListAdapter({ server });
         const result = await adapter.list();
 
         expect(result.threads[0]?.title).toBe("anthropic/claude-sonnet-4-6");
@@ -107,7 +107,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
             getSession: vi.fn(),
         });
 
-        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({ server });
+        const adapter = createOwnedSessionsThreadListAdapter({ server });
 
         await expect(adapter.initialize("local")).rejects.toThrow(/read-only/);
     });

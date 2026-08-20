@@ -42,6 +42,7 @@ function bindAbort(
     abortSignal: AbortSignal,
 ): () => void {
     const onAbort = () => {
+        // Best-effort cancel; ignore transport errors once the client already aborted.
         void server.cancelSession({ sessionId }).catch(() => undefined);
     };
     if (abortSignal.aborted) {
@@ -123,6 +124,7 @@ export async function* resumeTurnStream(
     }
 
     const onAbort = () => {
+        // Best-effort cancel; ignore transport errors once the client already aborted.
         void server.cancelSession({ sessionId }).catch(() => undefined);
     };
     if (abortSignal.aborted) {

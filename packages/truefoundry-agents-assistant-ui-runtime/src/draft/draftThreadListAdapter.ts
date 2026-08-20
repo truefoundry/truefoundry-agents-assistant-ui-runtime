@@ -1,24 +1,23 @@
 import type { RemoteThreadListAdapter } from "@assistant-ui/core";
 
-import type { AgentChatServer } from "./server/types.js";
-import { sessionListStartTimestamp } from "./sessionListStartTimestamp.js";
+import type { AgentChatServer } from "../server/types.js";
+import type { AgentSpec } from "../server/types.js";
+import { sessionListStartTimestamp } from "../sessionListStartTimestamp.js";
 import {
     sessionDisplayTitle,
     sessionToThreadMetadata,
-} from "./sessionThreadMetadata.js";
+} from "../sessionThreadMetadata.js";
 
 const THREAD_LIST_PAGE_SIZE = 20;
 
-/**
- * Read-only thread-list adapter backed by `AgentChatServer.listSessions`.
- * Hosts that previously used listOwnedSessions should filter in their server impl.
- */
-export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
+export function createDraftThreadListAdapter(options: {
     server: AgentChatServer;
+    defaultAgentSpec: AgentSpec;
+    getAgentSpec?: () => AgentSpec;
     /** When set, filters `listSessions` by this agent id. Omit for all chats. */
     listSessionsAgentId?: string;
 }): RemoteThreadListAdapter {
-    const { server, listSessionsAgentId } = options;
+    const { server, defaultAgentSpec, getAgentSpec, listSessionsAgentId } = options;
 
     return {
         async list({ after } = {}) {
@@ -29,7 +28,10 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
                 startTimestamp: sessionListStartTimestamp(),
             });
             const threads = page.data.map((session) =>
-                sessionToThreadMetadata(session, sessionDisplayTitle(session)),
+                sessionToThreadMetadata(
+                    session,
+                    sessionDisplayTitle(session, defaultAgentSpec),
+                ),
             );
             return {
                 threads,
@@ -37,15 +39,19 @@ export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
             };
         },
 
-        async initialize() {
-            throw new Error(
-                "Owned sessions history adapter is read-only; create sessions via a named or draft runtime.",
-            );
+        async initialize(_threadId: string) {
+            const draft = await server.createSession({
+                agentSpec: getAgentSpec?.() ?? defaultAgentSpec,
+            });
+            return { remoteId: draft.id, externalId: undefined };
         },
 
         async fetch(remoteId) {
-            const session = await server.getSession({ sessionId: remoteId });
-            return sessionToThreadMetadata(session, sessionDisplayTitle(session));
+            const draft = await server.getSession({ sessionId: remoteId });
+            return sessionToThreadMetadata(
+                draft,
+                sessionDisplayTitle(draft, defaultAgentSpec),
+            );
         },
 
         async rename() {},

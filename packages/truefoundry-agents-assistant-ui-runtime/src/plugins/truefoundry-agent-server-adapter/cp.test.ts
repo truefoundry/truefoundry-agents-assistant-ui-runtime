@@ -581,6 +581,7 @@ describe("saveAgent", () => {
             {
                 agentName: "my-agent",
                 agentSpec: { model: { name: "openai-main/gpt-4.1" } },
+                intent: "create",
             },
         );
 

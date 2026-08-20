@@ -20,9 +20,9 @@ export type DraftAgentConfig = {
     onAgentSpecChange?: ((spec: AgentSpec) => void) | undefined;
 };
 
-export type TrueFoundryAgentConfig = NamedAgentConfig | DraftAgentConfig;
+export type AgentConfig = NamedAgentConfig | DraftAgentConfig;
 
-type TrueFoundryAgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
+type AgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
     server: AgentChatServer;
     initialSessionId?: string | undefined;
     threadId?: string | undefined;
@@ -44,20 +44,20 @@ type TrueFoundryAgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
         | undefined;
 };
 
-export type UseTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptions & {
+export type UseAgentRuntimeOptions = AgentRuntimeBaseOptions & {
     /** Discriminated agent source. Omit when using legacy `agentName`. */
-    agent?: TrueFoundryAgentConfig | undefined;
+    agent?: AgentConfig | undefined;
     /** Legacy named-agent shorthand. Prefer `agent: { mode: "named", agentName }`. */
     agentName?: string | undefined;
 };
 
-export type ResolvedTrueFoundryAgentRuntimeOptions = TrueFoundryAgentRuntimeBaseOptions & {
-    agent: TrueFoundryAgentConfig;
+export type ResolvedAgentRuntimeOptions = AgentRuntimeBaseOptions & {
+    agent: AgentConfig;
 };
 
-export function resolveTrueFoundryAgentConfig(
-    options: Pick<UseTrueFoundryAgentRuntimeOptions, "agent" | "agentName">,
-): TrueFoundryAgentConfig {
+export function resolveAgentConfig(
+    options: Pick<UseAgentRuntimeOptions, "agent" | "agentName">,
+): AgentConfig {
     if (options.agent != null) {
         if (options.agent.mode === "named" && options.agentName != null) {
             return { mode: "named", agentName: options.agentName };
@@ -68,14 +68,14 @@ export function resolveTrueFoundryAgentConfig(
         return { mode: "named", agentName: options.agentName };
     }
     throw new Error(
-        "useTrueFoundryAgentRuntime requires `agent` or legacy `agentName`.",
+        "useAgentRuntime requires `agent` or legacy `agentName`.",
     );
 }
 
-export function resolveTrueFoundryAgentRuntimeOptions(
-    options: UseTrueFoundryAgentRuntimeOptions,
-): ResolvedTrueFoundryAgentRuntimeOptions {
-    const agent = resolveTrueFoundryAgentConfig(options);
+export function resolveAgentRuntimeOptions(
+    options: UseAgentRuntimeOptions,
+): ResolvedAgentRuntimeOptions {
+    const agent = resolveAgentConfig(options);
 
     return {
         ...options,

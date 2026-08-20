@@ -22,9 +22,9 @@ const getFileDataURL = async (file: File): Promise<string> => {
 
 /**
  * Reads composer files into `CompleteAttachment` `file` parts for send.
- * Wire via `adapters: { attachments: trueFoundryAttachmentAdapter }`.
+ * Wire via `adapters: { attachments: agentAttachmentAdapter }`.
  */
-export const trueFoundryAttachmentAdapter: AttachmentAdapter = {
+export const agentAttachmentAdapter: AttachmentAdapter = {
     accept: "*",
     async add({ file }) {
         return {

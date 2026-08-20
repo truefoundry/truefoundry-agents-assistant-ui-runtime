@@ -4,7 +4,7 @@ import { ROOT_THREAD_ID } from "./constants.js";
 import { toolApprovalStatus, TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY } from "./toolApproval.js";
 import { toolResponseStatus, TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY } from "./toolResponse.js";
 import type { TurnStreamUpdate } from "./turnStreamUpdate.js";
-import { requiredActionsFromActiveUpdate } from "./useTrueFoundryAgentMessages.js";
+import { requiredActionsFromActiveUpdate } from "./useAgentMessages.js";
 
 /**
  * Regression coverage for the live-stream pause path: when a turn pauses at a

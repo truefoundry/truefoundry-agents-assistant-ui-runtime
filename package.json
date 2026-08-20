@@ -2,7 +2,7 @@
   "name": "truefoundry-agents-assistant-ui-runtime-repo",
   "private": true,
   "scripts": {
-    "build": "pnpm --filter assistant-ui-vite^... build",
+    "build": "pnpm --filter \"@truefoundry/assistant-ui-runtime\" build",
     "test": "pnpm --filter \"@truefoundry/assistant-ui-runtime\" test",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
     "dev": "pnpm build && pnpm --filter assistant-ui-vite dev",
@@ -13,7 +13,7 @@
     "overrides": {
       "react": "19.2.7",
       "react-dom": "19.2.7",
-      "truefoundry-gateway-sdk": "0.4.0-rc.6",
+      "truefoundry-gateway-sdk": "0.4.0",
       "@truefoundry/assistant-ui-runtime": "workspace:*",
       "@assistant-ui/store": "0.2.22"
     }

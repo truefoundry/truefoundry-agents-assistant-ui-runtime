@@ -10,16 +10,16 @@ import {
 } from "@assistant-ui/react-ink";
 import { MarkdownText } from "@assistant-ui/react-ink-markdown";
 import {
-    useTrueFoundryToolResponses,
-    useTrueFoundryApprovals,
-    useTrueFoundryMcpAuth,
+    useToolResponses,
+    useApprovals,
+    useMcpAuth,
     type PendingToolResponse,
 } from "@truefoundry/assistant-ui-runtime";
 
 // ── Ask-user question prompt ─────────────────────────────────────────────────
 
 const ToolResponseInput = ({ pending }: { pending: PendingToolResponse }) => {
-    const { respond } = useTrueFoundryToolResponses();
+    const { respond } = useToolResponses();
     const isRunning = useAuiState((s) => s.thread.isRunning);
     const [value, setValue] = useState("");
     const [selected, setSelected] = useState(0);
@@ -97,7 +97,7 @@ const ToolResponseInput = ({ pending }: { pending: PendingToolResponse }) => {
 // ── MCP OAuth prompt ──────────────────────────────────────────────────────────
 
 const McpAuthInput = () => {
-    const { pending, resume } = useTrueFoundryMcpAuth();
+    const { pending, resume } = useMcpAuth();
     const isRunning = useAuiState((s) => s.thread.isRunning);
 
     useInput((_input, key) => {
@@ -137,7 +137,7 @@ const McpAuthInput = () => {
 // ── Tool approval prompt (y/n) ───────────────────────────────────────────────
 
 const ToolApprovalInput = () => {
-    const { pending, respond } = useTrueFoundryApprovals();
+    const { pending, respond } = useApprovals();
     const isRunning = useAuiState((s) => s.thread.isRunning);
     const first = pending[0];
 
@@ -176,9 +176,9 @@ const ToolApprovalInput = () => {
 // ── Composer ──────────────────────────────────────────────────────────────────
 
 const Composer = () => {
-    const { pending: pendingMcpAuth } = useTrueFoundryMcpAuth();
-    const { pending: pendingResponses } = useTrueFoundryToolResponses();
-    const { pending: pendingApprovals } = useTrueFoundryApprovals();
+    const { pending: pendingMcpAuth } = useMcpAuth();
+    const { pending: pendingResponses } = useToolResponses();
+    const { pending: pendingApprovals } = useApprovals();
 
     if (pendingMcpAuth != null) {
         return <McpAuthInput />;

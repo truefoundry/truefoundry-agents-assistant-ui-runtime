@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { mergeAgentSpec } from "./draft/agentSpec.js";
 import type { AgentSpec } from "./server/types.js";
 import {
-    resolveTrueFoundryAgentConfig,
-    resolveTrueFoundryAgentRuntimeOptions,
+    resolveAgentConfig,
+    resolveAgentRuntimeOptions,
 } from "./types.js";
 import type { AgentChatServer } from "./server/index.js";
 
-describe("resolveTrueFoundryAgentConfig", () => {
+describe("resolveAgentConfig", () => {
     it("supports legacy agentName", () => {
-        expect(resolveTrueFoundryAgentConfig({ agentName: "my-agent" })).toEqual({
+        expect(resolveAgentConfig({ agentName: "my-agent" })).toEqual({
             mode: "named",
             agentName: "my-agent",
         });
@@ -18,7 +18,7 @@ describe("resolveTrueFoundryAgentConfig", () => {
 
     it("prefers explicit agentName over named config", () => {
         expect(
-            resolveTrueFoundryAgentConfig({
+            resolveAgentConfig({
                 agent: { mode: "named", agentName: "ignored" },
                 agentName: "preferred",
             }),
@@ -31,7 +31,7 @@ describe("resolveTrueFoundryAgentConfig", () => {
     it("returns draft config unchanged", () => {
         const spec = { model: { name: "openai/gpt-4o" } };
         expect(
-            resolveTrueFoundryAgentConfig({
+            resolveAgentConfig({
                 agent: { mode: "draft", defaultAgentSpec: spec },
             }),
         ).toEqual({
@@ -41,11 +41,11 @@ describe("resolveTrueFoundryAgentConfig", () => {
     });
 });
 
-describe("resolveTrueFoundryAgentRuntimeOptions", () => {
+describe("resolveAgentRuntimeOptions", () => {
     const server = {} as AgentChatServer;
 
     it("accepts draft mode without a private client", () => {
-        const resolved = resolveTrueFoundryAgentRuntimeOptions({
+        const resolved = resolveAgentRuntimeOptions({
             server,
             agent: { mode: "draft", defaultAgentSpec: { model: { name: "x" } } },
         });
@@ -54,7 +54,7 @@ describe("resolveTrueFoundryAgentRuntimeOptions", () => {
     });
 
     it("resolves named mode with server", () => {
-        const resolved = resolveTrueFoundryAgentRuntimeOptions({
+        const resolved = resolveAgentRuntimeOptions({
             server,
             agent: { mode: "named", agentName: "my-agent" },
         });

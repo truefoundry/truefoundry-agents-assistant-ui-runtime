@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0
+
+### Breaking
+
+- **Hard rename of core API (TrueFoundry → generic Agent tokens).** Plugin APIs (`createTrueFoundry*`, `Tfy*`, plugin subpath) are unchanged. Notable renames:
+  - `useTrueFoundryAgentRuntime` → `useAgentRuntime`
+  - `UseTrueFoundryAgentRuntimeOptions` → `UseAgentRuntimeOptions`
+  - `TrueFoundryAgentConfig` → `AgentConfig`
+  - `trueFoundryExtras` → `agentExtras` (extras key `"useAgentRuntime"`)
+  - `TrueFoundryRuntimeExtras` / `TrueFoundryDraftRuntimeExtras` → `AgentRuntimeExtras` / `DraftRuntimeExtras`
+  - `TrueFoundryMessageCustomMetadata` → `AgentMessageCustomMetadata`
+  - `trueFoundryAttachmentAdapter` → `agentAttachmentAdapter`
+  - `toTrueFoundryApprovalInputs` → `toApprovalInputs`
+  - `createTrueFoundryThreadListAdapter` / `Draft` / `OwnedSessions` → `createThreadListAdapter` / `createDraftThreadListAdapter` / `createOwnedSessionsThreadListAdapter`
+  - Consumer hooks drop the `TrueFoundry` prefix (`useApprovals`, `useToolResponses`, `useMcpAuth`, `useAgentSpec`, …)
+  - Source files renamed to match (`useAgentRuntime.ts`, `agentExtras.ts`, `threadListAdapter.ts`, …)
+  - No deprecation aliases — update imports for 0.2.0.
+- Optional peer `truefoundry-gateway-sdk` range is now `^0.4.0` (stable; was RC).
+
 ## 0.1.18
 
 ### Added
@@ -40,7 +59,7 @@
 
 ### Added
 
-- **Sole ownership of server-port types** — this package is the canonical home for `AgentChatServer` / `AgentBuilderServer` / catalog ports and DTOs. Hosts (e.g. trueforge-ui) should re-export, not fork.
+- **Sole ownership of server-port types** — this package is the canonical home for `AgentChatServer` / `AgentBuilderServer` / catalog ports and DTOs. Downstream hosts should re-export, not fork.
 - **`AgentUIServer`** — host-facing alias of `AgentUIServerPort`.
 - **Selector / compose aliases** — `ModelSelection`, `AgentSkill`, `ConnectorState`, `AgentLibraryEntry`, `SearchAgentsParams` (aliases of the `*SelectorEntry` / `SearchAgentSelectorParams` names).
 - **Root exports** for builder/catalog types previously internal to `server/` (`SaveAgentRequest`, `AgentBuilderCapabilitiesResponse`, `AuthenticateConnectorRequest`, `ConnectorAuthenticationResult`, mounts, selector entries, sandbox-provider aliases, etc.).

@@ -449,7 +449,7 @@ export function collectApprovalInputs(
     return events;
 }
 
-export function toTrueFoundryApprovalInputs(
+export function toApprovalInputs(
     message: Extract<ThreadMessage, { role: "assistant" }>,
     response: RespondToToolApprovalOptions,
     defaultThreadId: string = ROOT_THREAD_ID,

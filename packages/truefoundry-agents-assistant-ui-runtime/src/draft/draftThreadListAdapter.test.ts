@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AgentChatServer, Session } from "../server/index.js";
 
-import { createTrueFoundryDraftThreadListAdapter } from "./truefoundryDraftThreadListAdapter.js";
+import { createDraftThreadListAdapter } from "./draftThreadListAdapter.js";
 import type { AgentSpec } from "../server/types.js";
 
 const defaultAgentSpec: AgentSpec = {
@@ -38,7 +38,7 @@ function mockServer(partial: Partial<AgentChatServer>): AgentChatServer {
     return partial as AgentChatServer;
 }
 
-describe("createTrueFoundryDraftThreadListAdapter", () => {
+describe("createDraftThreadListAdapter", () => {
     it("lists sessions with pagination cursor and does not filter isMutable client-side", async () => {
         const listSessions = vi.fn().mockResolvedValue(
             mockDraftListPage(
@@ -64,7 +64,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             getSession: vi.fn(),
         });
 
-        const adapter = createTrueFoundryDraftThreadListAdapter({
+        const adapter = createDraftThreadListAdapter({
             server,
             defaultAgentSpec,
         });
@@ -115,7 +115,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             getSession: vi.fn(),
         });
 
-        const adapter = createTrueFoundryDraftThreadListAdapter({
+        const adapter = createDraftThreadListAdapter({
             server,
             defaultAgentSpec,
             listSessionsAgentId: "agent-x",
@@ -138,7 +138,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             getSession: vi.fn(),
         });
 
-        const adapter = createTrueFoundryDraftThreadListAdapter({
+        const adapter = createDraftThreadListAdapter({
             server,
             defaultAgentSpec,
         });
@@ -165,7 +165,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             getSession: vi.fn(),
         });
 
-        const adapter = createTrueFoundryDraftThreadListAdapter({
+        const adapter = createDraftThreadListAdapter({
             server,
             defaultAgentSpec,
             getAgentSpec: () => liveAgentSpec,
@@ -186,7 +186,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
             getSession,
         });
 
-        const adapter = createTrueFoundryDraftThreadListAdapter({
+        const adapter = createDraftThreadListAdapter({
             server,
             defaultAgentSpec,
         });

@@ -1,0 +1,48 @@
+name: Bug report
+description: Something is broken in the runtime, plugin, or docs
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Runtime (useAgentRuntime / sessions / streaming)
+        - TrueFoundry plugin (createTrueFoundry*)
+        - Docs
+        - Examples / demos
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: e.g. `@truefoundry/assistant-ui-runtime@0.2.0`
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened vs what you expected?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal steps or a small code snippet.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Node, React, assistant-ui, gateway-sdk versions if relevant.
+      placeholder: |
+        Node:
+        React:
+        @assistant-ui/react:
+        truefoundry-gateway-sdk:

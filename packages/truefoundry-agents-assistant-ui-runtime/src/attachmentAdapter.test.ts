@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { PendingAttachment } from "@assistant-ui/core";
 
-import { trueFoundryAttachmentAdapter } from "./attachmentAdapter.js";
+import { agentAttachmentAdapter } from "./attachmentAdapter.js";
 
 async function addFile(file: File): Promise<PendingAttachment> {
-    const result = await trueFoundryAttachmentAdapter.add({ file });
+    const result = await agentAttachmentAdapter.add({ file });
     if (Symbol.asyncIterator in result) {
         throw new Error("expected PendingAttachment");
     }
     return result;
 }
 
-describe("trueFoundryAttachmentAdapter", () => {
+describe("agentAttachmentAdapter", () => {
     it("accepts all file types", () => {
-        expect(trueFoundryAttachmentAdapter.accept).toBe("*");
+        expect(agentAttachmentAdapter.accept).toBe("*");
     });
 
     it("add returns a pending attachment awaiting composer send", async () => {
@@ -34,7 +34,7 @@ describe("trueFoundryAttachmentAdapter", () => {
     it("send reads the file into a data URI file part", async () => {
         const file = new File(["hello"], "notes.txt", { type: "text/plain" });
         const pending = await addFile(file);
-        const complete = await trueFoundryAttachmentAdapter.send(pending);
+        const complete = await agentAttachmentAdapter.send(pending);
 
         expect(complete.status).toEqual({ type: "complete" });
         expect(complete.content).toHaveLength(1);
@@ -51,6 +51,6 @@ describe("trueFoundryAttachmentAdapter", () => {
     it("remove is a no-op", async () => {
         const file = new File(["hello"], "notes.txt", { type: "text/plain" });
         const pending = await addFile(file);
-        await expect(trueFoundryAttachmentAdapter.remove(pending)).resolves.toBeUndefined();
+        await expect(agentAttachmentAdapter.remove(pending)).resolves.toBeUndefined();
     });
 });

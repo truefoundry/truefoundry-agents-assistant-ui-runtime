@@ -4,8 +4,8 @@ import { AssistantRuntimeProvider, StatusBarPrimitive } from "@assistant-ui/reac
 import { useAuiState } from "@assistant-ui/store";
 import {
     createTrueFoundryAgentUIServer,
-    useTrueFoundryAgentRuntime,
-    type TrueFoundryAgentConfig,
+    useAgentRuntime,
+    type AgentConfig,
     type TrueFoundryAgentUIServer,
 } from "@truefoundry/assistant-ui-runtime";
 import { Thread } from "./components/thread.js";
@@ -21,7 +21,7 @@ function requireEnv(key: string): string {
 
 export type AppProps = {
     server: TrueFoundryAgentUIServer;
-    agent: TrueFoundryAgentConfig;
+    agent: AgentConfig;
     label: string;
 };
 
@@ -41,7 +41,7 @@ const StatusBar = ({ label }: { label: string }) => {
 };
 
 export const App = ({ server, agent, label }: AppProps) => {
-    const agentRuntime = useTrueFoundryAgentRuntime(
+    const agentRuntime = useAgentRuntime(
         useMemo(() => ({ server, agent }), [server, agent]),
     );
 
@@ -66,7 +66,7 @@ export const App = ({ server, agent, label }: AppProps) => {
 /** Resolve credentials + full pack; agentName optional → draft with first CP model. */
 export async function createAppServer(): Promise<{
     server: TrueFoundryAgentUIServer;
-    agent: TrueFoundryAgentConfig;
+    agent: AgentConfig;
     label: string;
 }> {
     const apiKey = requireEnv("TFY_API_KEY");

@@ -1,8 +1,8 @@
 # @truefoundry/assistant-ui-runtime
 
-TrueFoundry Gateway agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/).
+Server-centric agent runtime adapter for [assistant-ui](https://www.assistant-ui.com/).
 
-Connect `assistant-ui` chat components to TrueFoundry agent sessions via `useTrueFoundryAgentRuntime`. The adapter handles streaming turns, multi-agent nesting, tool approvals, ask-user flows, MCP OAuth, resumable streams, and file attachment forwarding.
+Connect `assistant-ui` chat components to any `AgentChatServer` via `useAgentRuntime`. The adapter handles streaming turns, multi-agent nesting, tool approvals, ask-user flows, MCP OAuth, resumable streams, and file attachment forwarding. Ships with an optional TrueFoundry gateway plugin.
 
 ## Repository layout
 
@@ -11,12 +11,15 @@ packages/
   truefoundry-agents-assistant-ui-runtime/   # Published as @truefoundry/assistant-ui-runtime
 examples/
   assistant-ui-vite/                         # Vite + React demo app
+  ink-cli/                                   # Terminal chat demo (Ink)
+  assistant-ui-react/                        # Additional React demo
 ```
 
 | Path | README |
 |------|--------|
 | `packages/truefoundry-agents-assistant-ui-runtime` | [Package docs](packages/truefoundry-agents-assistant-ui-runtime/README.md) — installation, API reference, hooks, architecture |
 | `examples/assistant-ui-vite` | [Example docs](examples/assistant-ui-vite/README.md) — running the demo locally |
+| `examples/ink-cli` | [CLI example](examples/ink-cli/README.md) — terminal chat via Ink |
 
 ## Quickstart (demo app)
 
@@ -46,17 +49,19 @@ npm install @assistant-ui/react @truefoundry/assistant-ui-runtime truefoundry-ga
 ```
 
 ```tsx
-import { AgentSessionClient } from "truefoundry-gateway-sdk/agents";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { useTrueFoundryAgentRuntime } from "@truefoundry/assistant-ui-runtime";
+import {
+  createTrueFoundryAgentUIServer,
+  useAgentRuntime,
+} from "@truefoundry/assistant-ui-runtime";
 
-const client = new AgentSessionClient({
+const server = await createTrueFoundryAgentUIServer({
   apiKey: process.env.TFY_API_KEY!,
-  environment: process.env.TFY_GATEWAY_URL!,
+  cpURL: process.env.TFY_CP_URL!,
 });
 
 export function MyAssistant() {
-  const runtime = useTrueFoundryAgentRuntime({ client, agentName: "my-agent" });
+  const runtime = useAgentRuntime({ server, agentName: "my-agent" });
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <Thread />
@@ -80,4 +85,8 @@ Run from the repo root:
 
 ## License
 
-MIT
+[Apache-2.0](LICENSE)
+
+## Contributing / security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md).

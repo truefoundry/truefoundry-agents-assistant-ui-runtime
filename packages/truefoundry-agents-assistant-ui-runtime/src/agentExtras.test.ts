@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { AssistantClient } from "@assistant-ui/store";
 
 import {
-    getTrueFoundryExtras,
-    trueFoundryExtras,
-    tryGetTrueFoundryExtras,
-    type TrueFoundryRuntimeExtras,
-} from "./truefoundryExtras.js";
+    agentExtras,
+    getAgentExtras,
+    tryGetAgentExtras,
+    type AgentRuntimeExtras,
+} from "./agentExtras.js";
 
 function clientWithExtras(
     extras: unknown,
@@ -18,9 +18,9 @@ function clientWithExtras(
     } as unknown as AssistantClient;
 }
 
-describe("tryGetTrueFoundryExtras", () => {
+describe("tryGetAgentExtras", () => {
     it("reads extras from the current client", () => {
-        const extras = trueFoundryExtras.provide({
+        const extras = agentExtras.provide({
             pendingApprovals: [],
             pendingToolResponses: [],
             pendingMcpAuth: null,
@@ -37,14 +37,14 @@ describe("tryGetTrueFoundryExtras", () => {
             isLoadingOlderHistory: false,
             loadOlderHistory: vi.fn(),
             draft: null,
-        } satisfies TrueFoundryRuntimeExtras);
+        } satisfies AgentRuntimeExtras);
 
-        expect(tryGetTrueFoundryExtras(clientWithExtras(extras))).toBe(extras);
+        expect(tryGetAgentExtras(clientWithExtras(extras))).toBe(extras);
     });
 
     it("walks nested readonly clients (Object.create parent) to find root extras", () => {
         const respondToToolApproval = vi.fn();
-        const extras = trueFoundryExtras.provide({
+        const extras = agentExtras.provide({
             pendingApprovals: [{ approvalId: "a1", threadId: "child-1", toolName: "bash", args: {}, argsText: "{}" }],
             pendingToolResponses: [],
             pendingMcpAuth: null,
@@ -61,7 +61,7 @@ describe("tryGetTrueFoundryExtras", () => {
             isLoadingOlderHistory: false,
             loadOlderHistory: vi.fn(),
             draft: null,
-        } satisfies TrueFoundryRuntimeExtras);
+        } satisfies AgentRuntimeExtras);
 
         const root = clientWithExtras(extras);
         // Mirrors ReadonlyThreadProvider: nested AUI is Object.create(parent) with
@@ -72,10 +72,10 @@ describe("tryGetTrueFoundryExtras", () => {
             }),
         }) as AssistantClient;
 
-        expect(tryGetTrueFoundryExtras(nested)).toBe(extras);
+        expect(tryGetAgentExtras(nested)).toBe(extras);
         // Namespace .get must walk too (not only the named helper).
-        expect(trueFoundryExtras.get(nested)).toBe(extras);
-        getTrueFoundryExtras(nested).respondToToolApproval({
+        expect(agentExtras.get(nested)).toBe(extras);
+        getAgentExtras(nested).respondToToolApproval({
             approvalId: "a1",
             approved: true,
         });
@@ -85,12 +85,12 @@ describe("tryGetTrueFoundryExtras", () => {
         });
     });
 
-    it("returns undefined when no ancestor has TrueFoundry extras", () => {
-        expect(tryGetTrueFoundryExtras(clientWithExtras(undefined))).toBeUndefined();
+    it("returns undefined when no ancestor has agent extras", () => {
+        expect(tryGetAgentExtras(clientWithExtras(undefined))).toBeUndefined();
     });
 
     it("survives RootAssistantClient-style proxies that throw on missing accessors", () => {
-        const extras = trueFoundryExtras.provide({
+        const extras = agentExtras.provide({
             pendingApprovals: [],
             pendingToolResponses: [],
             pendingMcpAuth: null,
@@ -107,7 +107,7 @@ describe("tryGetTrueFoundryExtras", () => {
             isLoadingOlderHistory: false,
             loadOlderHistory: vi.fn(),
             draft: null,
-        } satisfies TrueFoundryRuntimeExtras);
+        } satisfies AgentRuntimeExtras);
 
         // Mirrors @assistant-ui/store createRootAssistantClient: empty proxy that
         // throws on any get (e.g. "subscribe" / "thread").
@@ -131,15 +131,15 @@ describe("tryGetTrueFoundryExtras", () => {
             }),
         }) as AssistantClient;
 
-        expect(tryGetTrueFoundryExtras(root)).toBe(extras);
+        expect(tryGetAgentExtras(root)).toBe(extras);
 
-        // useTrueFoundryRuntimeExtras walks .subscribe up the same chain.
+        // useAgentRuntimeExtras walks .subscribe up the same chain.
         const nested = Object.assign(Object.create(root), {
             thread: () => ({
                 getState: () => ({ extras: undefined }),
             }),
         }) as AssistantClient;
-        expect(tryGetTrueFoundryExtras(nested)).toBe(extras);
+        expect(tryGetAgentExtras(nested)).toBe(extras);
         expect(() => {
             let current: object | null = nested;
             const seen = new Set<object>();

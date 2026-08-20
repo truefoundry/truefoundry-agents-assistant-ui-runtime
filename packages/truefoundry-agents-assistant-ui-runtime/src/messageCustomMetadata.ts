@@ -5,7 +5,7 @@ import { TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY } from "./toolApproval.js";
 import { TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY } from "./toolResponse.js";
 
 /** Keys written to `ThreadMessage.metadata.custom` by this runtime adapter. */
-export type TrueFoundryMessageCustomMetadata = {
+export type AgentMessageCustomMetadata = {
     subAgent?: SubAgentCustomMetadata;
     pendingMcpAuth?: true;
     mcpServers?: McpAuthRequiredEvent["mcpServers"];
@@ -17,23 +17,23 @@ export type TrueFoundryMessageCustomMetadata = {
 };
 
 export type SubAgentMessageCustomMetadata = Pick<
-    TrueFoundryMessageCustomMetadata,
+    AgentMessageCustomMetadata,
     "subAgent"
 >;
 
 export type McpAuthMessageCustomMetadata = Pick<
-    TrueFoundryMessageCustomMetadata,
+    AgentMessageCustomMetadata,
     "pendingMcpAuth" | "mcpServers"
 >;
 
-export type SandboxMessageCustomMetadata = Pick<TrueFoundryMessageCustomMetadata, "sandboxId">;
+export type SandboxMessageCustomMetadata = Pick<AgentMessageCustomMetadata, "sandboxId">;
 
 export type ToolApprovalMessageCustomMetadata = Pick<
-    TrueFoundryMessageCustomMetadata,
+    AgentMessageCustomMetadata,
     typeof TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY
 >;
 
 export type ToolResponseMessageCustomMetadata = Pick<
-    TrueFoundryMessageCustomMetadata,
+    AgentMessageCustomMetadata,
     typeof TOOL_RESPONSE_THREAD_ID_CUSTOM_KEY
 >;

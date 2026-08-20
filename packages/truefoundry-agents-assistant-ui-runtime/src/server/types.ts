@@ -727,7 +727,7 @@ export interface UpdateSandboxRequest extends SandboxConfig {
   apiKey?: string;
 }
 
-/** Host-facing aliases (trueforge-ui public names). */
+/** Host-facing aliases (stable names for downstream UI packages). */
 export type SandboxProviderConfig = SandboxConfig;
 export type SandboxProviderCatalogEntry = SandboxCatalogEntry;
 export type SandboxProviderBase = SandboxBase;
@@ -749,7 +749,7 @@ export interface SandboxCatalogServer<
   deleteSandboxProvider?(req: { id: string }): Promise<void>;
 }
 
-/** Host-facing selector / compose aliases (trueforge-ui public names). */
+/** Host-facing selector / compose aliases (stable names for downstream UI). */
 export type ModelSelection = ModelSelectorEntry;
 export type AgentSkill = SkillSelectorEntry;
 export type ConnectorState = ConnectorSelectorEntry;
@@ -782,7 +782,7 @@ export interface CatalogServer<
  * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
  * if omitted, those surfaces stay hidden.
  *
- * trueforge-ui re-exports this as `AgentUIServer`.
+ * Downstream hosts typically re-export this as `AgentUIServer`.
  */
 export type AgentUIServerPort<
   TChat extends AgentChatServer = AgentChatServer,
@@ -790,5 +790,5 @@ export type AgentUIServerPort<
   TCatalog extends CatalogServer = CatalogServer,
 > = TChat & TBuilder & { catalog?: TCatalog };
 
-/** Host-facing alias used by trueforge-ui. */
+/** Host-facing alias of `AgentUIServerPort`. */
 export type AgentUIServer = AgentUIServerPort;

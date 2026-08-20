@@ -1,6 +1,6 @@
 /// <reference types="@assistant-ui/core/react" />
 
-export { useTrueFoundryAgentRuntime } from "./useTrueFoundryAgentRuntime.js";
+export { useAgentRuntime } from "./useAgentRuntime.js";
 export {
     convertTurnsToThreadMessages,
     buildUserMessageContent,
@@ -15,25 +15,25 @@ export { ROOT_THREAD_ID } from "./constants.js";
 export type {
     NamedAgentConfig,
     DraftAgentConfig,
-    TrueFoundryAgentConfig,
-    UseTrueFoundryAgentRuntimeOptions,
+    AgentConfig,
+    UseAgentRuntimeOptions,
 } from "./types.js";
 export type { AgentSpecUpdate, DraftSession } from "./draft/agentSpec.js";
 export { mergeAgentSpec, draftSessionTitle } from "./draft/agentSpec.js";
-export { createTrueFoundryDraftThreadListAdapter } from "./draft/truefoundryDraftThreadListAdapter.js";
-export { createTrueFoundryOwnedSessionsThreadListAdapter } from "./truefoundryOwnedSessionsThreadListAdapter.js";
+export { createDraftThreadListAdapter } from "./draft/draftThreadListAdapter.js";
+export { createOwnedSessionsThreadListAdapter } from "./ownedSessionsThreadListAdapter.js";
 export { createDraftSessionBridge } from "./draft/draftSessionBridge.js";
 export type { DraftSessionBridge } from "./draft/draftSessionBridge.js";
 export {
-    useTrueFoundryAdoptAgentSpec,
-    useTrueFoundryAgentSpec,
-    useTrueFoundryFlushAgentSpec,
-    useTrueFoundryUpdateAgentSpec,
+    useAdoptAgentSpec,
+    useAgentSpec,
+    useFlushAgentSpec,
+    useUpdateAgentSpec,
 } from "./hooks.js";
-export type { TrueFoundryDraftRuntimeExtras } from "./truefoundryExtras.js";
+export type { DraftRuntimeExtras } from "./agentExtras.js";
 export type { SubAgentArtifact, SubAgentCustomMetadata } from "./foldPeerThreads.js";
 export type {
-    TrueFoundryMessageCustomMetadata,
+    AgentMessageCustomMetadata,
     SubAgentMessageCustomMetadata,
     McpAuthMessageCustomMetadata,
     SandboxMessageCustomMetadata,
@@ -41,32 +41,32 @@ export type {
     ToolResponseMessageCustomMetadata,
 } from "./messageCustomMetadata.js";
 export type { PendingApproval, PendingToolResponse } from "./collectPending.js";
-export type { TrueFoundryRuntimeExtras } from "./truefoundryExtras.js";
+export type { AgentRuntimeExtras } from "./agentExtras.js";
 export {
-    trueFoundryExtras,
-    getTrueFoundryExtras,
-    tryGetTrueFoundryExtras,
-} from "./truefoundryExtras.js";
+    agentExtras,
+    getAgentExtras,
+    tryGetAgentExtras,
+} from "./agentExtras.js";
 export {
-    useTrueFoundryApprovals,
-    useTrueFoundryToolResponses,
-    useTrueFoundryMcpAuth,
-    useTrueFoundryRespondToToolApproval,
-    useTrueFoundryRespondToToolResponse,
-    useTrueFoundryResumeMcpAuth,
-    useTrueFoundrySandboxId,
-    useTrueFoundryTurnId,
-    useTrueFoundryDownloadSandboxFile,
-    useTrueFoundryCancel,
-    useTrueFoundryResetFromTurn,
-    useTrueFoundryReload,
-    useTrueFoundryHistoryPagination,
-    useTrueFoundryResumeUnavailable,
+    useApprovals,
+    useToolResponses,
+    useMcpAuth,
+    useRespondToToolApproval,
+    useRespondToToolResponse,
+    useResumeMcpAuth,
+    useSandboxId,
+    useTurnId,
+    useDownloadSandboxFile,
+    useCancel,
+    useResetFromTurn,
+    useReload,
+    useHistoryPagination,
+    useResumeUnavailable,
 } from "./hooks.js";
 export {
     collectApprovalInputs,
     messageHasPendingApprovals,
-    toTrueFoundryApprovalInputs,
+    toApprovalInputs,
 } from "./toolApproval.js";
 export {
     collectResponseInputs,
@@ -78,9 +78,9 @@ export {
     messageHasPendingRequiredActions,
     findPausedAssistantMessage,
 } from "./requiredActionInputs.js";
-export { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
+export { createThreadListAdapter } from "./threadListAdapter.js";
 export { getSession } from "./sessions.js";
-export { trueFoundryAttachmentAdapter } from "./attachmentAdapter.js";
+export { agentAttachmentAdapter } from "./attachmentAdapter.js";
 
 export type {
     AgentChatServer,
