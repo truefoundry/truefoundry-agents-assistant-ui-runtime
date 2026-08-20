@@ -33,6 +33,7 @@ import {
 } from "./draft/draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./draft/truefoundryDraftThreadListAdapter.js";
+import { buildSandboxDownloadRequest } from "./sandboxDownload.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
 import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
@@ -157,20 +158,16 @@ function useTrueFoundryAgentRuntimeImpl(
                     "Downloading a sandbox file requires AgentChatServer.downloadSandboxFile.",
                 );
             }
-            if (sessionId == null) {
-                throw new Error(
-                    "This session has not been saved yet, so its files cannot be downloaded.",
-                );
-            }
-            if (sandboxId == null) {
-                throw new Error("No sandbox is available yet for this session.");
-            }
-            return await server.downloadSandboxFile({
-                sessionId,
-                turnId,
-                sandboxId,
-                path,
-            });
+            // Turn-scoped hosts resolve the sandbox from turnId; sandboxId is best-effort
+            // (may be missing after resume when sandbox.created is outside the loaded window).
+            return await server.downloadSandboxFile(
+                buildSandboxDownloadRequest({
+                    sessionId,
+                    turnId,
+                    path,
+                    sandboxId,
+                }),
+            );
         },
         [server, sessionId, sandboxId],
     );

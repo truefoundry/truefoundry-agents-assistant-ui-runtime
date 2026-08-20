@@ -99,6 +99,7 @@ export const useTrueFoundryTurnId = (): string | undefined =>
 /**
  * Returns a function to download a file the current turn wrote to its sandbox. Must be called
  * from a message scope, since the artifact belongs to the turn that rendered it.
+ * Does not require extras `sandboxId` — turn-scoped hosts resolve the sandbox from `turnId`.
  */
 export const useTrueFoundryDownloadSandboxFile = () => {
     const aui = useAui();
