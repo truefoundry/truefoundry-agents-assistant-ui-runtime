@@ -132,6 +132,7 @@ export interface AgentSpec<
   config?: TConfig;
   instructions?: string;
   variables?: Record<string, string>;
+  description?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +353,8 @@ export interface SaveAgentRequest<TSpec extends AgentSpec = AgentSpec> {
 export interface SaveAgentResult {
   /** Immutable id allocated by the host registry. */
   agentId?: string;
+  /** Version id allocated by the host registry for this save. */
+  versionId?: string;
   /** Timestamp returned when the active mutable session was updated. */
   sessionUpdatedAt?: string;
 }

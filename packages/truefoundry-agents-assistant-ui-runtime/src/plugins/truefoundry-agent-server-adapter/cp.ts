@@ -19,7 +19,7 @@ import {
     reasoningEffortsForModel,
 } from "./modelReasoningEffort.js";
 import { normalizeAgentSpecForGateway } from "./normalizeAgentSpec.js";
-import type { TfyAgentSpec } from "./types.js";
+import type { TfyAgentSpec, TfySaveAgentResult } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Selector rows — FE base + TFY mount fields
@@ -408,6 +408,61 @@ export function toCamelCaseDeep(value: unknown): unknown {
     return value;
 }
 
+/** Keys are user data (e.g. metadata tag names) — copied verbatim, never case-converted. */
+function stringRecordFromCp(raw: unknown): Record<string, string> | undefined {
+    if (!isRecord(raw)) return undefined;
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw)) {
+        if (typeof value === "string") out[key] = value;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Variable names are user keys and must survive verbatim. Values appear as
+ * plain strings in new manifests and `{ default_value }` records in older
+ * ones; both collapse to the resolved string.
+ */
+function variablesFromCp(raw: unknown): Record<string, string> | undefined {
+    if (!isRecord(raw)) return undefined;
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw)) {
+        if (typeof value === "string") {
+            out[key] = value;
+        } else if (isRecord(value) && typeof value.default_value === "string") {
+            out[key] = value.default_value;
+        }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Rebuild the gateway ResponseFormat from the wire shape. Only the envelope
+ * key changes case (`json_schema` → `jsonSchema`); the `schema` body is a
+ * user-authored JSON schema whose property names must not be rewritten.
+ */
+function responseFormatFromCp(raw: unknown): TfyAgentSpec["responseFormat"] {
+    if (!isRecord(raw)) return undefined;
+    if (raw.type === "text") return { type: "text" };
+    if (raw.type === "json_object") return { type: "json_object" };
+    if (raw.type !== "json_schema") return undefined;
+    const wireSchema = isRecord(raw.json_schema) ? raw.json_schema : undefined;
+    if (wireSchema == null || typeof wireSchema.name !== "string") return undefined;
+    return {
+        type: "json_schema",
+        jsonSchema: {
+            name: wireSchema.name,
+            ...(typeof wireSchema.description === "string"
+                ? { description: wireSchema.description }
+                : {}),
+            ...(isRecord(wireSchema.schema) ? { schema: wireSchema.schema } : {}),
+            ...(typeof wireSchema.strict === "boolean" || wireSchema.strict === null
+                ? { strict: wireSchema.strict }
+                : {}),
+        },
+    };
+}
+
 /**
  * Map a CP AgentManifest (snake_case wire) → FE AgentSpec for Edit seeding.
  * Skills/MCP keep `{ id, name }` for draft pickers plus runtime fields
@@ -485,11 +540,39 @@ export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undef
     const config =
         configRaw != null ? (toCamelCaseDeep(configRaw) as TfyAgentSpec["config"]) : undefined;
 
+    // Wire-named pass-through fields (description, messages, collaborators)
+    // need no mount remapping — one camelCase pass and a shape guard each.
+    // Guards drop malformed values instead of seeding the editor with garbage.
+    const camel = toCamelCaseDeep(manifest) as Record<string, unknown>;
+    const description =
+        typeof camel.description === "string" ? camel.description : undefined;
+    const messages = Array.isArray(camel.messages)
+        ? (camel.messages as TfyAgentSpec["messages"])
+        : undefined;
+    const collaborators = Array.isArray(camel.collaborators)
+        ? (camel.collaborators as TfyAgentSpec["collaborators"])
+        : undefined;
+
+    // User-keyed fields are read from the RAW manifest: their keys are data
+    // (tag names like "TFY_ALPHA_ENABLE_OPENUI", variable names like
+    // "my_city", JSON-schema property names), and case-converting them
+    // corrupts saved agents (e.g. "TFY_ALPHA…" → "tfyAlpha…" → on the next
+    // save "_t_f_y__a_l_p_h_a__…").
+    const variables = variablesFromCp(manifest.variables);
+    const metadataTags = stringRecordFromCp(manifest.metadata_tags);
+    const responseFormat = responseFormatFromCp(manifest.response_format);
+
     return {
         model,
         ...(typeof manifest.instructions === "string"
             ? { instructions: manifest.instructions }
             : {}),
+        ...(description != null ? { description } : {}),
+        ...(variables != null ? { variables } : {}),
+        ...(messages != null ? { messages } : {}),
+        ...(responseFormat != null ? { responseFormat } : {}),
+        ...(metadataTags != null ? { metadataTags } : {}),
+        ...(collaborators != null ? { collaborators } : {}),
         ...(config != null ? { config } : {}),
         ...(skills.length > 0 ? { skills } : {}),
         ...(mcpServers.length > 0 ? { mcpServers } : {}),
@@ -602,9 +685,46 @@ function skillMountForCp(mount: unknown): Record<string, unknown> {
 }
 
 /**
+ * Snake-case only the response_format envelope (`jsonSchema` → `json_schema`);
+ * the `schema` body is a user-authored JSON schema whose property names must
+ * not be rewritten. Inverse of {@link responseFormatFromCp}.
+ */
+function responseFormatForCp(
+    responseFormat: NonNullable<TfyAgentSpec["responseFormat"]>,
+): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(responseFormat)) {
+        if (key === "jsonSchema" && isRecord(value)) {
+            const inner: Record<string, unknown> = {};
+            for (const [innerKey, innerValue] of Object.entries(value)) {
+                inner[camelToSnakeKey(innerKey)] =
+                    innerKey === "schema" ? innerValue : toSnakeCaseDeep(innerValue);
+            }
+            out.json_schema = inner;
+            continue;
+        }
+        out[camelToSnakeKey(key)] = toSnakeCaseDeep(value);
+    }
+    return out;
+}
+
+/**
  * Build CP `manifest` for `PUT /api/svc/v1/agents`.
- * Normalizes UI catalog mounts, snake_cases gateway fields, hardcodes type /
- * metadata_tags / collaborators.
+ *
+ * Wire-named spec fields are snake-cased and spread so any field the host
+ * puts on the spec reaches the wire without this adapter enumerating it.
+ * metadataTags / variables / responseFormat are pulled out FIRST because
+ * their keys are user data — snake-casing a tag named
+ * "TFY_ALPHA_ENABLE_OPENUI" would corrupt it to "_t_f_y__a_l_p_h_a__…" —
+ * and re-attached verbatim after the spread.
+ *
+ * Field order matters:
+ *  1. `...snake` — everything wire-named the host provided.
+ *  2. description / metadata_tags / collaborators — CP requires these, so
+ *     platform defaults fill in only when the host omitted them.
+ *  3. mcp_servers / skills — overwrite the spread values because catalog
+ *     mounts need remapping to gateway registry shapes (mcpMountForCp /
+ *     skillMountForCp), which plain snake-casing cannot do.
  */
 export function buildSaveAgentManifest(
     agentName: string,
@@ -613,21 +733,48 @@ export function buildSaveAgentManifest(
     const spec = normalizeAgentSpecForGateway(agentSpec);
     const mcpServers = (spec.mcpServers ?? []).map(mcpMountForCp);
     const skills = (spec.skills ?? []).map(skillMountForCp);
-    // CP AgentManifest requires description; not on FE AgentSpec yet.
-    const rawDescription = (agentSpec as { description?: unknown }).description;
-    const description = typeof rawDescription === "string" ? rawDescription : "";
+    const { metadataTags, variables, responseFormat, ...wireFields } = spec;
+    const snake = toSnakeCaseDeep(wireFields) as Record<string, unknown>;
 
     return {
         type: "truefoundry-agent",
         name: agentName,
-        description,
-        model: toSnakeCaseDeep(spec.model),
-        metadata_tags: { ...SAVE_AGENT_METADATA_TAGS },
-        collaborators: [...SAVE_AGENT_COLLABORATORS],
-        ...(spec.instructions != null ? { instructions: spec.instructions } : {}),
-        ...(spec.config != null ? { config: toSnakeCaseDeep(spec.config) } : {}),
+        ...snake,
+        description: typeof snake.description === "string" ? snake.description : "",
+        metadata_tags: metadataTags ?? { ...SAVE_AGENT_METADATA_TAGS },
+        collaborators: Array.isArray(snake.collaborators)
+            ? snake.collaborators
+            : [...SAVE_AGENT_COLLABORATORS],
+        ...(variables != null ? { variables } : {}),
+        ...(responseFormat != null
+            ? { response_format: responseFormatForCp(responseFormat) }
+            : {}),
         ...(mcpServers.length > 0 ? { mcp_servers: mcpServers } : {}),
         ...(skills.length > 0 ? { skills } : {}),
+    };
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+    return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * Normalize CP save responses into
+ * `{ agentId, versionId }`. Observed live shapes (both camelCase, wrapped):
+ *   { data: { id: "<versionId>", agentId: "<agentId>", fqn, version, … } } //agent-playground
+ *   { data: { id: "<agentId>", name, manifest } }  — no separate version //trueforge
+ * `id` is a version id only when a distinct `agentId` accompanies it;
+ * otherwise `id` is the agent itself and no version id is known.
+ */
+export function saveAgentResultFromCp(raw: unknown): TfySaveAgentResult {
+    const root = isRecord(raw) ? raw : {};
+    const data = isRecord(root.data) ? root.data : {};
+    const agentId = nonEmptyString(data.agentId) ?? nonEmptyString(data.id);
+    const versionId =
+        nonEmptyString(data.agentId) != null ? nonEmptyString(data.id) : undefined;
+    return {
+        ...(agentId != null ? { agentId } : {}),
+        ...(versionId != null ? { versionId } : {}),
     };
 }
 
@@ -638,11 +785,12 @@ export function buildSaveAgentManifest(
 export async function saveAgent(
     opts: CpCredentials,
     req: SaveAgentRequest<TfyAgentSpec>,
-): Promise<unknown> {
+): Promise<TfySaveAgentResult> {
     const manifest = buildSaveAgentManifest(req.agentName, req.agentSpec);
-    return cpFetch(opts, "/api/svc/v1/agents", {
+    const raw = await cpFetch<unknown>(opts, "/api/svc/v1/agents", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ manifest }),
     });
+    return saveAgentResultFromCp(raw);
 }

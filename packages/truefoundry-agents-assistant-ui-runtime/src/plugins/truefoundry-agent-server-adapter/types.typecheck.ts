@@ -15,6 +15,7 @@ import type {
     TfyAgentSpec,
     TfyFinishReason,
     TfyMcpServerMount,
+    TfySaveAgentResult,
     TfySkillMount,
     TfySubject,
     TfyTurn,
@@ -161,4 +162,17 @@ export const withEndTimestamp: NonNullable<
 > = {
     startTimestamp: "2026-01-01T00:00:00Z",
     endTimestamp: "2026-02-01T00:00:00Z",
+};
+
+export const savedAgent: TfyAgentSpec = {
+    model: { name: "openai-main/gpt-4.1" },
+    description: "Demo",
+    metadataTags: { env: "test" },
+    collaborators: [{ subject: "team:everyone", roleId: "agent-access" }],
+    variables: { city: "Berlin" },
+};
+
+export const saveResult: TfySaveAgentResult = {
+    agentId: "ag_1",
+    versionId: "ver_1",
 };

@@ -15,7 +15,7 @@ import {
     createTrueFoundryChatServer,
     type TrueFoundryChatServer,
 } from "./chatServer.js";
-import type { TfyAgentSpec } from "./types.js";
+import type { TfyAgentSpec, TfySaveAgentResult } from "./types.js";
 
 export type CreateTrueFoundryAgentUIServerOptions = {
     apiKey: string;
@@ -37,7 +37,7 @@ export type TrueFoundryAgentUIServer<TSpec extends TfyAgentSpec = TfyAgentSpec> 
             TfySkillSelectorEntry,
             TfyConnectorSelectorEntry,
             TfyAgentSelectorEntry,
-            unknown
+            TfySaveAgentResult
         >;
 
 function credentialsKey(opts: CreateTrueFoundryAgentUIServerOptions): string {
