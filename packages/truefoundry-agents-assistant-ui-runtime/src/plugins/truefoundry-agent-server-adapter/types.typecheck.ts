@@ -167,7 +167,7 @@ export const withEndTimestamp: NonNullable<
 export const savedAgent: TfyAgentSpec = {
     model: { name: "openai-main/gpt-4.1" },
     description: "Demo",
-    metadataTags: { env: "test" },
+    tags: { env: "test" },
     collaborators: [{ subject: "team:everyone", roleId: "agent-access" }],
     variables: { city: "Berlin" },
 };

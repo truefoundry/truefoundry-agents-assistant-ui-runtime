@@ -11,7 +11,7 @@ import {
     saveAgent,
     saveAgentResultFromCp,
     SAVE_AGENT_COLLABORATORS,
-    SAVE_AGENT_METADATA_TAGS,
+    SAVE_AGENT_TAGS,
     toCamelCaseDeep,
     toSnakeCaseDeep,
 } from "./cp.js";
@@ -468,7 +468,7 @@ describe("toSnakeCaseDeep", () => {
 });
 
 describe("buildSaveAgentManifest", () => {
-    it("spreads the snake-cased spec and defaults missing metadata_tags / collaborators", () => {
+    it("spreads the snake-cased spec and defaults missing tags / collaborators", () => {
         const manifest = buildSaveAgentManifest("my-agent", {
             model: {
                 name: "ai-foundry/claude-sonnet-4-6",
@@ -503,7 +503,7 @@ describe("buildSaveAgentManifest", () => {
                 name: "ai-foundry/claude-sonnet-4-6",
                 params: { max_tokens: 8192, reasoning_effort: "medium" },
             },
-            metadata_tags: { ...SAVE_AGENT_METADATA_TAGS },
+            tags: { ...SAVE_AGENT_TAGS },
             collaborators: [...SAVE_AGENT_COLLABORATORS],
             instructions: "Be helpful",
             config: {
@@ -528,7 +528,7 @@ describe("buildSaveAgentManifest", () => {
         });
     });
 
-    it("keeps host metadata_tags, collaborators, and extra spec fields", () => {
+    it("keeps host tags, collaborators, and extra spec fields", () => {
         const manifest = buildSaveAgentManifest("named", {
             model: {
                 name: "openai-main/gpt-4.1",
@@ -542,14 +542,14 @@ describe("buildSaveAgentManifest", () => {
                 type: "json_schema",
                 jsonSchema: { name: "answer", schema: { type: "object" } },
             },
-            metadataTags: { env: "test", owner: "platform" },
+            tags: { env: "test", owner: "platform" },
             collaborators: [
                 { subject: "user:ada@example.com", roleId: "agent-manager" },
             ],
         } as never);
 
         expect(manifest.description).toBe("My agent");
-        expect(manifest.metadata_tags).toEqual({ env: "test", owner: "platform" });
+        expect(manifest.tags).toEqual({ env: "test", owner: "platform" });
         expect(manifest.collaborators).toEqual([
             { subject: "user:ada@example.com", role_id: "agent-manager" },
         ]);
@@ -645,7 +645,7 @@ describe("saveAgent", () => {
         expect(body.manifest.type).toBe("truefoundry-agent");
         expect(body.manifest.name).toBe("my-agent");
         expect(body.manifest.model).toEqual({ name: "openai-main/gpt-4.1" });
-        expect(body.manifest.metadata_tags).toEqual(SAVE_AGENT_METADATA_TAGS);
+        expect(body.manifest.tags).toEqual(SAVE_AGENT_TAGS);
         expect(body.manifest.collaborators).toEqual([...SAVE_AGENT_COLLABORATORS]);
     });
 
@@ -709,7 +709,7 @@ describe("old saved-agent manifest round-trip", () => {
         messages: [{ role: "user", content: "Hello {{city}}" }],
         // Uppercase tag keys are the regression case: snake-casing them once
         // produced "_t_f_y__a_l_p_h_a__…" on the wire.
-        metadata_tags: {
+        tags: {
             env: "prod",
             owner: "platform",
             TFY_ALPHA_ENABLE_OPENUI: "true",
@@ -759,7 +759,7 @@ describe("old saved-agent manifest round-trip", () => {
         expect(spec?.messages).toEqual([
             { role: "user", content: "Hello {{city}}" },
         ]);
-        expect(spec?.metadataTags).toEqual({
+        expect(spec?.tags).toEqual({
             env: "prod",
             owner: "platform",
             TFY_ALPHA_ENABLE_OPENUI: "true",
@@ -793,7 +793,7 @@ describe("old saved-agent manifest round-trip", () => {
         expect(saved.messages).toEqual([
             { role: "user", content: "Hello {{city}}" },
         ]);
-        expect(saved.metadata_tags).toEqual({
+        expect(saved.tags).toEqual({
             env: "prod",
             owner: "platform",
             TFY_ALPHA_ENABLE_OPENUI: "true",

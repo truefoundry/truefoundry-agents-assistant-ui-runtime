@@ -78,7 +78,7 @@ export interface TfyAgentSpec
     > {
     responseFormat?: TruefoundryGatewayApi.ResponseFormat;
     messages?: TruefoundryGatewayApi.AgentSpecUserMessage[];
-    metadataTags?: Record<string, string>;
+    tags?: Record<string, string>;
     collaborators?: TfyCollaborator[];
 }
 

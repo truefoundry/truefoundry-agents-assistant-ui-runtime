@@ -559,7 +559,7 @@ export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undef
     // corrupts saved agents (e.g. "TFY_ALPHA…" → "tfyAlpha…" → on the next
     // save "_t_f_y__a_l_p_h_a__…").
     const variables = variablesFromCp(manifest.variables);
-    const metadataTags = stringRecordFromCp(manifest.metadata_tags);
+    const tags = stringRecordFromCp(manifest.tags);
     const responseFormat = responseFormatFromCp(manifest.response_format);
 
     return {
@@ -571,7 +571,7 @@ export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undef
         ...(variables != null ? { variables } : {}),
         ...(messages != null ? { messages } : {}),
         ...(responseFormat != null ? { responseFormat } : {}),
-        ...(metadataTags != null ? { metadataTags } : {}),
+        ...(tags != null ? { tags } : {}),
         ...(collaborators != null ? { collaborators } : {}),
         ...(config != null ? { config } : {}),
         ...(skills.length > 0 ? { skills } : {}),
@@ -627,7 +627,7 @@ export async function listAgents(
 // ---------------------------------------------------------------------------
 
 /** Platform feature flags baked into every saved agent manifest. */
-export const SAVE_AGENT_METADATA_TAGS = {
+export const SAVE_AGENT_TAGS = {
     agent: "tfy-ai-gateway-agent",
     TFY_ALPHA_ENABLE_OPENUI: "true",
     TFY_ALPHA_ENABLE_ASK_USER: "true",
@@ -713,14 +713,14 @@ function responseFormatForCp(
  *
  * Wire-named spec fields are snake-cased and spread so any field the host
  * puts on the spec reaches the wire without this adapter enumerating it.
- * metadataTags / variables / responseFormat are pulled out FIRST because
+ * tags / variables / responseFormat are pulled out FIRST because
  * their keys are user data — snake-casing a tag named
  * "TFY_ALPHA_ENABLE_OPENUI" would corrupt it to "_t_f_y__a_l_p_h_a__…" —
  * and re-attached verbatim after the spread.
  *
  * Field order matters:
  *  1. `...snake` — everything wire-named the host provided.
- *  2. description / metadata_tags / collaborators — CP requires these, so
+ *  2. description / tags / collaborators — CP requires these, so
  *     platform defaults fill in only when the host omitted them.
  *  3. mcp_servers / skills — overwrite the spread values because catalog
  *     mounts need remapping to gateway registry shapes (mcpMountForCp /
@@ -733,7 +733,7 @@ export function buildSaveAgentManifest(
     const spec = normalizeAgentSpecForGateway(agentSpec);
     const mcpServers = (spec.mcpServers ?? []).map(mcpMountForCp);
     const skills = (spec.skills ?? []).map(skillMountForCp);
-    const { metadataTags, variables, responseFormat, ...wireFields } = spec;
+    const { tags, variables, responseFormat, ...wireFields } = spec;
     const snake = toSnakeCaseDeep(wireFields) as Record<string, unknown>;
 
     return {
@@ -741,7 +741,7 @@ export function buildSaveAgentManifest(
         name: agentName,
         ...snake,
         description: typeof snake.description === "string" ? snake.description : "",
-        metadata_tags: metadataTags ?? { ...SAVE_AGENT_METADATA_TAGS },
+        tags: tags ?? { ...SAVE_AGENT_TAGS },
         collaborators: Array.isArray(snake.collaborators)
             ? snake.collaborators
             : [...SAVE_AGENT_COLLABORATORS],
