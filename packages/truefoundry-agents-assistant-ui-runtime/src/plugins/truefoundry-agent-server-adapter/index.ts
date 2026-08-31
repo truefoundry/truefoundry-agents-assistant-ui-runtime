@@ -17,9 +17,32 @@ export {
 
 export {
     type RequireApprovalToolSelectorItem,
-    type RequireApprovalToolsSelectorTag, type TfyAgentSpec, type TfyCreateSessionRequest, type TfyFinishReason, type TfyListSessionsParams, type TfyMcpServerInitInfo, type TfyMcpServerMount, type TfyMcpToolInfo,
-    type TfyModelMessageUsage, type TfyModelParams, type TfyResponseFormat, type TfyRuntimeConfig, type TfySession, type TfySkillMount, type TfySubject, type TfySystemToolInfo, type TfyThreadState, type TfyToolInfo, type TfyTurn, type TfyTurnCancelledReason, type TfyTurnState, type TfyTurnStateDoneOutput, type ToolsSelectorItem,
-    type ToolsSelectorTag
+    type RequireApprovalToolsSelectorTag,
+    type TfyAgentSpec,
+    type TfyCollaborator,
+    type TfyCreateSessionRequest,
+    type TfyFinishReason,
+    type TfyListSessionsParams,
+    type TfyMcpServerInitInfo,
+    type TfyMcpServerMount,
+    type TfyMcpToolInfo,
+    type TfyModelMessageUsage,
+    type TfyModelParams,
+    type TfyResponseFormat,
+    type TfyRuntimeConfig,
+    type TfySaveAgentResult,
+    type TfySession,
+    type TfySkillMount,
+    type TfySubject,
+    type TfySystemToolInfo,
+    type TfyThreadState,
+    type TfyToolInfo,
+    type TfyTurn,
+    type TfyTurnCancelledReason,
+    type TfyTurnState,
+    type TfyTurnStateDoneOutput,
+    type ToolsSelectorItem,
+    type ToolsSelectorTag,
 } from "./types.js";
 
 export {

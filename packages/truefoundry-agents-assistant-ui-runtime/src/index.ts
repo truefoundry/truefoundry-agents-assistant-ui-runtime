@@ -208,6 +208,8 @@ export {
     type TfyConnectorSelectorEntry,
     type TfyAgentSelectorEntry,
     type TfyAgentSpec,
+    type TfyCollaborator,
+    type TfySaveAgentResult,
     type TfySkillMount,
     type TfyMcpServerMount,
     type TfyModelParams,

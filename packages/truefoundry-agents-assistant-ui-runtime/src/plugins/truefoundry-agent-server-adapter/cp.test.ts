@@ -9,8 +9,9 @@ import {
     normalizeMcpServers,
     resolveGatewayURL,
     saveAgent,
+    saveAgentResultFromCp,
     SAVE_AGENT_COLLABORATORS,
-    SAVE_AGENT_METADATA_TAGS,
+    SAVE_AGENT_TAGS,
     toCamelCaseDeep,
     toSnakeCaseDeep,
 } from "./cp.js";
@@ -467,7 +468,7 @@ describe("toSnakeCaseDeep", () => {
 });
 
 describe("buildSaveAgentManifest", () => {
-    it("hardcodes type / metadata_tags / collaborators and snake_cases spec fields", () => {
+    it("spreads the snake-cased spec and defaults missing tags / collaborators", () => {
         const manifest = buildSaveAgentManifest("my-agent", {
             model: {
                 name: "ai-foundry/claude-sonnet-4-6",
@@ -502,7 +503,7 @@ describe("buildSaveAgentManifest", () => {
                 name: "ai-foundry/claude-sonnet-4-6",
                 params: { max_tokens: 8192, reasoning_effort: "medium" },
             },
-            metadata_tags: { ...SAVE_AGENT_METADATA_TAGS },
+            tags: { ...SAVE_AGENT_TAGS },
             collaborators: [...SAVE_AGENT_COLLABORATORS],
             instructions: "Be helpful",
             config: {
@@ -524,6 +525,45 @@ describe("buildSaveAgentManifest", () => {
                     preload: true,
                 },
             ],
+        });
+    });
+
+    it("keeps host tags, collaborators, and extra spec fields", () => {
+        const manifest = buildSaveAgentManifest("named", {
+            model: {
+                name: "openai-main/gpt-4.1",
+                params: { maxTokens: 4096, temperature: 0.2 },
+            },
+            description: "My agent",
+            instructions: "Be concise",
+            variables: { city: "Berlin" },
+            messages: [{ role: "user", content: "Hello {{city}}" }],
+            responseFormat: {
+                type: "json_schema",
+                jsonSchema: { name: "answer", schema: { type: "object" } },
+            },
+            tags: { env: "test", owner: "platform" },
+            collaborators: [
+                { subject: "user:ada@example.com", roleId: "agent-manager" },
+            ],
+        } as never);
+
+        expect(manifest.description).toBe("My agent");
+        expect(manifest.tags).toEqual({ env: "test", owner: "platform" });
+        expect(manifest.collaborators).toEqual([
+            { subject: "user:ada@example.com", role_id: "agent-manager" },
+        ]);
+        expect(manifest.variables).toEqual({ city: "Berlin" });
+        expect(manifest.messages).toEqual([
+            { role: "user", content: "Hello {{city}}" },
+        ]);
+        expect(manifest.response_format).toEqual({
+            type: "json_schema",
+            json_schema: { name: "answer", schema: { type: "object" } },
+        });
+        expect(manifest.model).toEqual({
+            name: "openai-main/gpt-4.1",
+            params: { max_tokens: 4096, temperature: 0.2 },
         });
     });
 
@@ -572,7 +612,7 @@ describe("buildSaveAgentManifest", () => {
 describe("saveAgent", () => {
     it("PUTs { manifest } to /api/svc/v1/agents", async () => {
         const fetchMock = vi.fn(async () =>
-            Response.json({ id: "ag_1", name: "my-agent" }),
+            Response.json({ data: { id: "ag_1", name: "my-agent" } }),
         );
         vi.stubGlobal("fetch", fetchMock);
 
@@ -581,10 +621,11 @@ describe("saveAgent", () => {
             {
                 agentName: "my-agent",
                 agentSpec: { model: { name: "openai-main/gpt-4.1" } },
+                intent: "create",
             },
         );
 
-        expect(result).toEqual({ id: "ag_1", name: "my-agent" });
+        expect(result).toEqual({ agentId: "ag_1" });
         expect(fetchMock).toHaveBeenCalledWith(
             "https://cp.example/api/svc/v1/agents",
             expect.objectContaining({
@@ -604,7 +645,195 @@ describe("saveAgent", () => {
         expect(body.manifest.type).toBe("truefoundry-agent");
         expect(body.manifest.name).toBe("my-agent");
         expect(body.manifest.model).toEqual({ name: "openai-main/gpt-4.1" });
-        expect(body.manifest.metadata_tags).toEqual(SAVE_AGENT_METADATA_TAGS);
+        expect(body.manifest.tags).toEqual(SAVE_AGENT_TAGS);
         expect(body.manifest.collaborators).toEqual([...SAVE_AGENT_COLLABORATORS]);
+    });
+
+    it("extracts agentId and versionId from a wrapped CP version response", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                Response.json({
+                    data: { id: "ver_9", agentId: "ag_1", name: "my-agent" },
+                }),
+            ),
+        );
+
+        const result = await saveAgent(
+            { apiKey: "key", cpURL: "https://cp.example/" },
+            {
+                agentName: "my-agent",
+                agentSpec: { model: { name: "openai-main/gpt-4.1" } },
+                intent: "update",
+            },
+        );
+
+        expect(result).toEqual({ agentId: "ag_1", versionId: "ver_9" });
+    });
+});
+
+describe("saveAgentResultFromCp", () => {
+    it("reads { data: { id, name } } (no agentId) as the agent itself", () => {
+        expect(
+            saveAgentResultFromCp({ data: { id: "ag_1", name: "my-agent" } }),
+        ).toEqual({ agentId: "ag_1" });
+    });
+
+    it("reads { data: { id, agentId } } as version + agent", () => {
+        expect(
+            saveAgentResultFromCp({ data: { id: "ver_1", agentId: "ag_2" } }),
+        ).toEqual({ agentId: "ag_2", versionId: "ver_1" });
+    });
+
+    it("returns {} for malformed payloads", () => {
+        expect(saveAgentResultFromCp(null)).toEqual({});
+        expect(saveAgentResultFromCp({ id: "not-wrapped" })).toEqual({});
+    });
+});
+
+describe("old saved-agent manifest round-trip", () => {
+    const oldManifest = {
+        type: "truefoundry-agent",
+        name: "ask-ai-agent",
+        description: "Answer questions",
+        model: {
+            name: "openai-main/gpt-4.1",
+            params: { max_tokens: 8192, reasoning_effort: "medium" },
+        },
+        instructions: "Be helpful",
+        // Variable names are user keys — `my_city` must never become `myCity`.
+        variables: {
+            city: "Berlin",
+            my_city: { default_value: "Pune", description: "home town" },
+        },
+        messages: [{ role: "user", content: "Hello {{city}}" }],
+        // Uppercase tag keys are the regression case: snake-casing them once
+        // produced "_t_f_y__a_l_p_h_a__…" on the wire.
+        tags: {
+            env: "prod",
+            owner: "platform",
+            TFY_ALPHA_ENABLE_OPENUI: "true",
+        },
+        collaborators: [
+            { subject: "team:everyone", role_id: "agent-access" },
+        ],
+        response_format: {
+            type: "json_schema",
+            json_schema: {
+                name: "answer",
+                // Schema property names are user data — `user_name` must
+                // survive both directions verbatim.
+                schema: {
+                    type: "object",
+                    properties: { user_name: { type: "string" } },
+                },
+            },
+        },
+        config: {
+            iteration_limit: 50,
+            ask_user_questions: { enabled: true },
+            sandbox: { enabled: true, file_downloads: true },
+        },
+        mcp_servers: [
+            {
+                type: "truefoundry-mcp-registry",
+                name: "gmail",
+                enable_tools: ["@read-only"],
+                preload: true,
+            },
+        ],
+        skills: [
+            {
+                type: "truefoundry-skills-registry",
+                fqn: "agent-skill:tfy/skills/web:1",
+                preload: false,
+            },
+        ],
+    };
+
+    it("reads snake_case fields into camelCase spec and writes them back", () => {
+        const spec = agentSpecFromCpManifest(oldManifest);
+        expect(spec?.description).toBe("Answer questions");
+        // User keys verbatim; `{ default_value }` records collapse to strings.
+        expect(spec?.variables).toEqual({ city: "Berlin", my_city: "Pune" });
+        expect(spec?.messages).toEqual([
+            { role: "user", content: "Hello {{city}}" },
+        ]);
+        expect(spec?.tags).toEqual({
+            env: "prod",
+            owner: "platform",
+            TFY_ALPHA_ENABLE_OPENUI: "true",
+        });
+        expect(spec?.collaborators).toEqual([
+            { subject: "team:everyone", roleId: "agent-access" },
+        ]);
+        expect(spec?.responseFormat).toEqual({
+            type: "json_schema",
+            jsonSchema: {
+                name: "answer",
+                schema: {
+                    type: "object",
+                    properties: { user_name: { type: "string" } },
+                },
+            },
+        });
+        expect(spec?.model.params).toEqual({
+            maxTokens: 8192,
+            reasoningEffort: "medium",
+        });
+        expect(spec?.config).toEqual({
+            iterationLimit: 50,
+            askUserQuestions: { enabled: true },
+            sandbox: { enabled: true, fileDownloads: true },
+        });
+
+        const saved = buildSaveAgentManifest("ask-ai-agent", spec!);
+        expect(saved.description).toBe("Answer questions");
+        expect(saved.variables).toEqual({ city: "Berlin", my_city: "Pune" });
+        expect(saved.messages).toEqual([
+            { role: "user", content: "Hello {{city}}" },
+        ]);
+        expect(saved.tags).toEqual({
+            env: "prod",
+            owner: "platform",
+            TFY_ALPHA_ENABLE_OPENUI: "true",
+        });
+        expect(saved.collaborators).toEqual([
+            { subject: "team:everyone", role_id: "agent-access" },
+        ]);
+        expect(saved.response_format).toEqual({
+            type: "json_schema",
+            json_schema: {
+                name: "answer",
+                schema: {
+                    type: "object",
+                    properties: { user_name: { type: "string" } },
+                },
+            },
+        });
+        expect(saved.model).toEqual({
+            name: "openai-main/gpt-4.1",
+            params: { max_tokens: 8192, reasoning_effort: "medium" },
+        });
+        expect(saved.config).toEqual({
+            iteration_limit: 50,
+            ask_user_questions: { enabled: true },
+            sandbox: { enabled: true, file_downloads: true },
+        });
+        expect(saved.mcp_servers).toEqual([
+            {
+                type: "truefoundry-mcp-registry",
+                name: "gmail",
+                enable_tools: ["@read-only"],
+                preload: true,
+            },
+        ]);
+        expect(saved.skills).toEqual([
+            {
+                type: "truefoundry-skills-registry",
+                fqn: "agent-skill:tfy/skills/web:1",
+                preload: false,
+            },
+        ]);
     });
 });

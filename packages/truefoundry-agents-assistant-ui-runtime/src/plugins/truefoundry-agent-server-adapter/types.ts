@@ -16,6 +16,7 @@ import type {
     AgentSpec,
     CreateSessionRequest,
     ListSessionsParams,
+    SaveAgentResult,
     Session,
     Turn,
     TurnState,
@@ -63,6 +64,11 @@ export type TfyMcpServerMount = RuntimeMcpServerMount & TruefoundryGatewayApi.Mc
 // AgentSpec — the concrete TrueFoundry agent definition
 // ---------------------------------------------------------------------------
 
+export interface TfyCollaborator {
+    subject: string;
+    roleId: string;
+}
+
 export interface TfyAgentSpec
     extends AgentSpec<
         TruefoundryGatewayApi.Model,
@@ -72,7 +78,11 @@ export interface TfyAgentSpec
     > {
     responseFormat?: TruefoundryGatewayApi.ResponseFormat;
     messages?: TruefoundryGatewayApi.AgentSpecUserMessage[];
+    tags?: Record<string, string>;
+    collaborators?: TfyCollaborator[];
 }
+
+export type TfySaveAgentResult = SaveAgentResult;
 
 // ---------------------------------------------------------------------------
 // Turn — runtime base narrowed to the gateway's concrete state shapes
