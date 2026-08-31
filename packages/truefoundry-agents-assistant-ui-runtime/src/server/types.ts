@@ -180,10 +180,12 @@ export type PageParams = {
 };
 
 export interface ListSessionsParams extends PageParams {
-  /** Host-owned agent identity filter. Hosts that key agents by name pass that name here. */
+  /** Host-owned agent identity filter. Omit for all sessions (current user). */
   agentId?: string;
-  /** Host-specific filter (e.g. TFY startTimestamp). */
+  /** Inclusive lower bound on session activity (ISO-8601). */
   startTimestamp?: string;
+  /** Inclusive upper bound on session activity (ISO-8601). */
+  endTimestamp?: string;
 }
 
 export type PreviousTurnIdInput = "auto" | "none" | string;
@@ -229,11 +231,26 @@ export type TurnInputItem =
 
 export type TurnStateRunning = { status: "running" };
 
+/**
+ * Aggregated token metrics on a finished turn (`turn.done.state.metrics`).
+ * Host maps wire snake_case (`total_input_tokens`, …) → camelCase here.
+ */
+export interface TurnDoneMetrics {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
+  totalReasoningTokens: number;
+}
+
 export type TurnStateDone = {
   status: "done";
   output?: unknown;
   requiredActions?: ActionRequiredEvent[];
   completedAt: string;
+  /** Present when the host reports per-turn token totals. */
+  metrics?: TurnDoneMetrics;
 };
 
 export type TurnStateCancelled = {
@@ -778,12 +795,120 @@ export interface CatalogServer<
   sandboxCatalog?: TSandboxCatalog;
 }
 
+// ---------------------------------------------------------------------------
+// AgentSessions — optional agent-detail shell (Overview + sessions under agent)
+// ---------------------------------------------------------------------------
+
 /**
- * Composed host port: chat + builder + optional settings catalog.
+ * Published agent identity + spec for the agent-detail Overview (read-only).
+ * Host widens `TSpec` (and may extend this DTO) for mounts / config / extras.
+ */
+export interface AgentDetail<TSpec extends AgentSpec = AgentSpec> {
+  agentId: string;
+  /** Display name (e.g. "release-notes-writer"). */
+  name: string;
+  agentSpec: TSpec;
+}
+
+/** Stream vs non-stream bodies for one language on the Use In Code tab. */
+export interface CodeSnippetSampleCode {
+  stream: string;
+  nonStream: string;
+}
+
+/**
+ * One language row for Use In Code.
+ * Host maps wire `sample_code` / `non_stream` → camelCase here.
+ */
+export interface CodeSnippet<
+  TSample extends CodeSnippetSampleCode = CodeSnippetSampleCode,
+> {
+  /** Sidebar label (e.g. "TypeScript"). */
+  labelName: string;
+  /** Highlighter / tab id (e.g. "typescript"). */
+  language: string;
+  icon?: string;
+  sampleCode: TSample;
+}
+
+/**
+ * Aggregated session metrics for the sessions list sidebar.
+ * Host maps wire snake_case (`total_turns`, `total_cost_in_usd`, …) → camelCase.
+ */
+export interface SessionListMetrics {
+  totalTurns: number;
+  totalCostInUsd: number;
+  totalDurationMs: number;
+}
+
+/**
+ * One row in the Agent Sessions list (left pane).
+ *
+ * Binding: `agentName` → named / immutable agent; `agentSpec` → mutable / draft.
+ * Host may send one, both, or neither depending on how the session was created.
+ */
+export interface SessionListEntry<TSpec extends AgentSpec = AgentSpec> {
+  id: string;
+  title?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+  metrics: SessionListMetrics;
+  /** Present when bound to a published (immutable) agent. */
+  agentName?: string | null;
+  /** Present when bound to a mutable / draft agent spec. */
+  agentSpec?: TSpec;
+}
+
+/** Params for `AgentSessionsServer.listSessionEvents` (session event timeline). */
+export interface ListSessionEventsParams extends Pick<PageParams, "limit" | "pageToken"> {
+  sessionId: string;
+}
+
+/**
+ * Optional plug-in for agent-detail UI: Overview, Use In Code, sessions list,
+ * and per-session event timeline. Omit `sessions` on `AgentUIServerPort` when
+ * the host has no agent-detail surface.
+ *
+ * Read-only — create/update/delete stay on `AgentChatServer` / `AgentBuilderServer`.
+ */
+export interface AgentSessionsServer<
+  TSpec extends AgentSpec = AgentSpec,
+  TDetail extends AgentDetail<TSpec> = AgentDetail<TSpec>,
+  TSnippet extends CodeSnippet = CodeSnippet,
+  TListEntry extends SessionListEntry<TSpec> = SessionListEntry<TSpec>,
+  TList extends ListSessionsParams = ListSessionsParams,
+> {
+  /** Fetch published agent details by id for the Overview tab. */
+  getAgent(req: { agentId: string }): Promise<TDetail>;
+  /** Fetch Use In Code snippets for the agent (one row per language). */
+  getCodeSnippets(req: { agentId: string }): Promise<TSnippet[]>;
+  /**
+   * List sessions for the current user. Pass `agentId` to scope to one agent;
+   * omit for all sessions. Use `startTimestamp` / `endTimestamp` for date filters.
+   */
+  listSessions(req?: TList): Promise<ListResult<TListEntry>>;
+  /**
+   * Fetch the session event timeline (right pane). Paginate with `pageToken`
+   * until exhausted; rebuild turns from `turn.created` / `turn.done` +
+   * nested `TurnEvent`s. Per-turn token metrics live on `turn.done.state.metrics`.
+   */
+  listSessionEvents(
+    req: ListSessionEventsParams,
+  ): Promise<ListResult<SessionEventItem>>;
+}
+
+/**
+ * Composed host port: chat + builder + optional settings catalog + optional
+ * agent-detail / sessions shell.
  *
  * `catalog` is optional — if the host passes it, settings UI can call
  * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
  * if omitted, those surfaces stay hidden.
+ *
+ * `sessions` is optional — if the host passes it, agent-detail UI can call
+ * `useAgentSessionsServer()` / Overview + sessions under an agent; if omitted,
+ * that surface stays hidden.
  *
  * trueforge-ui re-exports this as `AgentUIServer`.
  */
@@ -791,7 +916,8 @@ export type AgentUIServerPort<
   TChat extends AgentChatServer = AgentChatServer,
   TBuilder extends AgentBuilderServer = AgentBuilderServer,
   TCatalog extends CatalogServer = CatalogServer,
-> = TChat & TBuilder & { catalog?: TCatalog };
+  TSessions extends AgentSessionsServer = AgentSessionsServer,
+> = TChat & TBuilder & { catalog?: TCatalog; sessions?: TSessions };
 
 /** Host-facing alias used by trueforge-ui. */
 export type AgentUIServer = AgentUIServerPort;
