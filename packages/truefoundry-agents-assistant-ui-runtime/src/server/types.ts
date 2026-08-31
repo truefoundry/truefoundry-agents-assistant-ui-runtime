@@ -348,12 +348,14 @@ export interface AgentChatServer<
   /**
    * Reads a file the agent wrote inside its sandbox. Hosts whose download route is scoped to a
    * turn resolve the sandbox from `turnId` and ignore `sandboxId`; hosts addressing sandboxes
-   * directly use `sandboxId`.
+   * directly use `sandboxId` when the runtime was able to recover it (optional after resume when
+   * `sandbox.created` is outside the loaded history window).
    */
   downloadSandboxFile?(req: {
     sessionId: string;
     turnId: string;
-    sandboxId: string;
+    /** Present when a `sandbox.created` event was observed in session history or the live stream. */
+    sandboxId?: string;
     path: string;
   }): Promise<Blob>;
 }
