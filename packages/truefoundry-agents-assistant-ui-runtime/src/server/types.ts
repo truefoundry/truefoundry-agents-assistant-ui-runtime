@@ -953,9 +953,83 @@ export interface ScheduleServer<
   deleteSchedule(req: { id: string }): Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// AgentMetrics — optional aggregate metrics + time-series charts
+// ---------------------------------------------------------------------------
+
+export type AgentMetricChartType = "line";
+
+export interface AgentMetricChartDefinition {
+  name: string;
+  displayName: string;
+  description: string;
+  chartType: AgentMetricChartType;
+}
+
+export interface AgentMetricMeter {
+  name: string;
+  aggregateValue: number;
+  description: string;
+  unit: string;
+}
+
+export interface AgentMetricPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface AgentMetricGraphLine<
+  TPoint extends AgentMetricPoint = AgentMetricPoint,
+> {
+  name: string;
+  values: TPoint[];
+}
+
+export interface AgentMetricGraph<
+  TLine extends AgentMetricGraphLine = AgentMetricGraphLine,
+> {
+  name: string;
+  displayName: string;
+  description: string;
+  unit: string;
+  chartType: AgentMetricChartType;
+  graphLines: TLine[];
+}
+
+export interface AgentMetricChartData<
+  TGraph extends AgentMetricGraph = AgentMetricGraph,
+> {
+  step: string;
+  graphs: TGraph[];
+}
+
+export interface AgentMetricRangeRequest {
+  agentId: string;
+  startTimestamp: string;
+  endTimestamp: string;
+}
+
+export interface AgentMetricChartDataRequest
+  extends AgentMetricRangeRequest {
+  chartName: string;
+}
+
+export interface AgentMetricsServer<
+  TChart extends AgentMetricChartDefinition = AgentMetricChartDefinition,
+  TMeter extends AgentMetricMeter = AgentMetricMeter,
+  TChartData extends AgentMetricChartData = AgentMetricChartData,
+  TRangeRequest extends AgentMetricRangeRequest = AgentMetricRangeRequest,
+  TChartDataRequest extends AgentMetricChartDataRequest =
+    AgentMetricChartDataRequest,
+> {
+  getCharts(): Promise<TChart[]>;
+  getMeters(req: TRangeRequest): Promise<TMeter[]>;
+  getChartData(req: TChartDataRequest): Promise<TChartData>;
+}
+
 /**
  * Composed host port: chat + builder + optional settings catalog + optional
- * agent-detail / sessions shell + optional schedules surface.
+ * agent-detail / sessions shell + optional schedules surface + optional metrics.
  *
  * `catalog` is optional — if the host passes it, settings UI can call
  * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
@@ -969,6 +1043,9 @@ export interface ScheduleServer<
  * `useScheduleServer()` / list and manage schedules; if omitted, that surface
  * stays hidden.
  *
+ * `metrics` is optional — if the host passes it, agent-detail UI can render
+ * aggregate meter cards and time-series charts.
+ *
  * trueforge-ui re-exports this as `AgentUIServer`.
  */
 export type AgentUIServerPort<
@@ -977,7 +1054,14 @@ export type AgentUIServerPort<
   TCatalog extends CatalogServer = CatalogServer,
   TSessions extends AgentSessionsServer = AgentSessionsServer,
   TSchedules extends ScheduleServer = ScheduleServer,
-> = TChat & TBuilder & { catalog?: TCatalog; sessions?: TSessions; schedules?: TSchedules };
+  TMetrics extends AgentMetricsServer = AgentMetricsServer,
+> = TChat &
+  TBuilder & {
+    catalog?: TCatalog;
+    sessions?: TSessions;
+    schedules?: TSchedules;
+    metrics?: TMetrics;
+  };
 
 /** Host-facing alias used by trueforge-ui. */
 export type AgentUIServer = AgentUIServerPort;
