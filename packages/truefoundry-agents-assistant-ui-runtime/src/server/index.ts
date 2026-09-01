@@ -102,6 +102,12 @@ export type {
     SessionListEntry,
     ListSessionEventsParams,
     AgentSessionsServer,
+    ScheduleStatus,
+    Schedule,
+    ListSchedulesParams,
+    CreateScheduleRequest,
+    UpdateScheduleRequest,
+    ScheduleServer,
     AgentUIServerPort,
     AgentUIServer,
 } from "./types.js";

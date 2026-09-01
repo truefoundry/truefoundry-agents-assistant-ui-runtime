@@ -898,9 +898,64 @@ export interface AgentSessionsServer<
   ): Promise<ListResult<SessionEventItem>>;
 }
 
+// ---------------------------------------------------------------------------
+// Schedules — optional schedules listing + CRUD (host extends via generics)
+// ---------------------------------------------------------------------------
+
+export type ScheduleStatus = "active" | "paused";
+
+export interface Schedule {
+  id: string;
+  name: string;
+  /** Stable agent id (`AgentSelectorEntry.agentId`). */
+  agentId: string;
+  /** Display name; omit when the host only has `agentId`. */
+  agentName?: string;
+  task: string;
+  cron: string;
+  timezone: string;
+  status: ScheduleStatus;
+  lastRunAt: string | null;
+}
+
+export interface ListSchedulesParams {
+  agentId?: string;
+}
+
+export interface CreateScheduleRequest {
+  agentId: string;
+  name: string;
+  task: string;
+  cron: string;
+  timezone?: string;
+  status?: ScheduleStatus;
+}
+
+/** `agentId` is not on the base update body; hosts that allow rebinding can extend `TUpdate`. */
+export interface UpdateScheduleRequest {
+  id: string;
+  name: string;
+  task: string;
+  cron: string;
+  timezone?: string;
+  status?: ScheduleStatus;
+}
+
+export interface ScheduleServer<
+  TSchedule extends Schedule = Schedule,
+  TCreate extends CreateScheduleRequest = CreateScheduleRequest,
+  TUpdate extends UpdateScheduleRequest = UpdateScheduleRequest,
+> {
+  listSchedules(req?: ListSchedulesParams): Promise<TSchedule[]>;
+  getSchedule(req: { id: string }): Promise<TSchedule>;
+  createSchedule(req: TCreate): Promise<TSchedule>;
+  updateSchedule(req: TUpdate): Promise<TSchedule>;
+  deleteSchedule(req: { id: string }): Promise<void>;
+}
+
 /**
  * Composed host port: chat + builder + optional settings catalog + optional
- * agent-detail / sessions shell.
+ * agent-detail / sessions shell + optional schedules surface.
  *
  * `catalog` is optional — if the host passes it, settings UI can call
  * `useCatalogServer()` / show modelCatalog, connectorCatalog, and skillCatalog;
@@ -910,6 +965,10 @@ export interface AgentSessionsServer<
  * `useAgentSessionsServer()` / Overview + sessions under an agent; if omitted,
  * that surface stays hidden.
  *
+ * `schedules` is optional — if the host passes it, schedules UI can call
+ * `useScheduleServer()` / list and manage schedules; if omitted, that surface
+ * stays hidden.
+ *
  * trueforge-ui re-exports this as `AgentUIServer`.
  */
 export type AgentUIServerPort<
@@ -917,7 +976,8 @@ export type AgentUIServerPort<
   TBuilder extends AgentBuilderServer = AgentBuilderServer,
   TCatalog extends CatalogServer = CatalogServer,
   TSessions extends AgentSessionsServer = AgentSessionsServer,
-> = TChat & TBuilder & { catalog?: TCatalog; sessions?: TSessions };
+  TSchedules extends ScheduleServer = ScheduleServer,
+> = TChat & TBuilder & { catalog?: TCatalog; sessions?: TSessions; schedules?: TSchedules };
 
 /** Host-facing alias used by trueforge-ui. */
 export type AgentUIServer = AgentUIServerPort;
