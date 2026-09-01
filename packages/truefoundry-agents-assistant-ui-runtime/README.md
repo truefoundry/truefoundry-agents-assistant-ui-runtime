@@ -251,6 +251,11 @@ const server: AgentChatServer = {
 
 `ListResult<T>` is `{ data: T[]; nextPageToken?: string }` — flat token-based pagination. Optional methods: `deleteSession`, `listTurnEvents`, `subscribeToTurn`, `downloadSandboxFile`.
 
+The composed `AgentUIServer` can also expose an optional
+`AgentMetricsServer` under `metrics`. UI hosts use its `getCharts`,
+`getMeters`, and `getChartData` methods for per-agent aggregate cards and
+time-series charts; the runtime itself does not invoke this port.
+
 ### Without `subscribeToTurn`
 
 `subscribeToTurn` is what lets the runtime re-attach to a turn that is still running after a refresh. When a server omits it and a session loads with a running turn, the runtime does **not** throw. It renders the loaded history, reports the thread as running (so your UI shows a pending indicator rather than an endless skeleton), and calls `onError` with a `TurnResumeUnsupportedError`. The turn keeps running on the backend — reload the session to pick up the result.
