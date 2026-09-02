@@ -17,6 +17,8 @@ export type {
     Model,
     AgentCapabilityConfig,
     AgentSandboxConfig,
+    AgentInputTokensCompactionTrigger,
+    AgentCompactionConfig,
     AgentContextManagementConfig,
     AgentRuntimeConfig,
     AgentSpec,

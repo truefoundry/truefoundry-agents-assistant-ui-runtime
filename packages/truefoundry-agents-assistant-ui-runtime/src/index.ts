@@ -88,6 +88,8 @@ export type {
     AgentBuilderServer,
     AgentCapabilityConfig,
     AgentSandboxConfig,
+    AgentInputTokensCompactionTrigger,
+    AgentCompactionConfig,
     AgentContextManagementConfig,
     AgentRuntimeConfig,
     McpToolSelection,

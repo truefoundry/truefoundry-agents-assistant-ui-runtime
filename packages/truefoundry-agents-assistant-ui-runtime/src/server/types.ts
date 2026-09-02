@@ -121,8 +121,17 @@ export interface AgentSandboxConfig extends AgentCapabilityConfig {
   fileDownloads?: boolean;
 }
 
+export interface AgentInputTokensCompactionTrigger {
+  type: "input_tokens";
+  value: number;
+}
+
+export interface AgentCompactionConfig extends AgentCapabilityConfig {
+  trigger?: AgentInputTokensCompactionTrigger;
+}
+
 export interface AgentContextManagementConfig {
-  compaction?: AgentCapabilityConfig;
+  compaction?: AgentCompactionConfig;
   largeToolResponse?: AgentCapabilityConfig;
 }
 
