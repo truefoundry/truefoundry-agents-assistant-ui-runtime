@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.25
+
+### Breaking
+
+- **`ScheduleServer.listSchedules` returns `ListResult<TSchedule>`** instead of `TSchedule[]` (token pagination via `limit` / `pageToken` / `nextPageToken`).
+- **`ListSchedulesParams`** adds optional `agentIds`, `limit`, and `pageToken` (still accepts single `agentId`).
+
+### Added
+
+- **`ScheduleRun` / `ScheduleRunStatus` / `CreateScheduleRunRequest`** — flat run DTOs for last-run chips and manual “run now”.
+- **`ScheduleServer.listScheduleRuns` / `createScheduleRun`** — optional schedule-run surface for hosts that support manual triggers.
+
 ## 0.1.18
 
 ### Added
