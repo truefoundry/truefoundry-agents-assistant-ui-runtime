@@ -899,10 +899,12 @@ export interface AgentSessionsServer<
 }
 
 // ---------------------------------------------------------------------------
-// Schedules — optional schedules listing + CRUD (host extends via generics)
+// Schedules — optional schedules listing + CRUD + manual runs (host extends)
 // ---------------------------------------------------------------------------
 
 export type ScheduleStatus = "active" | "paused";
+
+export type ScheduleRunStatus = "scheduled" | "triggered" | "failed";
 
 export interface Schedule {
   id: string;
@@ -918,8 +920,22 @@ export interface Schedule {
   lastRunAt: string | null;
 }
 
-export interface ListSchedulesParams {
+/** Flat schedule-run DTO (ISO-8601 timestamps; host maps from wire Dates). */
+export interface ScheduleRun {
+  id: string;
+  scheduleId: string;
+  name: string;
+  scheduledFor: string;
+  status: ScheduleRunStatus;
+  triggeredAt: string | null;
+  triggeredBy: string;
+}
+
+export interface ListSchedulesParams
+  extends Pick<PageParams, "limit" | "pageToken"> {
   agentId?: string;
+  /** Multi-agent filter; combined with `agentId` when both are set. */
+  agentIds?: string[];
 }
 
 export interface CreateScheduleRequest {
@@ -941,16 +957,23 @@ export interface UpdateScheduleRequest {
   status?: ScheduleStatus;
 }
 
+export interface CreateScheduleRunRequest {
+  scheduleId: string;
+}
+
 export interface ScheduleServer<
   TSchedule extends Schedule = Schedule,
   TCreate extends CreateScheduleRequest = CreateScheduleRequest,
   TUpdate extends UpdateScheduleRequest = UpdateScheduleRequest,
+  TRun extends ScheduleRun = ScheduleRun,
 > {
-  listSchedules(req?: ListSchedulesParams): Promise<TSchedule[]>;
+  listSchedules(req?: ListSchedulesParams): Promise<ListResult<TSchedule>>;
   getSchedule(req: { id: string }): Promise<TSchedule>;
   createSchedule(req: TCreate): Promise<TSchedule>;
   updateSchedule(req: TUpdate): Promise<TSchedule>;
   deleteSchedule(req: { id: string }): Promise<void>;
+  listScheduleRuns(req: { scheduleId: string }): Promise<TRun[]>;
+  createScheduleRun(req: CreateScheduleRunRequest): Promise<TRun>;
 }
 
 // ---------------------------------------------------------------------------
