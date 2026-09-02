@@ -7,6 +7,18 @@
 - Advanced agent configuration contracts for model limits, model parameters, runtime settings, and lazy MCP tool selection.
 - TrueFoundry builder adapter enrichment for model metadata and MCP tool discovery.
 
+## 0.1.25
+
+### Breaking
+
+- **`ScheduleServer.listSchedules` returns `ListResult<TSchedule>`** instead of `TSchedule[]` (token pagination via `limit` / `pageToken` / `nextPageToken`).
+- **`ListSchedulesParams`** adds optional `agentIds`, `limit`, and `pageToken` (still accepts single `agentId`).
+
+### Added
+
+- **`ScheduleRun` / `ScheduleRunStatus` / `CreateScheduleRunRequest`** — flat run DTOs for last-run chips and manual “run now”.
+- **`ScheduleServer.listScheduleRuns` / `createScheduleRun`** — optional schedule-run surface for hosts that support manual triggers.
+
 ## 0.1.18
 
 ### Added
