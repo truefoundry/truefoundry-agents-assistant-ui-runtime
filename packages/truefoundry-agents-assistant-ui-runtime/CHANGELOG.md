@@ -4,7 +4,7 @@
 
 ### Added
 
-- Advanced agent configuration contracts for model limits and optional costs, model parameters, runtime settings, and lazy MCP tool selection.
+- Advanced agent configuration contracts for model limits, model parameters, runtime settings, and lazy MCP tool selection.
 - TrueFoundry builder adapter enrichment for model metadata and MCP tool discovery.
 
 ## 0.1.18

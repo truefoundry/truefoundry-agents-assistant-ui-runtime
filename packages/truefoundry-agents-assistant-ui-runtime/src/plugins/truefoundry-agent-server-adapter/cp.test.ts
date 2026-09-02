@@ -231,10 +231,6 @@ describe("normalizeEnabledModels", () => {
                                             context_window: 200_000,
                                             max_output_tokens: 8_192,
                                         },
-                                        pricing: {
-                                            input_cost_per_million_tokens: 3,
-                                            output_cost_per_million_tokens: 15,
-                                        },
                                     },
                                 },
                             },
@@ -247,8 +243,6 @@ describe("normalizeEnabledModels", () => {
                 properties: {
                     contextLength: 200_000,
                     maxOutputTokens: 8_192,
-                    inputCostPerMillionTokens: 3,
-                    outputCostPerMillionTokens: 15,
                 },
             }),
         ]);

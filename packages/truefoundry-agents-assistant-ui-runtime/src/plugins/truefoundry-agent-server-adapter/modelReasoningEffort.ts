@@ -27,24 +27,6 @@ export type ModelMetadata = {
         max_output_tokens?: number;
         max_tokens?: number;
     };
-    input_cost_per_million_tokens?: number;
-    output_cost_per_million_tokens?: number;
-    cost?: {
-        input?: number;
-        output?: number;
-        input_per_million_tokens?: number;
-        output_per_million_tokens?: number;
-        input_cost_per_million_tokens?: number;
-        output_cost_per_million_tokens?: number;
-    };
-    pricing?: {
-        input?: number;
-        output?: number;
-        input_per_million_tokens?: number;
-        output_per_million_tokens?: number;
-        input_cost_per_million_tokens?: number;
-        output_cost_per_million_tokens?: number;
-    };
     /** Provider-wide defaults; reasoning_effort often lives only here. */
     defaultProviderParams?: {
         params?: ModelParamDef[];

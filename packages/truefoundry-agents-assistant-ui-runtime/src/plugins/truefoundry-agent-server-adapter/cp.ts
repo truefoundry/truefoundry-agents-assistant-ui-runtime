@@ -284,34 +284,10 @@ function modelPropertiesFromMetadata(
         meta.limits?.max_output_tokens,
         meta.limits?.max_tokens,
     ]);
-    const inputCostPerMillionTokens = firstNumber([
-        meta.input_cost_per_million_tokens,
-        meta.cost?.input_cost_per_million_tokens,
-        meta.cost?.input_per_million_tokens,
-        meta.cost?.input,
-        meta.pricing?.input_cost_per_million_tokens,
-        meta.pricing?.input_per_million_tokens,
-        meta.pricing?.input,
-    ]);
-    const outputCostPerMillionTokens = firstNumber([
-        meta.output_cost_per_million_tokens,
-        meta.cost?.output_cost_per_million_tokens,
-        meta.cost?.output_per_million_tokens,
-        meta.cost?.output,
-        meta.pricing?.output_cost_per_million_tokens,
-        meta.pricing?.output_per_million_tokens,
-        meta.pricing?.output,
-    ]);
     return {
         ...(reasoningEfforts != null ? { reasoningEfforts } : {}),
         ...(contextLength != null ? { contextLength } : {}),
         ...(maxOutputTokens != null ? { maxOutputTokens } : {}),
-        ...(inputCostPerMillionTokens != null
-            ? { inputCostPerMillionTokens }
-            : {}),
-        ...(outputCostPerMillionTokens != null
-            ? { outputCostPerMillionTokens }
-            : {}),
     };
 }
 

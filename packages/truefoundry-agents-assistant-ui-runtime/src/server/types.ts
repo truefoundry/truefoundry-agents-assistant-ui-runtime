@@ -25,11 +25,9 @@ export interface ModelProperties {
   reasoningEfforts?: string[];
   contextLength?: number;
   maxOutputTokens?: number;
-  inputCostPerMillionTokens?: number;
-  outputCostPerMillionTokens?: number;
 }
 
-/** Model selector row. Host extends for apiModel, modelId, pricing, etc. */
+/** Model selector row. Host extends for apiModel, modelId, etc. */
 export interface ModelSelectorEntry<
   TProvider extends ProviderEntry = ProviderEntry,
   TProperties extends ModelProperties = ModelProperties,
