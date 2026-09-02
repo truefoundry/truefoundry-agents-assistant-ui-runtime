@@ -3,6 +3,7 @@ import {
     listAgents,
     listAgentSkills,
     listEnabledModels,
+    listMcpTools,
     listMcpServers,
     resolveGatewayURL,
     saveAgent,
@@ -86,6 +87,7 @@ export async function createTrueFoundryAgentUIServer<
             getModels: () => listEnabledModels(cp),
             getSkills: () => listAgentSkills(cp),
             getMcp: () => listMcpServers(cp),
+            getMcpTools: (req) => listMcpTools(cp, req),
             searchAgents: (req) => listAgents(cp, req),
             saveAgent: (req) => saveAgent(cp, req),
         };
