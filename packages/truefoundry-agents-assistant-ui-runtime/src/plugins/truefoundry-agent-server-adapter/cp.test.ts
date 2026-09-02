@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     agentSpecFromCpManifest,
     buildSaveAgentManifest,
+    enrichModelsWithReasoningEfforts,
+    mcpToolsPath,
     normalizeAgents,
     normalizeAgentSkills,
     normalizeEnabledModels,
     normalizeMcpServers,
+    normalizeMcpTools,
     resolveGatewayURL,
     saveAgent,
     saveAgentResultFromCp,
@@ -15,6 +18,7 @@ import {
     toCamelCaseDeep,
     toSnakeCaseDeep,
 } from "./cp.js";
+import { createTrueFoundryAgentUIServer } from "./createTrueFoundryAgentUIServer.js";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -200,6 +204,94 @@ describe("normalizeEnabledModels", () => {
     it("returns [] for empty object", () => {
         expect(normalizeEnabledModels({})).toEqual([]);
     });
+
+    it("adds optional limits and per-million-token costs from provider metadata", () => {
+        const models = normalizeEnabledModels({
+            anthropic: {
+                main: [
+                    {
+                        provider: "anthropic",
+                        model_id: "claude-sonnet",
+                        model_fqn: "main/claude-sonnet",
+                    },
+                ],
+            },
+        });
+
+        expect(
+            enrichModelsWithReasoningEfforts(models, {
+                data: [
+                    {
+                        type: "provider-account/anthropic",
+                        integrations: [
+                            {
+                                metadata: {
+                                    "claude-sonnet": {
+                                        limits: {
+                                            context_window: 200_000,
+                                            max_output_tokens: 8_192,
+                                        },
+                                        pricing: {
+                                            input_cost_per_million_tokens: 3,
+                                            output_cost_per_million_tokens: 15,
+                                        },
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            }),
+        ).toEqual([
+            expect.objectContaining({
+                properties: {
+                    contextLength: 200_000,
+                    maxOutputTokens: 8_192,
+                    inputCostPerMillionTokens: 3,
+                    outputCostPerMillionTokens: 15,
+                },
+            }),
+        ]);
+    });
+
+    it("drops malformed optional model metadata", () => {
+        const models = normalizeEnabledModels({
+            openai: {
+                main: [
+                    {
+                        provider: "openai",
+                        model_id: "gpt",
+                        model_fqn: "main/gpt",
+                    },
+                ],
+            },
+        });
+
+        expect(
+            enrichModelsWithReasoningEfforts(models, {
+                data: [
+                    {
+                        type: "provider-account/openai",
+                        integrations: [
+                            {
+                                metadata: {
+                                    gpt: {
+                                        limits: {
+                                            context_window: "large",
+                                            max_output_tokens: -1,
+                                        },
+                                        cost: {
+                                            input: Number.POSITIVE_INFINITY,
+                                        },
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            }),
+        ).toEqual(models);
+    });
 });
 
 describe("normalizeAgentSkills", () => {
@@ -275,6 +367,69 @@ describe("normalizeMcpServers", () => {
                 authenticated: true,
             },
         ]);
+    });
+});
+
+describe("normalizeMcpTools", () => {
+    it("normalizes valid rows, falls back id to name, and dedupes", () => {
+        expect(
+            normalizeMcpTools({
+                data: [
+                    { id: "tool_1", name: "search", description: "Search" },
+                    { name: "read" },
+                    { id: "duplicate", name: "search" },
+                    { id: "missing-name" },
+                ],
+            }),
+        ).toEqual([
+            { id: "tool_1", name: "search", description: "Search" },
+            { id: "read", name: "read" },
+        ]);
+    });
+
+    it("accepts array and tools-wrapped responses", () => {
+        expect(normalizeMcpTools([{ name: "array-tool" }])).toEqual([
+            { id: "array-tool", name: "array-tool" },
+        ]);
+        expect(normalizeMcpTools({ tools: [{ name: "wrapped-tool" }] })).toEqual([
+            { id: "wrapped-tool", name: "wrapped-tool" },
+        ]);
+    });
+});
+
+describe("createTrueFoundryAgentUIServer getMcpTools", () => {
+    it("wires the encoded connector id to the CP tools endpoint", async () => {
+        const fetchMock = vi.fn(async () =>
+            Response.json({ data: [{ name: "list_repositories" }] }),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        const server = await createTrueFoundryAgentUIServer({
+            apiKey: "key",
+            cpURL: "https://cp.example/",
+            gatewayURL: "https://gateway.example/acme",
+        });
+        const getMcpTools = server.getMcpTools;
+        if (getMcpTools == null) {
+            throw new Error("Expected TrueFoundry server to provide getMcpTools");
+        }
+
+        await expect(
+            getMcpTools({ connectorId: "mcp/github enterprise" }),
+        ).resolves.toEqual([
+            { id: "list_repositories", name: "list_repositories" },
+        ]);
+        expect(mcpToolsPath("mcp/github enterprise")).toBe(
+            "/api/svc/v1/mcp-servers/mcp%2Fgithub%20enterprise/tools",
+        );
+        expect(fetchMock).toHaveBeenCalledWith(
+            "https://cp.example/api/svc/v1/mcp-servers/mcp%2Fgithub%20enterprise/tools",
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    Authorization: "Bearer key",
+                }),
+            }),
+        );
     });
 });
 

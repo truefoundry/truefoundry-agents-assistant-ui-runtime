@@ -23,6 +23,10 @@ export interface ProviderEntry {
 
 export interface ModelProperties {
   reasoningEfforts?: string[];
+  contextLength?: number;
+  maxOutputTokens?: number;
+  inputCostPerMillionTokens?: number;
+  outputCostPerMillionTokens?: number;
 }
 
 /** Model selector row. Host extends for apiModel, modelId, pricing, etc. */
@@ -98,6 +102,10 @@ export type McpServerMount = object;
 export interface ModelParams {
   maxTokens?: number;
   reasoningEffort?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  parallelToolCalls?: boolean;
 }
 
 export interface Model {
@@ -109,7 +117,19 @@ export interface AgentCapabilityConfig {
   enabled?: boolean;
 }
 
+export interface AgentSandboxConfig extends AgentCapabilityConfig {
+  fileDownloads?: boolean;
+}
+
+export interface AgentContextManagementConfig {
+  compaction?: AgentCapabilityConfig;
+  largeToolResponse?: AgentCapabilityConfig;
+}
+
 export interface AgentRuntimeConfig {
+  iterationLimit?: number;
+  sandbox?: AgentSandboxConfig;
+  contextManagement?: AgentContextManagementConfig;
   generativeUi?: AgentCapabilityConfig;
   dynamicSubAgents?: AgentCapabilityConfig;
   askUserQuestions?: AgentCapabilityConfig;
@@ -376,6 +396,13 @@ export interface SaveAgentResult {
   sessionUpdatedAt?: string;
 }
 
+/** MCP tool row used by the per-agent connector tool selector. */
+export interface McpToolSelection {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 /**
  * Builder feature flags — atoms gate sandbox / skill / settings surfaces on these.
  */
@@ -400,11 +427,13 @@ export interface AgentBuilderServer<
   TSave = SaveAgentResult,
   TCapabilities extends AgentBuilderCapabilitiesResponse =
     AgentBuilderCapabilitiesResponse,
+  TMcpTool extends McpToolSelection = McpToolSelection,
 > {
   getCapabilities(): Promise<TCapabilities>;
   getModels(): Promise<TModel[]>;
   getSkills(): Promise<TSkill[]>;
   getMcp(): Promise<TMcp[]>;
+  getMcpTools?(req: { connectorId: string }): Promise<TMcpTool[]>;
   searchAgents(req?: SearchAgentSelectorParams): Promise<TAgent[]>;
   saveAgent(req: SaveAgentRequest<TSpec>): Promise<TSave>;
   deleteAgent?(req: { agentName: string }): Promise<void>;

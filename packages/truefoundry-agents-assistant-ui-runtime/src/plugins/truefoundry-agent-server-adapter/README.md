@@ -92,6 +92,7 @@ Implemented against Control Plane HTTP (not the gateway SDK):
 | `getModels` | `GET /api/svc/v1/llm-gateway/model/enabled` (+ `GET /api/svc/v1/provider-accounts/providers` for `properties.reasoningEfforts`) |
 | `getSkills` | `GET /api/ml/v1/agent-skills?include_empty_agent_skills=false` |
 | `getMcp` | `GET /api/svc/v1/mcp-servers` |
+| `getMcpTools` | `GET /api/svc/v1/mcp-servers/{connectorId}/tools` |
 | `searchAgents` | `GET /api/svc/v1/agents?type=truefoundry-agent&…` |
 | `saveAgent` | `PUT /api/svc/v1/agents` (`{ manifest }`, upsert by name) |
 

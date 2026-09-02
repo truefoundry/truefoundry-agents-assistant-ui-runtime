@@ -8,6 +8,8 @@
 import type {
     AgentSelectorEntry,
     ConnectorSelectorEntry,
+    McpToolSelection,
+    ModelProperties,
     ModelSelectorEntry,
     SaveAgentRequest,
     SearchAgentSelectorParams,
@@ -17,6 +19,7 @@ import {
     buildMetadataMap,
     metadataKey,
     reasoningEffortsForModel,
+    type ModelMetadata,
 } from "./modelReasoningEffort.js";
 import { normalizeAgentSpecForGateway } from "./normalizeAgentSpec.js";
 import type { TfyAgentSpec, TfySaveAgentResult } from "./types.js";
@@ -246,12 +249,70 @@ export function enrichModelsWithReasoningEfforts(
             meta,
             model.provider.name,
         );
-        if (reasoningEfforts == null) return model;
+        const properties = modelPropertiesFromMetadata(meta, reasoningEfforts);
+        if (Object.keys(properties).length === 0) return model;
         return {
             ...model,
-            properties: { ...model.properties, reasoningEfforts },
+            properties: { ...model.properties, ...properties },
         };
     });
+}
+
+function optionalNonNegativeNumber(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0
+        ? value
+        : undefined;
+}
+
+function firstNumber(values: unknown[]): number | undefined {
+    for (const value of values) {
+        const number = optionalNonNegativeNumber(value);
+        if (number != null) return number;
+    }
+    return undefined;
+}
+
+function modelPropertiesFromMetadata(
+    meta: ModelMetadata | undefined,
+    reasoningEfforts: string[] | undefined,
+): ModelProperties {
+    if (meta == null) {
+        return reasoningEfforts == null ? {} : { reasoningEfforts };
+    }
+    const contextLength = optionalNonNegativeNumber(meta.limits?.context_window);
+    const maxOutputTokens = firstNumber([
+        meta.limits?.max_output_tokens,
+        meta.limits?.max_tokens,
+    ]);
+    const inputCostPerMillionTokens = firstNumber([
+        meta.input_cost_per_million_tokens,
+        meta.cost?.input_cost_per_million_tokens,
+        meta.cost?.input_per_million_tokens,
+        meta.cost?.input,
+        meta.pricing?.input_cost_per_million_tokens,
+        meta.pricing?.input_per_million_tokens,
+        meta.pricing?.input,
+    ]);
+    const outputCostPerMillionTokens = firstNumber([
+        meta.output_cost_per_million_tokens,
+        meta.cost?.output_cost_per_million_tokens,
+        meta.cost?.output_per_million_tokens,
+        meta.cost?.output,
+        meta.pricing?.output_cost_per_million_tokens,
+        meta.pricing?.output_per_million_tokens,
+        meta.pricing?.output,
+    ]);
+    return {
+        ...(reasoningEfforts != null ? { reasoningEfforts } : {}),
+        ...(contextLength != null ? { contextLength } : {}),
+        ...(maxOutputTokens != null ? { maxOutputTokens } : {}),
+        ...(inputCostPerMillionTokens != null
+            ? { inputCostPerMillionTokens }
+            : {}),
+        ...(outputCostPerMillionTokens != null
+            ? { outputCostPerMillionTokens }
+            : {}),
+    };
 }
 
 export async function listEnabledModels(
@@ -369,6 +430,46 @@ export async function listMcpServers(
 ): Promise<TfyConnectorSelectorEntry[]> {
     const raw = await cpFetch<unknown>(opts, "/api/svc/v1/mcp-servers");
     return normalizeMcpServers(raw);
+}
+
+function mcpToolRows(raw: unknown): unknown[] {
+    if (Array.isArray(raw)) return raw;
+    if (!isRecord(raw)) return [];
+    if (Array.isArray(raw.data)) return raw.data;
+    if (Array.isArray(raw.tools)) return raw.tools;
+    return [];
+}
+
+export function normalizeMcpTools(raw: unknown): McpToolSelection[] {
+    const out: McpToolSelection[] = [];
+    const seen = new Set<string>();
+    for (const row of mcpToolRows(raw)) {
+        if (!isRecord(row)) continue;
+        const name = nonEmptyString(row.name);
+        if (name == null || seen.has(name)) continue;
+        seen.add(name);
+        const id = nonEmptyString(row.id) ?? name;
+        const description = nonEmptyString(row.description);
+        out.push({
+            id,
+            name,
+            ...(description != null ? { description } : {}),
+        });
+    }
+    return out;
+}
+
+/** CP route used by the connector detail UI to enumerate MCP tools. */
+export function mcpToolsPath(connectorId: string): string {
+    return `/api/svc/v1/mcp-servers/${encodeURIComponent(connectorId)}/tools`;
+}
+
+export async function listMcpTools(
+    opts: CpCredentials,
+    req: { connectorId: string },
+): Promise<McpToolSelection[]> {
+    const raw = await cpFetch<unknown>(opts, mcpToolsPath(req.connectorId));
+    return normalizeMcpTools(raw);
 }
 
 // ---------------------------------------------------------------------------
