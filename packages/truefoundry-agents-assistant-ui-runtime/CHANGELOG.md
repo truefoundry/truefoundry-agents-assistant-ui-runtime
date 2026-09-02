@@ -1,12 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- Advanced agent configuration contracts for model limits, model parameters, runtime settings, and lazy MCP tool selection.
-- TrueFoundry builder adapter enrichment for model metadata and MCP tool discovery.
-
 ## 0.1.25
 
 ### Breaking
@@ -18,6 +11,9 @@
 
 - **`ScheduleRun` / `ScheduleRunStatus` / `CreateScheduleRunRequest`** — flat run DTOs for last-run chips and manual “run now”.
 - **`ScheduleServer.listScheduleRuns` / `createScheduleRun`** — optional schedule-run surface for hosts that support manual triggers.
+- Advanced agent configuration contracts for model limits, model parameters, runtime settings, and lazy MCP tool selection (`McpToolSelection`, optional `AgentBuilderServer.getMcpTools`).
+- TrueFoundry builder adapter enrichment for model metadata and MCP tool discovery.
+- `AgentInputTokensCompactionTrigger` and `AgentCompactionConfig` types.
 
 ## 0.1.18
 
