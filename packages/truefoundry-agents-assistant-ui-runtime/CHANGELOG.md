@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.27
+
+### Added
+
+- **`AgentBuilderServer.listMcp?(req?: PageParams): Promise<ListResult<TMcp>>`** — optional token-paginated MCP catalog for picker infinite scroll. Hosts that omit it keep using `getMcp()`.
+
 ## 0.1.25
 
 ### Breaking
