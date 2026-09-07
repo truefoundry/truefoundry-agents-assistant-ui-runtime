@@ -878,7 +878,7 @@ export interface CodeSnippet<
  */
 export interface SessionListMetrics {
   totalTurns: number;
-  totalCostInUsd: number;
+  totalCostInUsd?: number;
   totalDurationMs: number;
 }
 
