@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.27
+
+### Added
+
+- Optional `PermissionsServer` port for batch MANAGE/DELETE grants on agents, schedules, and sessions.
+
 ## 0.1.25
 
 ### Breaking
