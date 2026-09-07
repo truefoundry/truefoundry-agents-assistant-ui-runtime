@@ -1018,6 +1018,30 @@ export interface ScheduleServer<
 }
 
 // ---------------------------------------------------------------------------
+// Permissions — optional resource mutation grants
+// ---------------------------------------------------------------------------
+
+export type PermissionResourceType = "agent" | "schedule" | "session";
+
+export type ResourcePermission = "MANAGE" | "DELETE";
+
+export interface ListPermissionsRequest {
+  resourceType: PermissionResourceType;
+  resourceIds: string[];
+}
+
+export interface ListPermissionsResponse {
+  data: Record<string, ResourcePermission[]>;
+}
+
+export interface PermissionsServer<
+  TRequest extends ListPermissionsRequest = ListPermissionsRequest,
+  TResponse extends ListPermissionsResponse = ListPermissionsResponse,
+> {
+  listPermissions(req: TRequest): Promise<TResponse>;
+}
+
+// ---------------------------------------------------------------------------
 // AgentMetrics — optional aggregate metrics + time-series charts
 // ---------------------------------------------------------------------------
 
@@ -1119,12 +1143,14 @@ export type AgentUIServerPort<
   TSessions extends AgentSessionsServer = AgentSessionsServer,
   TSchedules extends ScheduleServer = ScheduleServer,
   TMetrics extends AgentMetricsServer = AgentMetricsServer,
+  TPermissions extends PermissionsServer = PermissionsServer,
 > = TChat &
   TBuilder & {
     catalog?: TCatalog;
     sessions?: TSessions;
     schedules?: TSchedules;
     metrics?: TMetrics;
+    permissions?: TPermissions;
   };
 
 /** Host-facing alias used by trueforge-ui. */

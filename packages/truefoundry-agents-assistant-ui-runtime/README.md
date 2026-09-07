@@ -256,6 +256,11 @@ The composed `AgentUIServer` can also expose an optional
 `getMeters`, and `getChartData` methods for per-agent aggregate cards and
 time-series charts; the runtime itself does not invoke this port.
 
+Hosts can expose an optional `PermissionsServer` under `permissions` to return
+`MANAGE` / `DELETE` grants for agent, schedule, and session ids. Omitting the
+port means permission-aware consumers make no request and retain their default
+behavior.
+
 ### Without `subscribeToTurn`
 
 `subscribeToTurn` is what lets the runtime re-attach to a turn that is still running after a refresh. When a server omits it and a session loads with a running turn, the runtime does **not** throw. It renders the loaded history, reports the thread as running (so your UI shows a pending indicator rather than an endless skeleton), and calls `onError` with a `TurnResumeUnsupportedError`. The turn keeps running on the backend — reload the session to pick up the result.
@@ -324,7 +329,7 @@ For contributors working inside this package. Source lives in `src/`; the publis
 
 | File | Responsibility |
 | ---- | -------------- |
-| `server/types.ts` | `AgentChatServer` + `AgentBuilderServer` + `CatalogServer` (modelCatalog/connectorCatalog/skillCatalog, optional via `AgentUIServerPort.catalog`), `AgentSpec`, session/turn/pagination types |
+| `server/types.ts` | `AgentChatServer` + `AgentBuilderServer` + optional catalog, sessions, schedules, metrics, and permissions ports; `AgentSpec`; session/turn/pagination types |
 | `server/events.ts` | Concrete turn/stream event types |
 | `draft/` | Draft-mode helpers (`mergeAgentSpec`, session bridge, draft thread-list, `useDraftAgentSpec`) |
 | `useTrueFoundryAgentRuntime.ts` | Public hook — external-store + thread-list + extras |

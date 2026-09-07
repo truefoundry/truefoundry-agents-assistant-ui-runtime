@@ -6,6 +6,12 @@
 
 - **`AgentBuilderServer.listMcp?(req?: PageParams): Promise<ListResult<TMcp>>`** — optional token-paginated MCP catalog for picker infinite scroll. Hosts that omit it keep using `getMcp()`.
 
+## 0.1.28
+
+### Added
+
+- Optional `PermissionsServer` port for batch MANAGE/DELETE grants on agents, schedules, and sessions.
+
 ## 0.1.25
 
 ### Breaking
