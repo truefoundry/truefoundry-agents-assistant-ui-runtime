@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.30
+
+### Changed
+
+- `SessionListMetrics.totalCostInUsd` is optional so hosts can omit unavailable session costs.
+
 ## 0.1.29
 
 ### Added
