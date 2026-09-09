@@ -47,14 +47,11 @@ describe("createTrueFoundryThreadListAdapter", () => {
 
         const result = await adapter.list();
 
-        expect(listSessions).toHaveBeenCalledWith(
-            expect.objectContaining({
-                agentId: "my-agent",
-                limit: 20,
-                pageToken: undefined,
-                startTimestamp: expect.any(String),
-            }),
-        );
+        expect(listSessions).toHaveBeenCalledWith({
+            limit: 20,
+            pageToken: undefined,
+            startTimestamp: expect.any(String),
+        });
         expect(result.threads).toEqual([
             {
                 status: "regular",

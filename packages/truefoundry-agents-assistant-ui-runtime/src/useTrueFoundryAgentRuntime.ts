@@ -3,6 +3,7 @@
 import {
     pickExternalStoreSharedOptions,
     type AppendMessage,
+    type RemoteThreadListAdapter,
     type ToolExecutionStatus,
 } from "@assistant-ui/core";
 import {
@@ -12,7 +13,7 @@ import {
 } from "@assistant-ui/core/react";
 import { useAui, useAuiState } from "@assistant-ui/store";
 import type { MutableRefObject } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentSpec } from "./server/types.js";
 import {
@@ -39,6 +40,29 @@ import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { resolveTrueFoundryAgentRuntimeOptions } from "./types.js";
 import { useDraftAgentSpec } from "./draft/useDraftAgentSpec.js";
 import { useTrueFoundryAgentMessages } from "./useTrueFoundryAgentMessages.js";
+
+/**
+ * Wraps the mode-specific adapter behind a stable object so assistant-ui does
+ * not treat a draft/named mode switch as an adapter change (which would reset
+ * loaded thread-list pages). Each call reads the ref, so behavior always
+ * follows the current mode.
+ */
+function createDelegatingThreadListAdapter(
+    adapterRef: MutableRefObject<RemoteThreadListAdapter>,
+): RemoteThreadListAdapter {
+    return {
+        list: (params) => adapterRef.current.list(params),
+        initialize: (threadId) => adapterRef.current.initialize(threadId),
+        fetch: (threadId) => adapterRef.current.fetch(threadId),
+        rename: (remoteId, newTitle) =>
+            adapterRef.current.rename(remoteId, newTitle),
+        archive: (remoteId) => adapterRef.current.archive(remoteId),
+        unarchive: (remoteId) => adapterRef.current.unarchive(remoteId),
+        delete: (remoteId) => adapterRef.current.delete(remoteId),
+        generateTitle: (remoteId, messages) =>
+            adapterRef.current.generateTitle(remoteId, messages),
+    };
+}
 
 function useTrueFoundryAgentRuntimeImpl(
     options: ReturnType<typeof resolveTrueFoundryAgentRuntimeOptions>,
@@ -285,7 +309,9 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     const agentMode = agent.mode;
     const namedAgentName = agent.mode === "named" ? agent.agentName : undefined;
     const listSessionsAgentId = resolved.listSessionsAgentId;
-    const threadListAdapter = useMemo(() => {
+    // Mode-specific adapter: rebuilt on draft/named switches, but never handed
+    // to assistant-ui directly — it is reached through the delegating adapter below.
+    const modeThreadListAdapter = useMemo(() => {
         if (agentMode === "draft") {
             const draftAgent = agent as Extract<typeof agent, { mode: "draft" }>;
             return createTrueFoundryDraftThreadListAdapter({
@@ -302,6 +328,16 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [agentMode, namedAgentName, listSessionsAgentId, server]);
+    const modeThreadListAdapterRef = useRef(modeThreadListAdapter);
+    useEffect(() => {
+        modeThreadListAdapterRef.current = modeThreadListAdapter;
+    }, [modeThreadListAdapter]);
+    // Identity stays stable across mode switches; a new server or session
+    // filter is a genuinely different list, so those do reset it.
+    const threadListAdapter = useMemo(
+        () => createDelegatingThreadListAdapter(modeThreadListAdapterRef),
+        [listSessionsAgentId, server],
+    );
 
     return useRemoteThreadListRuntime({
         allowNesting: true,
