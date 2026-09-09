@@ -100,7 +100,7 @@ export function turnToSessionRecord(turn: Turn): SessionTurnRecord {
     const userText = extractTurnUserText(turn.input);
     return {
         id: turn.id,
-        ...(userText ? { userText } : {}),
+        ...(userText !== undefined ? { userText } : {}),
         createdAt: turn.createdAt,
         state: turn.state,
         input: turn.input,
@@ -118,7 +118,7 @@ export function sessionEventsToSessionRecord(
     const userText = extractTurnUserText(createdEvent.input);
     return {
         id: turnId,
-        ...(userText ? { userText } : {}),
+        ...(userText !== undefined ? { userText } : {}),
         createdAt: createdEvent.createdAt,
         state: doneEvent.state,
         input: createdEvent.input,

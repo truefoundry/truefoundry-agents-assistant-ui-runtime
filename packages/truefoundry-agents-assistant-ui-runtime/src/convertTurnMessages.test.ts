@@ -37,6 +37,7 @@ import { findPausedAssistantMessage } from "./requiredActionInputs.js";
 import {
     createEmptySessionSnapshot,
     replaceSessionSnapshot,
+    turnToSessionRecord,
 } from "./sessionSnapshot.js";
 import { TOOL_APPROVAL_THREAD_ID_CUSTOM_KEY } from "./toolApproval.js";
 import {
@@ -315,6 +316,35 @@ describe("convertTurnMessages", () => {
                 ),
             ).toEqual([
                 { type: "text", text: "see attached" },
+                {
+                    type: "file",
+                    name: "doc.pdf",
+                    data: "data:application/pdf;base64,JVBERi0xLjQK",
+                },
+            ]);
+        });
+
+        it("forwards attachments without requiring text", () => {
+            expect(
+                buildUserMessageContent(
+                    appendUserMessage([], [
+                        {
+                            id: "att-1",
+                            type: "file",
+                            name: "doc.pdf",
+                            contentType: "application/pdf",
+                            status: { type: "complete" },
+                            content: [
+                                {
+                                    type: "file",
+                                    mimeType: "application/pdf",
+                                    data: "JVBERi0xLjQK",
+                                },
+                            ],
+                        },
+                    ]),
+                ),
+            ).toEqual([
                 {
                     type: "file",
                     name: "doc.pdf",
@@ -1227,6 +1257,43 @@ describe("convertTurnMessages", () => {
                     },
                 ],
             });
+        });
+
+        it("projects file-only turns and their assistant response", async () => {
+            const fileData = "data:image/png;base64,AAAA";
+            const turn = mockTurn({
+                id: "turn-image",
+                createdAt,
+                input: [
+                    {
+                        type: "user.message",
+                        content: [{ type: "file", name: "image.png", data: fileData }],
+                    },
+                ],
+                events: [
+                    modelMessage({
+                        id: "m-image",
+                        threadId: ROOT_THREAD_ID,
+                        content: "Image received.",
+                    }),
+                ],
+            });
+
+            const result = await convertTurnsToThreadMessages(mockServerWithTurns([turn]), SESSION_ID);
+
+            expect(result.messages).toHaveLength(2);
+            expect(result.messages[0]).toMatchObject({
+                id: "turn-image-user",
+                role: "user",
+                content: [{ type: "text", text: "" }],
+                attachments: [{ name: "image.png", status: { type: "complete" } }],
+            });
+            expect(result.messages[1]).toMatchObject({
+                id: "turn-image-assistant",
+                role: "assistant",
+                content: [{ type: "text", text: "Image received." }],
+            });
+            expect(turnToSessionRecord(turn)).toHaveProperty("userText", "");
         });
 
         it("nests sub-agents within a turn group and isolates the next user turn", async () => {
