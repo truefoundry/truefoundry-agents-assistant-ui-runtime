@@ -440,11 +440,6 @@ export interface AgentBuilderServer<
   getModels(): Promise<TModel[]>;
   getSkills(): Promise<TSkill[]>;
   getMcp(): Promise<TMcp[]>;
-  /**
-   * Token-paginated MCP catalog for picker infinite scroll.
-   * Prefer this over `getMcp` when present; omit on hosts that only expose a full list.
-   */
-  listMcp?(req?: PageParams): Promise<ListResult<TMcp>>;
   getMcpConnector?(req: { connectorId: string }): Promise<TMcp>;
   getMcpTools?(req: { connectorId: string }): Promise<TMcpTool[]>;
   searchAgents(req?: SearchAgentSelectorParams): Promise<TAgent[]>;

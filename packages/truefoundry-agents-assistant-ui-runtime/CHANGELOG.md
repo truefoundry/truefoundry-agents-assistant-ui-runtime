@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.33
+
+### Breaking
+
+- Removed `AgentBuilderServer.listMcp`; `getMcp` returns the complete MCP catalog.
+
 ## 0.1.30
 
 ### Changed
