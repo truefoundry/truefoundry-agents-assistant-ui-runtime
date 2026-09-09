@@ -445,6 +445,7 @@ export interface AgentBuilderServer<
    * Prefer this over `getMcp` when present; omit on hosts that only expose a full list.
    */
   listMcp?(req?: PageParams): Promise<ListResult<TMcp>>;
+  getMcpConnector?(req: { connectorId: string }): Promise<TMcp>;
   getMcpTools?(req: { connectorId: string }): Promise<TMcpTool[]>;
   searchAgents(req?: SearchAgentSelectorParams): Promise<TAgent[]>;
   saveAgent(req: SaveAgentRequest<TSpec>): Promise<TSave>;
