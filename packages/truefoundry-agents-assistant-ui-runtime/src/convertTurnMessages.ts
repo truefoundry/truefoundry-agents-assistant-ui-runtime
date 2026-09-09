@@ -521,7 +521,7 @@ function attachRunningTurn(
         runningTurn,
         unstable_resume: true as const,
         groupRootBaseline: computeGroupRootBaseline(snapshot.turns),
-        ...(pendingUserText
+        ...(pendingUserText !== undefined
             ? {
                   pendingUser: {
                       turnId: runningTurn.id,
@@ -1139,7 +1139,7 @@ function projectHistoryTurns(
         const turnRootIds = record.rootModelMessageIds ?? [];
         sandboxId = record.sandboxId ?? sandboxId;
 
-        if (record.userText) {
+        if (record.userText !== undefined) {
             groupRootIds = [...turnRootIds];
         } else {
             groupRootIds = [...groupRootIds, ...turnRootIds];
@@ -1188,7 +1188,7 @@ function projectHistoryTurns(
             ...(sandboxId != null ? { sandboxId } : {}),
         };
 
-        if (record.userText) {
+        if (record.userText !== undefined) {
             messages.push(
                 buildUserMessageFromTurnInput(
                     record.id,

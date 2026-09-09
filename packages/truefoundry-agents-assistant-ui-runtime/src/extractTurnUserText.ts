@@ -1,11 +1,13 @@
 import type { Turn } from "./server/index.js";
 
-export function extractTurnUserText(input: Turn["input"]): string {
+export function extractTurnUserText(input: Turn["input"]): string | undefined {
     const parts: string[] = [];
+    let hasUserMessage = false;
     for (const item of input ?? []) {
         if (item.type !== "user.message") {
             continue;
         }
+        hasUserMessage = true;
         const { content } = item;
         if (typeof content === "string") {
             parts.push(content);
@@ -17,5 +19,5 @@ export function extractTurnUserText(input: Turn["input"]): string {
             }
         }
     }
-    return parts.join("\n").trim();
+    return hasUserMessage ? parts.join("\n").trim() : undefined;
 }
