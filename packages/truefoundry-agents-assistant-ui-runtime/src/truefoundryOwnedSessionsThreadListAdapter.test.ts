@@ -50,7 +50,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
 
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
-                createdByMe: true,
+                createdByMe: false,
                 limit: 20,
                 pageToken: undefined,
                 startTimestamp: expect.any(String),
@@ -82,6 +82,7 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
         const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({
             server,
             listSessionsAgentId: "agent-x",
+            listSessionsCreatedByMe: true,
         });
         await adapter.list();
 

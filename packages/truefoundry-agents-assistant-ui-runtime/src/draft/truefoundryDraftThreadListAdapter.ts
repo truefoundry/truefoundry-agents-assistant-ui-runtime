@@ -16,14 +16,22 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
     getAgentSpec?: () => AgentSpec;
     /** When set, filters `listSessions` by this agent id. Omit for all chats. */
     listSessionsAgentId?: string;
+    /** Restrict history to sessions created by the authenticated subject. */
+    listSessionsCreatedByMe?: boolean;
 }): RemoteThreadListAdapter {
-    const { server, defaultAgentSpec, getAgentSpec, listSessionsAgentId } = options;
+    const {
+        server,
+        defaultAgentSpec,
+        getAgentSpec,
+        listSessionsAgentId,
+        listSessionsCreatedByMe = false,
+    } = options;
 
     return {
         async list({ after } = {}) {
             const page = await server.listSessions({
                 ...(listSessionsAgentId != null ? { agentId: listSessionsAgentId } : {}),
-                createdByMe: true,
+                createdByMe: listSessionsCreatedByMe,
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),

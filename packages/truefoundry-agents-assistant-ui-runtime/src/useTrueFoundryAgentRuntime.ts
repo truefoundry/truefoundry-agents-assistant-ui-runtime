@@ -309,6 +309,7 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     const agentMode = agent.mode;
     const namedAgentName = agent.mode === "named" ? agent.agentName : undefined;
     const listSessionsAgentId = resolved.listSessionsAgentId;
+    const listSessionsCreatedByMe = resolved.listSessionsCreatedByMe;
     // Mode-specific adapter: rebuilt on draft/named switches, but never handed
     // to assistant-ui directly — it is reached through the delegating adapter below.
     const modeThreadListAdapter = useMemo(() => {
@@ -319,15 +320,17 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
                 defaultAgentSpec: draftAgent.defaultAgentSpec,
                 getAgentSpec: () => pendingAgentSpecRef.current ?? draftAgent.defaultAgentSpec,
                 listSessionsAgentId,
+                listSessionsCreatedByMe,
             });
         }
         return createTrueFoundryThreadListAdapter({
             server,
             agentName: namedAgentName!,
             listSessionsAgentId,
+            listSessionsCreatedByMe,
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agentMode, namedAgentName, listSessionsAgentId, server]);
+    }, [agentMode, namedAgentName, listSessionsAgentId, listSessionsCreatedByMe, server]);
     const modeThreadListAdapterRef = useRef(modeThreadListAdapter);
     useEffect(() => {
         modeThreadListAdapterRef.current = modeThreadListAdapter;
@@ -336,7 +339,7 @@ export function useTrueFoundryAgentRuntime(options: UseTrueFoundryAgentRuntimeOp
     // filter is a genuinely different list, so those do reset it.
     const threadListAdapter = useMemo(
         () => createDelegatingThreadListAdapter(modeThreadListAdapterRef),
-        [listSessionsAgentId, server],
+        [listSessionsAgentId, listSessionsCreatedByMe, server],
     );
 
     return useRemoteThreadListRuntime({
