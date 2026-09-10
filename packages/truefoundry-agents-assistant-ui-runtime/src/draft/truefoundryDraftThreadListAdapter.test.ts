@@ -73,6 +73,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
 
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
+                createdByMe: true,
                 limit: 20,
                 pageToken: undefined,
                 startTimestamp: expect.any(String),
@@ -124,7 +125,7 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
         await adapter.list();
 
         expect(listSessions).toHaveBeenCalledWith(
-            expect.objectContaining({ agentId: "agent-x" }),
+            expect.objectContaining({ agentId: "agent-x", createdByMe: true }),
         );
     });
 

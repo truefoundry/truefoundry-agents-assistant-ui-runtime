@@ -19,6 +19,7 @@ export function createTrueFoundryThreadListAdapter(options: {
         async list({ after } = {}) {
             const page = await server.listSessions({
                 ...(listSessionsAgentId != null ? { agentId: listSessionsAgentId } : {}),
+                createdByMe: true,
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),
