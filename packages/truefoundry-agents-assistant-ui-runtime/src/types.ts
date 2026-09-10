@@ -33,6 +33,8 @@ type TrueFoundryAgentRuntimeBaseOptions = ExternalStoreSharedOptions & {
      * Omit for all chats; hosts that key agents by name pass that name as the id.
      */
     listSessionsAgentId?: string | undefined;
+    /** Restrict thread history to sessions created by the authenticated subject. */
+    listSessionsCreatedByMe?: boolean | undefined;
     adapters?:
         | {
               attachments?: AttachmentAdapter | undefined;

@@ -209,6 +209,11 @@ export type PageParams = {
 export interface ListSessionsParams extends PageParams {
   /** Host-owned agent identity filter. Omit for all sessions (current user). */
   agentId?: string;
+  /**
+   * When true, only sessions created by the authenticated subject.
+   * Omit to include managed-agent visibility where the host supports it.
+   */
+  createdByMe?: boolean;
   /** Inclusive lower bound on session activity (ISO-8601). */
   startTimestamp?: string;
   /** Inclusive upper bound on session activity (ISO-8601). */
@@ -921,8 +926,9 @@ export interface AgentSessionsServer<
   /** Fetch Use In Code snippets for the agent (one row per language). */
   getCodeSnippets(req: { agentId: string }): Promise<TSnippet[]>;
   /**
-   * List sessions for the current user. Pass `agentId` to scope to one agent;
-   * omit for all sessions. Use `startTimestamp` / `endTimestamp` for date filters.
+   * List sessions visible to the current user. Pass `agentId` to scope to one
+   * agent; `createdByMe: true` for only sessions they created. Use
+   * `startTimestamp` / `endTimestamp` for date filters.
    */
   listSessions(req?: TList): Promise<ListResult<TListEntry>>;
   /**

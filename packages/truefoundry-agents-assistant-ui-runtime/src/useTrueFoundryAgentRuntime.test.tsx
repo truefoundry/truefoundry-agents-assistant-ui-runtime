@@ -51,6 +51,7 @@ describe("useTrueFoundryAgentRuntime", () => {
             ({ named }: { named: boolean }) =>
                 useTrueFoundryAgentRuntime({
                     server,
+                    listSessionsCreatedByMe: true,
                     agent: named
                         ? { mode: "named", agentName: "support" }
                         : { mode: "draft", defaultAgentSpec: draftSpec },
@@ -64,6 +65,9 @@ describe("useTrueFoundryAgentRuntime", () => {
 
         await draftAdapter.list();
         await draftAdapter.list({ after: "page-2" });
+        expect(server.listSessions).toHaveBeenCalledWith(
+            expect.objectContaining({ createdByMe: true }),
+        );
 
         rerender({ named: true });
 

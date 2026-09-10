@@ -11,19 +11,25 @@ const THREAD_LIST_PAGE_SIZE = 20;
 
 /**
  * Read-only thread-list adapter backed by `AgentChatServer.listSessions`.
- * Hosts that previously used listOwnedSessions should filter in their server impl.
  */
 export function createTrueFoundryOwnedSessionsThreadListAdapter(options: {
     server: AgentChatServer;
     /** When set, filters `listSessions` by this agent id. Omit for all chats. */
     listSessionsAgentId?: string;
+    /** Restrict history to sessions created by the authenticated subject. */
+    listSessionsCreatedByMe?: boolean;
 }): RemoteThreadListAdapter {
-    const { server, listSessionsAgentId } = options;
+    const {
+        server,
+        listSessionsAgentId,
+        listSessionsCreatedByMe = false,
+    } = options;
 
     return {
         async list({ after } = {}) {
             const page = await server.listSessions({
                 ...(listSessionsAgentId != null ? { agentId: listSessionsAgentId } : {}),
+                createdByMe: listSessionsCreatedByMe,
                 limit: THREAD_LIST_PAGE_SIZE,
                 pageToken: after,
                 startTimestamp: sessionListStartTimestamp(),

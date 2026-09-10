@@ -48,6 +48,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
         const result = await adapter.list();
 
         expect(listSessions).toHaveBeenCalledWith({
+            createdByMe: false,
             limit: 20,
             pageToken: undefined,
             startTimestamp: expect.any(String),
@@ -73,6 +74,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
             server,
             agentName: "my-agent",
             listSessionsAgentId: "filter-agent",
+            listSessionsCreatedByMe: true,
         });
 
         const result = await adapter.list({ after: "page-2" });
@@ -80,6 +82,7 @@ describe("createTrueFoundryThreadListAdapter", () => {
         expect(listSessions).toHaveBeenCalledWith(
             expect.objectContaining({
                 agentId: "filter-agent",
+                createdByMe: true,
                 limit: 20,
                 pageToken: "page-2",
             }),
