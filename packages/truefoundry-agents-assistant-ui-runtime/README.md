@@ -257,7 +257,7 @@ The composed `AgentUIServer` can also expose an optional
 time-series charts; the runtime itself does not invoke this port.
 
 Hosts can expose an optional `PermissionsServer` under `permissions` to return
-`MANAGE` / `DELETE` grants for agent, schedule, and session ids. Omitting the
+`USE` grants for agents and `MANAGE` / `DELETE` grants for resource ids. Omitting the
 port means permission-aware consumers make no request and retain their default
 behavior.
 

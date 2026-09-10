@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `ResourcePermission` includes agent `USE` grants.
+
 ## 0.1.33
 
 ### Breaking

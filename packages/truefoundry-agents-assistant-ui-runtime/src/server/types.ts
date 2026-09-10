@@ -1025,7 +1025,7 @@ export interface ScheduleServer<
 
 export type PermissionResourceType = "agent" | "schedule" | "session";
 
-export type ResourcePermission = "MANAGE" | "DELETE";
+export type ResourcePermission = "USE" | "MANAGE" | "DELETE";
 
 export interface ListPermissionsRequest {
   resourceType: PermissionResourceType;
