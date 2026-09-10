@@ -202,6 +202,7 @@ export type {
     ModelSelectorEntry,
     SkillSelectorEntry,
     ConnectorSelectorEntry,
+    CreatedBySubject,
     AgentSelectorEntry,
     SearchAgentSelectorParams,
     ModelSelection,

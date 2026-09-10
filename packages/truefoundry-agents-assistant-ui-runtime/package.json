@@ -1,6 +1,6 @@
 {
   "name": "@truefoundry/assistant-ui-runtime",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "description": "TrueFoundry Gateway agent runtime adapter for assistant-ui",
   "license": "Apache-2.0",
   "repository": {

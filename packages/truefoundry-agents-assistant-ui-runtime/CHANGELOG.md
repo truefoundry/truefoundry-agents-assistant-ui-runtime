@@ -6,6 +6,12 @@
 
 - `ResourcePermission` includes agent `USE` grants.
 
+## 0.1.36
+
+### Added
+
+- Optional `CreatedBySubject` on `AgentSelectorEntry` / `AgentLibraryEntry` and `Schedule` so hosts can surface a Created-by column.
+
 ## 0.1.33
 
 ### Breaking

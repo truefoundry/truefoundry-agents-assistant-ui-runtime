@@ -56,6 +56,13 @@ export interface ConnectorSelectorEntry {
   authenticated?: boolean;
 }
 
+/** Who created a resource. Optional on list DTOs when the host does not track creators. */
+export interface CreatedBySubject {
+  subjectId: string;
+  subjectType: string;
+  subjectDisplayName: string;
+}
+
 /** Agent selector row. Host extends for metadata; `agentSpec` enables Edit. */
 export interface AgentSelectorEntry {
   name: string;
@@ -63,6 +70,8 @@ export interface AgentSelectorEntry {
   agentId?: string;
   /** Published agent spec — required for Edit; optional for Try-only hosts. */
   agentSpec?: AgentSpec;
+  /** Creator when the host persists one; omit to hide Created-by UI. */
+  createdBySubject?: CreatedBySubject;
 }
 
 export type SearchAgentSelectorParams = {
@@ -961,6 +970,8 @@ export interface Schedule {
   timezone: string;
   status: ScheduleStatus;
   lastRunAt: string | null;
+  /** Creator when the host persists one; omit to hide Created-by UI. */
+  createdBySubject?: CreatedBySubject;
 }
 
 /** Flat schedule-run DTO (ISO-8601 timestamps; host maps from wire Dates). */
