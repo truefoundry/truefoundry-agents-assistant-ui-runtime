@@ -8,10 +8,6 @@
 
 ## 0.1.37
 
-### Breaking
-
-- **`AgentSpec.description` removed.** Published-agent description is no longer part of the executable spec. Hosts that previously stored or sent it on `agentSpec` should use the top-level fields below.
-
 ### Added
 
 - Optional `description` on `AgentSelectorEntry` / `AgentLibraryEntry`, `AgentDetail`, and `SaveAgentRequest`.
