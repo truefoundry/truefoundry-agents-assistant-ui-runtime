@@ -6,6 +6,16 @@
 
 - `ResourcePermission` includes agent `USE` grants.
 
+## 0.1.37
+
+### Added
+
+- Optional `description` on `AgentSelectorEntry` / `AgentLibraryEntry`, `AgentDetail`, and `SaveAgentRequest`.
+
+### Changed
+
+- The bundled Control Plane adapter maps description as a top-level library/save field and still writes it onto the CP `manifest.description` wire field.
+
 ## 0.1.36
 
 ### Added
