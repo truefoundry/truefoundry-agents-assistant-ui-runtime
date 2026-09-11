@@ -447,6 +447,7 @@ describe("normalizeAgents", () => {
                                     },
                                 },
                                 instructions: "Be helpful",
+                                description: "Answers questions",
                                 config: {
                                     iteration_limit: 50,
                                     ask_user_questions: { enabled: true },
@@ -482,6 +483,7 @@ describe("normalizeAgents", () => {
             {
                 name: "ask-ai-agent",
                 agentId: "ag_1",
+                description: "Answers questions",
                 agentSpec: {
                     model: {
                         name: "openai-main/gpt-4.1",
@@ -677,25 +679,28 @@ describe("buildSaveAgentManifest", () => {
         });
     });
 
-    it("keeps host tags, collaborators, and extra spec fields", () => {
-        const manifest = buildSaveAgentManifest("named", {
-            model: {
-                name: "openai-main/gpt-4.1",
-                params: { maxTokens: 4096, temperature: 0.2 },
-            },
-            description: "My agent",
-            instructions: "Be concise",
-            variables: { city: "Berlin" },
-            messages: [{ role: "user", content: "Hello {{city}}" }],
-            responseFormat: {
-                type: "json_schema",
-                jsonSchema: { name: "answer", schema: { type: "object" } },
-            },
-            tags: { env: "test", owner: "platform" },
-            collaborators: [
-                { subject: "user:ada@example.com", roleId: "agent-manager" },
-            ],
-        } as never);
+    it("keeps top-level description, host tags, collaborators, and extra spec fields", () => {
+        const manifest = buildSaveAgentManifest(
+            "named",
+            {
+                model: {
+                    name: "openai-main/gpt-4.1",
+                    params: { maxTokens: 4096, temperature: 0.2 },
+                },
+                instructions: "Be concise",
+                variables: { city: "Berlin" },
+                messages: [{ role: "user", content: "Hello {{city}}" }],
+                responseFormat: {
+                    type: "json_schema",
+                    jsonSchema: { name: "answer", schema: { type: "object" } },
+                },
+                tags: { env: "test", owner: "platform" },
+                collaborators: [
+                    { subject: "user:ada@example.com", roleId: "agent-manager" },
+                ],
+            } as never,
+            "My agent",
+        );
 
         expect(manifest.description).toBe("My agent");
         expect(manifest.tags).toEqual({ env: "test", owner: "platform" });
@@ -748,11 +753,12 @@ describe("buildSaveAgentManifest", () => {
         expect(manifest).not.toHaveProperty("config");
     });
 
-    it("passes through description when present on the spec", () => {
-        const manifest = buildSaveAgentManifest("named", {
-            model: { name: "openai-main/gpt-4.1" },
-            description: "My agent",
-        } as never);
+    it("writes description from the top-level save field", () => {
+        const manifest = buildSaveAgentManifest(
+            "named",
+            { model: { name: "openai-main/gpt-4.1" } },
+            "My agent",
+        );
 
         expect(manifest.description).toBe("My agent");
     });
@@ -769,6 +775,7 @@ describe("saveAgent", () => {
             { apiKey: "key", cpURL: "https://cp.example/" },
             {
                 agentName: "my-agent",
+                description: "My agent",
                 agentSpec: { model: { name: "openai-main/gpt-4.1" } },
                 intent: "create",
             },
@@ -793,6 +800,7 @@ describe("saveAgent", () => {
         const body = JSON.parse(String(init.body));
         expect(body.manifest.type).toBe("truefoundry-agent");
         expect(body.manifest.name).toBe("my-agent");
+        expect(body.manifest.description).toBe("My agent");
         expect(body.manifest.model).toEqual({ name: "openai-main/gpt-4.1" });
         expect(body.manifest.tags).toEqual(SAVE_AGENT_TAGS);
         expect(body.manifest.collaborators).toEqual([...SAVE_AGENT_COLLABORATORS]);
@@ -902,7 +910,7 @@ describe("old saved-agent manifest round-trip", () => {
 
     it("reads snake_case fields into camelCase spec and writes them back", () => {
         const spec = agentSpecFromCpManifest(oldManifest);
-        expect(spec?.description).toBe("Answer questions");
+        expect(spec).not.toHaveProperty("description");
         // User keys verbatim; `{ default_value }` records collapse to strings.
         expect(spec?.variables).toEqual({ city: "Berlin", my_city: "Pune" });
         expect(spec?.messages).toEqual([
@@ -936,7 +944,11 @@ describe("old saved-agent manifest round-trip", () => {
             sandbox: { enabled: true, fileDownloads: true },
         });
 
-        const saved = buildSaveAgentManifest("ask-ai-agent", spec!);
+        const saved = buildSaveAgentManifest(
+            "ask-ai-agent",
+            spec!,
+            oldManifest.description,
+        );
         expect(saved.description).toBe("Answer questions");
         expect(saved.variables).toEqual({ city: "Berlin", my_city: "Pune" });
         expect(saved.messages).toEqual([

@@ -68,6 +68,8 @@ export interface AgentSelectorEntry {
   name: string;
   /** Stable id when distinct from display `name`. Falls back to `name` when omitted. */
   agentId?: string;
+  /** Published-agent description; not part of the executable agent spec. */
+  description?: string;
   /** Published agent spec — required for Edit; optional for Try-only hosts. */
   agentSpec?: AgentSpec;
   /** Creator when the host persists one; omit to hide Created-by UI. */
@@ -168,7 +170,6 @@ export interface AgentSpec<
   config?: TConfig;
   instructions?: string;
   variables?: Record<string, string>;
-  description?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -402,6 +403,8 @@ export interface AgentChatServer<
 /** Request body for `AgentBuilderServer.saveAgent`. */
 export interface SaveAgentRequest<TSpec extends AgentSpec = AgentSpec> {
   agentName: string;
+  /** Published-agent description; hosts may require it when creating an agent. */
+  description?: string;
   agentSpec: TSpec;
   intent: "create" | "update";
   /** Current mutable session to update atomically with the named agent. */
@@ -858,6 +861,8 @@ export interface AgentDetail<TSpec extends AgentSpec = AgentSpec> {
   agentId: string;
   /** Display name (e.g. "release-notes-writer"). */
   name: string;
+  /** Published-agent description; not part of the executable agent spec. */
+  description?: string;
   agentSpec: TSpec;
 }
 

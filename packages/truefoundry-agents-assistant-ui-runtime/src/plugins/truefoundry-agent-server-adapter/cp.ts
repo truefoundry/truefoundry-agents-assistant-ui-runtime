@@ -617,12 +617,10 @@ export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undef
     const config =
         configRaw != null ? (toCamelCaseDeep(configRaw) as TfyAgentSpec["config"]) : undefined;
 
-    // Wire-named pass-through fields (description, messages, collaborators)
+    // Wire-named pass-through fields (messages, collaborators)
     // need no mount remapping — one camelCase pass and a shape guard each.
     // Guards drop malformed values instead of seeding the editor with garbage.
     const camel = toCamelCaseDeep(manifest) as Record<string, unknown>;
-    const description =
-        typeof camel.description === "string" ? camel.description : undefined;
     const messages = Array.isArray(camel.messages)
         ? (camel.messages as TfyAgentSpec["messages"])
         : undefined;
@@ -644,7 +642,6 @@ export function agentSpecFromCpManifest(manifest: unknown): TfyAgentSpec | undef
         ...(typeof manifest.instructions === "string"
             ? { instructions: manifest.instructions }
             : {}),
-        ...(description != null ? { description } : {}),
         ...(variables != null ? { variables } : {}),
         ...(messages != null ? { messages } : {}),
         ...(responseFormat != null ? { responseFormat } : {}),
@@ -668,11 +665,16 @@ export function normalizeAgents(raw: unknown): TfyAgentSelectorEntry[] {
         if (row.name == null || row.name === "") continue;
         const manifest = row.latestVersionDetails?.manifest ?? row.manifest;
         const agentSpec = agentSpecFromCpManifest(manifest);
+        const description =
+            isRecord(manifest) && typeof manifest.description === "string"
+                ? manifest.description
+                : undefined;
         const agentId =
             typeof row.id === "string" && row.id !== "" ? row.id : row.name;
         out.push({
             name: row.name,
             agentId,
+            ...(description != null ? { description } : {}),
             ...(agentSpec != null ? { agentSpec } : {}),
         });
     }
@@ -806,6 +808,7 @@ function responseFormatForCp(
 export function buildSaveAgentManifest(
     agentName: string,
     agentSpec: TfyAgentSpec,
+    description?: string,
 ): Record<string, unknown> {
     const spec = normalizeAgentSpecForGateway(agentSpec);
     const mcpServers = (spec.mcpServers ?? []).map(mcpMountForCp);
@@ -817,7 +820,7 @@ export function buildSaveAgentManifest(
         type: "truefoundry-agent",
         name: agentName,
         ...snake,
-        description: typeof snake.description === "string" ? snake.description : "",
+        description: description ?? "",
         tags: tags ?? { ...SAVE_AGENT_TAGS },
         collaborators: Array.isArray(snake.collaborators)
             ? snake.collaborators
@@ -863,7 +866,11 @@ export async function saveAgent(
     opts: CpCredentials,
     req: SaveAgentRequest<TfyAgentSpec>,
 ): Promise<TfySaveAgentResult> {
-    const manifest = buildSaveAgentManifest(req.agentName, req.agentSpec);
+    const manifest = buildSaveAgentManifest(
+        req.agentName,
+        req.agentSpec,
+        req.description,
+    );
     const raw = await cpFetch<unknown>(opts, "/api/svc/v1/agents", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

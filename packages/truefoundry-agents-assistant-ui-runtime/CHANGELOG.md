@@ -6,6 +6,20 @@
 
 - `ResourcePermission` includes agent `USE` grants.
 
+## 0.1.37
+
+### Breaking
+
+- **`AgentSpec.description` removed.** Published-agent description is no longer part of the executable spec. Hosts that previously stored or sent it on `agentSpec` should use the top-level fields below.
+
+### Added
+
+- Optional `description` on `AgentSelectorEntry` / `AgentLibraryEntry`, `AgentDetail`, and `SaveAgentRequest`.
+
+### Changed
+
+- The bundled Control Plane adapter maps description as a top-level library/save field and still writes it onto the CP `manifest.description` wire field.
+
 ## 0.1.36
 
 ### Added

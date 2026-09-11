@@ -9,7 +9,7 @@
  * Not an entry point — tsup only bundles src/index.ts.
  */
 
-import type { AgentSpec } from "../../server/types.js";
+import type { AgentSpec, SaveAgentRequest } from "../../server/types.js";
 import type { createTrueFoundryChatServer } from "./index.js";
 import type {
     TfyAgentSpec,
@@ -166,10 +166,16 @@ export const withEndTimestamp: NonNullable<
 
 export const savedAgent: TfyAgentSpec = {
     model: { name: "openai-main/gpt-4.1" },
-    description: "Demo",
     tags: { env: "test" },
     collaborators: [{ subject: "team:everyone", roleId: "agent-access" }],
     variables: { city: "Berlin" },
+};
+
+export const saveAgentRequest: SaveAgentRequest<TfyAgentSpec> = {
+    agentName: "demo",
+    description: "Demo",
+    agentSpec: savedAgent,
+    intent: "create",
 };
 
 export const saveResult: TfySaveAgentResult = {
