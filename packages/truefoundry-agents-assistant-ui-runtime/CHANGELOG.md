@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-### Changed
+## 0.1.38
 
-- `ResourcePermission` includes agent `USE` grants.
+### Breaking
+
+- `ListPermissionsResponse.data` is now `{ type, permissions }` instead of a flat id→grants map.
+- `PermissionResourceType` includes `tenant`; `ResourcePermission` includes `CREATE` (tenant entity-kind grants).
 
 ## 0.1.37
 
