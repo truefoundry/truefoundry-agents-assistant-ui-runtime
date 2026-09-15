@@ -765,8 +765,9 @@ function resolveCreatedAt(
     messageId: string,
     fallback: Date,
     options?: ProjectSessionMessagesOptions,
+    replace = false,
 ): Date {
-    return options?.getCreatedAt?.(messageId, fallback) ?? fallback;
+    return options?.getCreatedAt?.(messageId, fallback, replace) ?? fallback;
 }
 
 function parseDataUriMime(data: string): string {
@@ -871,6 +872,7 @@ function buildAssistantMessage(
     status: MessageStatus,
     custom: Record<string, unknown> = {},
     options?: ProjectSessionMessagesOptions,
+    replaceCreatedAt = false,
 ): ThreadMessage {
     const fallback = createdAt instanceof Date ? createdAt : new Date(createdAt);
     const id = `${turnId}-assistant`;
@@ -879,7 +881,7 @@ function buildAssistantMessage(
         role: "assistant",
         content,
         status,
-        createdAt: resolveCreatedAt(id, fallback, options),
+        createdAt: resolveCreatedAt(id, fallback, options, replaceCreatedAt),
         metadata: {
             unstable_state: null,
             unstable_annotations: [],
@@ -1187,6 +1189,11 @@ function projectHistoryTurns(
             turnId: record.id,
             ...(sandboxId != null ? { sandboxId } : {}),
         };
+        const assistantCreatedAt =
+            record.state.status === "running"
+                ? record.createdAt
+                : record.state.completedAt;
+        const replaceAssistantCreatedAt = record.state.status !== "running";
 
         if (record.userText !== undefined) {
             messages.push(
@@ -1204,10 +1211,11 @@ function projectHistoryTurns(
                         buildAssistantMessage(
                             record.id,
                             content,
-                            record.createdAt,
+                            assistantCreatedAt,
                             status,
                             custom,
                             options,
+                            replaceAssistantCreatedAt,
                         ),
                     );
                     lastAssistantIndex = messages.length - 1;
@@ -1220,10 +1228,11 @@ function projectHistoryTurns(
                     buildAssistantMessage(
                         record.id,
                         content,
-                        record.createdAt,
+                        assistantCreatedAt,
                         status,
                         custom,
                         options,
+                        replaceAssistantCreatedAt,
                     ),
                 );
                 lastAssistantIndex = messages.length - 1;
@@ -1240,6 +1249,12 @@ function projectHistoryTurns(
                 ...existing,
                 content,
                 status,
+                createdAt: resolveCreatedAt(
+                    existing.id,
+                    new Date(assistantCreatedAt),
+                    options,
+                    true,
+                ),
                 metadata: {
                     ...existing.metadata,
                     custom,

@@ -78,7 +78,11 @@ export type SessionSnapshot = {
 };
 
 export type ProjectSessionMessagesOptions = {
-    getCreatedAt?: (messageId: string, fallback: Date) => Date;
+    getCreatedAt?: (
+        messageId: string,
+        fallback: Date,
+        replace?: boolean,
+    ) => Date;
 };
 
 export function emptyRequiredActionsOverlay(): RequiredActionsOverlay {
