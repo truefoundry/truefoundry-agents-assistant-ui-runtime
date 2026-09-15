@@ -1907,6 +1907,8 @@ describe("convertTurnMessages", () => {
             const fold = new PeerThreadFoldState();
             const turn1Id = "turn-1";
             const turn2Id = "turn-2";
+            const initialCompletedAt = "2026-09-15T09:00:12.000Z";
+            const continuationCompletedAt = "2026-09-15T09:01:08.000Z";
 
             ingestTurnEvent(
                 fold,
@@ -1969,7 +1971,7 @@ describe("convertTurnMessages", () => {
                         state: {
                             status: "done",
                             requiredActions: [],
-                            completedAt: createdAt,
+                            completedAt: initialCompletedAt,
                         },
                         input: [{ type: "user.message", content: "hello" }],
                         rootModelMessageIds: ["model-1"],
@@ -1980,7 +1982,7 @@ describe("convertTurnMessages", () => {
                         state: {
                             status: "done",
                             requiredActions: [],
-                            completedAt: createdAt,
+                            completedAt: continuationCompletedAt,
                         },
                         input: [
                             {
@@ -2000,6 +2002,7 @@ describe("convertTurnMessages", () => {
 
             const assistant = messages.find((message) => message.role === "assistant");
             expect(assistant).toBeDefined();
+            expect(assistant?.createdAt).toEqual(new Date(continuationCompletedAt));
             const toolCall = assistant?.content.find((part) => part.type === "tool-call");
             expect(toolCall).toMatchObject({
                 type: "tool-call",
@@ -2406,6 +2409,8 @@ function mockServerWithEvents(
 
 describe("buildSnapshotFromSessionEvents", () => {
     it("builds a snapshot from a single complete turn", async () => {
+        const turnStartedAt = "2026-09-15T09:00:00.000Z";
+        const turnCompletedAt = "2026-09-15T09:00:12.000Z";
         const items: SessionEventItem[] = [
             {
                 turnId: "t1",
@@ -2415,7 +2420,7 @@ describe("buildSnapshotFromSessionEvents", () => {
                     turnId: "t1",
                     input: [{ type: "user.message", content: "hello" }],
                     state: { status: "running" },
-                    createdAt,
+                    createdAt: turnStartedAt,
                 },
             },
             {
@@ -2427,8 +2432,8 @@ describe("buildSnapshotFromSessionEvents", () => {
                 event: {
                     type: "turn.done",
                     id: "evt-d1",
-                    state: { status: "done", requiredActions: [], completedAt: createdAt },
-                    createdAt,
+                    state: { status: "done", requiredActions: [], completedAt: turnCompletedAt },
+                    createdAt: turnCompletedAt,
                 } as TurnDoneEvent,
             },
         ];
@@ -2441,7 +2446,7 @@ describe("buildSnapshotFromSessionEvents", () => {
         expect(snapshot.turns[0]?.state).toEqual({
             status: "done",
             requiredActions: [],
-            completedAt: createdAt,
+            completedAt: turnCompletedAt,
         });
         expect(snapshot.turns[0]?.rootModelMessageIds).toEqual(["m1"]);
         expect(snapshot.runningTurn).toBeUndefined();
@@ -2449,7 +2454,9 @@ describe("buildSnapshotFromSessionEvents", () => {
         const messages = projectSessionMessages(snapshot);
         expect(messages).toHaveLength(2);
         expect(messages[0]?.role).toBe("user");
+        expect(messages[0]?.createdAt).toEqual(new Date(turnStartedAt));
         expect(messages[1]?.role).toBe("assistant");
+        expect(messages[1]?.createdAt).toEqual(new Date(turnCompletedAt));
     });
 
     it("detects and attaches the running turn without events", async () => {

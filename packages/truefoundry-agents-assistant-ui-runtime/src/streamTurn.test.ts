@@ -182,7 +182,7 @@ describe("streamTurn", () => {
             });
         });
 
-        it("returns early and cancels the session when already aborted", async () => {
+        it("returns early without cancelling the backend run when already aborted", async () => {
             const createTurn = vi.fn(async function* () {});
             const cancelSession = vi.fn().mockResolvedValue(undefined);
             const server = mockServer({ createTurn, cancelSession });
@@ -199,9 +199,37 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(cancelSession).toHaveBeenCalledWith({ sessionId: SESSION_ID });
+            expect(cancelSession).not.toHaveBeenCalled();
             expect(createTurn).not.toHaveBeenCalled();
             expect(updates).toEqual([]);
+        });
+
+        it("does not cancel the backend run when the stream is aborted mid-flight", async () => {
+            const abortController = new AbortController();
+            const createTurn = vi.fn(async function* () {
+                yield streamData(1, {
+                    type: "model.message",
+                    createdAt,
+                    id: "m1",
+                    threadId: ROOT_THREAD_ID,
+                    content: "partial",
+                });
+                abortController.abort();
+            });
+            const cancelSession = vi.fn().mockResolvedValue(undefined);
+            const server = mockServer({ createTurn, cancelSession });
+
+            await collectUpdates(
+                streamTurnContent(
+                    server,
+                    SESSION_ID,
+                    new PeerThreadFoldState(),
+                    { userMessage: "hello" },
+                    abortController.signal,
+                ),
+            );
+
+            expect(cancelSession).not.toHaveBeenCalled();
         });
 
         it("forwards headers to createTurn", async () => {
@@ -392,7 +420,7 @@ describe("streamTurn", () => {
                 ),
             );
 
-            expect(cancelSession).toHaveBeenCalledWith({ sessionId: SESSION_ID });
+            expect(cancelSession).not.toHaveBeenCalled();
             expect(subscribeToTurn).not.toHaveBeenCalled();
             expect(updates).toEqual([]);
         });

@@ -36,22 +36,6 @@ function buildTurnInput(options: StreamTurnOptions): TurnInputItem[] {
     return [{ type: "user.message", content: options.userMessage ?? "" }];
 }
 
-function bindAbort(
-    server: AgentChatServer,
-    sessionId: string,
-    abortSignal: AbortSignal,
-): () => void {
-    const onAbort = () => {
-        void server.cancelSession({ sessionId }).catch(() => undefined);
-    };
-    if (abortSignal.aborted) {
-        onAbort();
-        return onAbort;
-    }
-    abortSignal.addEventListener("abort", onAbort, { once: true });
-    return onAbort;
-}
-
 export async function* streamTurnContent(
     server: AgentChatServer,
     sessionId: string,
@@ -66,7 +50,9 @@ export async function* streamTurnContent(
      */
     onTurnIdAvailable?: (turnId: string) => void,
 ): AsyncGenerator<TurnStreamUpdate> {
-    const onAbort = bindAbort(server, sessionId, abortSignal);
+    // Aborting only detaches this client from the run; the turn keeps running on
+    // the backend so switching sessions (or remounting) can reattach via
+    // `subscribeToTurn`. Stopping the run is an explicit `cancelSession` call.
     if (abortSignal.aborted) {
         return;
     }
@@ -101,8 +87,6 @@ export async function* streamTurnContent(
             return;
         }
         throw error;
-    } finally {
-        abortSignal.removeEventListener("abort", onAbort);
     }
 }
 
@@ -122,14 +106,9 @@ export async function* resumeTurnStream(
         return;
     }
 
-    const onAbort = () => {
-        void server.cancelSession({ sessionId }).catch(() => undefined);
-    };
     if (abortSignal.aborted) {
-        onAbort();
         return;
     }
-    abortSignal.addEventListener("abort", onAbort, { once: true });
 
     try {
         yield* streamTurnEvents(
@@ -149,7 +128,5 @@ export async function* resumeTurnStream(
             return;
         }
         throw error;
-    } finally {
-        abortSignal.removeEventListener("abort", onAbort);
     }
 }
