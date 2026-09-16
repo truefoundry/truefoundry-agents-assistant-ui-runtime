@@ -344,6 +344,12 @@ export function useTrueFoundryAgentMessages({
 
     const snapshotRef = useRef(snapshot);
     snapshotRef.current = snapshot;
+    // Live session id — stale loadOlderHistory / resolveSandboxIdForTurn
+    // closures compare against this so a post-switch iteration cannot merge
+    // session A's pages onto session B's snapshot (generation alone is not
+    // enough: a late call captures B's generation while still closed over A).
+    const sessionIdRef = useRef(sessionId);
+    sessionIdRef.current = sessionId;
     const loadOlderInflightRef = useRef<Promise<void> | null>(null);
 
     const onErrorRef = useRef(onError);
@@ -1107,6 +1113,11 @@ export function useTrueFoundryAgentMessages({
         if (sessionId == null || isMain === false) {
             return;
         }
+        const requestedSessionId = sessionId;
+        // Stale closure from a prior session — do not touch the live snapshot.
+        if (sessionIdRef.current !== requestedSessionId) {
+            return;
+        }
         if (loadOlderInflightRef.current != null) {
             return loadOlderInflightRef.current;
         }
@@ -1123,17 +1134,23 @@ export function useTrueFoundryAgentMessages({
         setIsLoadingOlderHistory(true);
 
         const run = (async () => {
+            const stillCurrent = () =>
+                generation === loadGenerationRef.current &&
+                sessionIdRef.current === requestedSessionId;
             try {
                 const conversationSessionId = await resolveActiveSessionId(
-                    sessionId,
+                    requestedSessionId,
                     resolveConversationSessionIdRef.current,
                 );
+                if (!stillCurrent()) {
+                    return;
+                }
                 const next = await prependOlderSessionHistory(
                     server,
                     conversationSessionId,
                     snapshotRef.current,
                 );
-                if (generation !== loadGenerationRef.current) {
+                if (!stillCurrent()) {
                     return;
                 }
                 // Keep the ref in sync before the next render so awaiting
@@ -1141,12 +1158,12 @@ export function useTrueFoundryAgentMessages({
                 snapshotRef.current = next;
                 setSnapshot(next);
             } catch (error) {
-                if (generation === loadGenerationRef.current) {
+                if (stillCurrent()) {
                     onErrorRef.current?.(error);
                 }
                 throw error;
             } finally {
-                if (generation === loadGenerationRef.current) {
+                if (stillCurrent()) {
                     setIsLoadingOlderHistory(false);
                 }
                 loadOlderInflightRef.current = null;
@@ -1165,22 +1182,36 @@ export function useTrueFoundryAgentMessages({
      */
     const resolveSandboxIdForTurn = useCallback(
         async (turnId: string): Promise<string | undefined> => {
+            const generation = loadGenerationRef.current;
+            const requestedSessionId = sessionId;
+            const stillCurrent = () =>
+                generation === loadGenerationRef.current &&
+                sessionIdRef.current === requestedSessionId;
+
+            if (!stillCurrent()) {
+                return undefined;
+            }
+
             let sandboxId = findSandboxIdInSnapshot(snapshotRef.current, turnId);
             // ponytail: bounded linear page-in — the gateway has no direct
             // session→sandbox lookup; a backend lookup route is the upgrade path.
             for (
                 let i = 0;
                 sandboxId == null &&
+                stillCurrent() &&
                 snapshotRef.current.historyPagination?.hasOlder === true &&
                 i < MAX_SANDBOX_HISTORY_PAGE_INS;
                 i++
             ) {
                 await loadOlderHistory();
+                if (!stillCurrent()) {
+                    return undefined;
+                }
                 sandboxId = findSandboxIdInSnapshot(snapshotRef.current, turnId);
             }
-            return sandboxId;
+            return stillCurrent() ? sandboxId : undefined;
         },
-        [loadOlderHistory],
+        [loadOlderHistory, sessionId],
     );
 
     return {

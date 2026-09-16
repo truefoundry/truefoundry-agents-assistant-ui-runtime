@@ -1144,6 +1144,92 @@ describe("useTrueFoundryAgentMessages", () => {
         expect(prependOlderSessionHistory).toHaveBeenCalledTimes(1);
     });
 
+    it("does not merge session A older history onto session B after a switch", async () => {
+        // Bugbot: a stale resolveSandboxIdForTurn / loadOlderHistory closed over
+        // session A can run after switch, capture B's loadGeneration, and commit
+        // A's pages onto B's snapshot — or return B's sandboxId for A's turn.
+        const createdAt = new Date().toISOString();
+        const doneState = {
+            status: "done" as const,
+            requiredActions: [],
+            completedAt: createdAt,
+        };
+
+        vi.mocked(loadSessionSnapshot)
+            .mockResolvedValueOnce(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    turns: [{ id: "turn-a", createdAt, state: doneState }],
+                    historyPagination: { hasOlder: true, olderPageToken: "tok-a" },
+                }),
+            )
+            .mockResolvedValueOnce(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    turns: [
+                        {
+                            id: "turn-b",
+                            createdAt,
+                            state: doneState,
+                            sandboxId: "sbx-b",
+                        },
+                    ],
+                    historyPagination: { hasOlder: false },
+                }),
+            );
+
+        vi.mocked(prependOlderSessionHistory).mockImplementation(
+            async (_server, _sessionId, snapshot) =>
+                replaceSessionSnapshot(snapshot, {
+                    turns: [
+                        {
+                            id: "turn-old-a",
+                            createdAt,
+                            state: doneState,
+                            sandboxId: "sbx-a-pollute",
+                        },
+                        ...snapshot.turns,
+                    ],
+                    historyPagination: { hasOlder: false },
+                }),
+        );
+
+        const { result, rerender } = renderHook(
+            ({ sessionId }: { sessionId: string }) =>
+                useTrueFoundryAgentMessages({ server: mockServer, sessionId }),
+            { initialProps: { sessionId: "session-a" } },
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        // Capture the session-A closures, then switch so later calls are stale.
+        const resolveFromA = result.current.resolveSandboxIdForTurn;
+        const loadOlderFromA = result.current.loadOlderHistory;
+
+        rerender({ sessionId: "session-b" });
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        await waitFor(() =>
+            expect(result.current.resolveSandboxIdForTurn).not.toBe(resolveFromA),
+        );
+
+        let staleResolved: string | undefined = "sentinel";
+        await act(async () => {
+            staleResolved = await resolveFromA("turn-a");
+            await loadOlderFromA();
+        });
+
+        // Stale resolve must not read B's sandbox; stale load must not commit.
+        expect(staleResolved).toBeUndefined();
+        expect(prependOlderSessionHistory).not.toHaveBeenCalled();
+        await expect(result.current.resolveSandboxIdForTurn("turn-b")).resolves.toBe(
+            "sbx-b",
+        );
+        expect(
+            result.current.messages.some(
+                (message) =>
+                    (message.metadata.custom as { turnId?: string } | undefined)
+                        ?.turnId === "turn-old-a",
+            ),
+        ).toBe(false);
+    });
+
     it("respondToToolApproval records approval decisions on the pending tool call", async () => {
         vi.mocked(loadSessionSnapshot).mockResolvedValue(
             snapshotWithAssistantMessage(assistantMessageWithPendingApproval()),
