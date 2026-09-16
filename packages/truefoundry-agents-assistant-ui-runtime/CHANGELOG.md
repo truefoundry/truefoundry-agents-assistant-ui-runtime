@@ -2,12 +2,17 @@
 
 ## Unreleased
 
-## 0.1.38
+## 0.1.39
 
 ### Breaking
 
 - `ListPermissionsResponse.data` is now `{ type, permissions }` instead of a flat id→grants map.
 - `PermissionResourceType` includes `tenant`; `ResourcePermission` includes `CREATE` (tenant entity-kind grants).
+
+### Fixed
+
+- Assistant messages use the turn completion time instead of the turn start time.
+- Detaching from a turn stream (session switch, reload, remount) no longer cancels the backend run; only an explicit cancel does.
 
 ## 0.1.37
 

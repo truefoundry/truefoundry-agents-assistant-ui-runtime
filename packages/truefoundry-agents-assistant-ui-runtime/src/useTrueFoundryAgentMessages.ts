@@ -346,10 +346,17 @@ export function useTrueFoundryAgentMessages({
 
     const projectOptions = useMemo(
         () => ({
-            getCreatedAt: (messageId: string, fallback: Date) => {
+            getCreatedAt: (
+                messageId: string,
+                fallback: Date,
+                replace = false,
+            ) => {
                 const cache = createdAtByMessageIdRef.current;
                 const existing = cache.get(messageId);
-                if (existing != null) {
+                if (
+                    existing != null &&
+                    (!replace || existing.getTime() === fallback.getTime())
+                ) {
                     return existing;
                 }
                 cache.set(messageId, fallback);
@@ -838,12 +845,15 @@ export function useTrueFoundryAgentMessages({
     );
 
     const cancel = useCallback(async () => {
-        if (sessionId == null) {
+        // A turn can start before the thread list publishes `remoteId`, and that
+        // run still has a backend session to stop.
+        const activeSessionId = sessionId ?? lazilyCreatedSessionIdRef.current;
+        if (activeSessionId == null) {
             abortControllerRef.current?.abort();
             return;
         }
         const conversationSessionId = await resolveActiveSessionId(
-            sessionId,
+            activeSessionId,
             resolveConversationSessionIdRef.current,
         );
         // Request cancellation but keep consuming the stream. After cancel(),
