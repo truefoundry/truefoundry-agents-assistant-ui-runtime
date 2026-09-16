@@ -1039,9 +1039,9 @@ export interface ScheduleServer<
 // Permissions — optional resource mutation grants
 // ---------------------------------------------------------------------------
 
-export type PermissionResourceType = "agent" | "schedule" | "session";
+export type PermissionResourceType = "agent" | "schedule" | "session" | "tenant";
 
-export type ResourcePermission = "USE" | "MANAGE" | "DELETE";
+export type ResourcePermission = "USE" | "MANAGE" | "DELETE" | "CREATE";
 
 export interface ListPermissionsRequest {
   resourceType: PermissionResourceType;
@@ -1049,7 +1049,10 @@ export interface ListPermissionsRequest {
 }
 
 export interface ListPermissionsResponse {
-  data: Record<string, ResourcePermission[]>;
+  data: {
+    type: PermissionResourceType;
+    permissions: Record<string, ResourcePermission[]>;
+  };
 }
 
 export interface PermissionsServer<
