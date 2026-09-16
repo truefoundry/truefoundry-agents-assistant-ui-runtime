@@ -252,6 +252,39 @@ function commitActiveStream(
     });
 }
 
+/** Bounds the older-history page-ins a sandbox lookup may trigger. */
+const MAX_SANDBOX_HISTORY_PAGE_INS = 20;
+
+/**
+ * sandboxId in effect as of `turnId`. An artifact can only come from a sandbox
+ * created at or before its own turn, so scan records backward from that turn;
+ * an unknown turn (e.g. projected only from the active stream) scans the whole
+ * loaded window.
+ */
+function findSandboxIdInSnapshot(
+    snapshot: SessionSnapshot,
+    turnId: string,
+): string | undefined {
+    const active = snapshot.activeStream;
+    if (active?.turnId === turnId) {
+        const custom = active.update.metadata?.custom as
+            | { sandboxId?: string }
+            | undefined;
+        if (custom?.sandboxId != null) {
+            return custom.sandboxId;
+        }
+    }
+    const turns = snapshot.turns;
+    const turnIndex = turns.findIndex((turn) => turn.id === turnId);
+    for (let i = turnIndex === -1 ? turns.length - 1 : turnIndex; i >= 0; i--) {
+        const sandboxId = turns[i]?.sandboxId;
+        if (sandboxId != null) {
+            return sandboxId;
+        }
+    }
+    return undefined;
+}
+
 async function resolveActiveSessionId(
     remoteId: string,
     resolveConversationSessionId?: (remoteId: string) => Promise<string>,
@@ -664,10 +697,16 @@ export function useTrueFoundryAgentMessages({
                     "inputs" in options ||
                     ("resumeMcpAuth" in options && options.resumeMcpAuth === true);
                 const continuationTurnId = snapshotRef.current.activeStream?.turnId;
-                const turnId =
-                    isContinuation && continuationTurnId != null
-                        ? continuationTurnId
-                        : generateId();
+                const turnId = isContinuation
+                    ? // A paused stream is usually already committed (commitActiveStream
+                      // cleared activeStream), so continue under the committed turn's
+                      // real id. Never mint a local id for a continuation — it leaks to
+                      // the backend via `custom.turnId` (sandbox downloads, edit/retry)
+                      // as a turn the gateway has never heard of.
+                      continuationTurnId ??
+                      snapshotRef.current.turns.at(-1)?.id ??
+                      generateId()
+                    : generateId();
                 // First turns must send previousTurnId: "none".
                 const isFirstTurnInSession =
                     "userMessage" in options &&
@@ -676,10 +715,39 @@ export function useTrueFoundryAgentMessages({
                     snapshotRef.current.pendingUser == null &&
                     snapshotRef.current.activeStream == null;
 
-                // Mutable ref so runStream always reads the latest ID. For new
-                // user-message turns the local `generateId()` value is replaced
-                // with the gateway-assigned ID once the first SSE event arrives.
+                // Mutable ref so runStream always reads the latest ID. The local
+                // placeholder (optimistic `generateId()` or the previous turn's id
+                // for continuations) is replaced with the gateway-assigned ID once
+                // the first SSE event arrives.
                 const turnIdRef = { current: turnId };
+
+                // Renames the placeholder ID to the gateway turn ID so that
+                // edit/retry and sandbox downloads can resolve the turn via the
+                // gateway. Wired into every stream branch — continuation turns
+                // (approval / ask-user / MCP-auth resumes) are new gateway turns
+                // too, and committing them under a local id corrupts the record.
+                const handleGatewayTurnId = (gatewayTurnId: string) => {
+                    const oldId = turnIdRef.current;
+                    // turn.created proves the gateway registered the message.
+                    gatewayTurnAccepted = true;
+                    if (gatewayTurnId === oldId) return;
+                    turnIdRef.current = gatewayTurnId;
+                    // Rename in the ref immediately so any synchronous read
+                    // (e.g. commitActiveStream) sees the correct ID.
+                    const renamePendingUser = (
+                        prev: SessionSnapshot,
+                    ): SessionSnapshot => {
+                        if (prev.pendingUser?.turnId !== oldId) return prev;
+                        return replaceSessionSnapshot(prev, {
+                            pendingUser: {
+                                ...prev.pendingUser,
+                                turnId: gatewayTurnId,
+                            },
+                        });
+                    };
+                    snapshotRef.current = renamePendingUser(snapshotRef.current);
+                    setSnapshot(renamePendingUser);
+                };
 
                 if ("inputs" in options) {
                     applyUserToolResponsesToFold(
@@ -756,6 +824,7 @@ export function useTrueFoundryAgentMessages({
                                 { inputs: options.inputs, ...streamHeaders },
                                 signal,
                                 groupRootBaseline,
+                                handleGatewayTurnId,
                             );
                         }
                         if ("resumeMcpAuth" in options) {
@@ -766,6 +835,7 @@ export function useTrueFoundryAgentMessages({
                                 { resumeMcpAuth: true, ...streamHeaders },
                                 signal,
                                 groupRootBaseline,
+                                handleGatewayTurnId,
                             );
                         }
                         return streamTurnContent(
@@ -783,25 +853,7 @@ export function useTrueFoundryAgentMessages({
                             },
                             signal,
                             groupRootBaseline,
-                            // Rename the optimistic local ID to the gateway turn ID
-                            // so that edit/retry can resolve the turn via the gateway.
-                            (gatewayTurnId) => {
-                                const oldId = turnIdRef.current;
-                                // turn.created proves the gateway registered the message.
-                                gatewayTurnAccepted = true;
-                                if (gatewayTurnId === oldId) return;
-                                turnIdRef.current = gatewayTurnId;
-                                // Rename in the ref immediately so any synchronous read
-                                // (e.g. commitActiveStream) sees the correct ID.
-                                const renamePendingUser = (prev: SessionSnapshot): SessionSnapshot => {
-                                    if (prev.pendingUser?.turnId !== oldId) return prev;
-                                    return replaceSessionSnapshot(prev, {
-                                        pendingUser: { ...prev.pendingUser, turnId: gatewayTurnId },
-                                    });
-                                };
-                                snapshotRef.current = renamePendingUser(snapshotRef.current);
-                                setSnapshot(renamePendingUser);
-                            },
+                            handleGatewayTurnId,
                         );
                     },
                     turnIdRef,
@@ -1084,6 +1136,9 @@ export function useTrueFoundryAgentMessages({
                 if (generation !== loadGenerationRef.current) {
                     return;
                 }
+                // Keep the ref in sync before the next render so awaiting
+                // callers (e.g. resolveSandboxIdForTurn) see the merged history.
+                snapshotRef.current = next;
                 setSnapshot(next);
             } catch (error) {
                 if (generation === loadGenerationRef.current) {
@@ -1102,6 +1157,32 @@ export function useTrueFoundryAgentMessages({
         return run;
     }, [server, isMain, sessionId]);
 
+    /**
+     * Resolves the sandbox that was current as of `turnId`, paging in older
+     * history when the `sandbox.created` reference predates the loaded window
+     * (deriving it from loaded messages alone caused spurious "No sandbox is
+     * available yet" failures on long sessions).
+     */
+    const resolveSandboxIdForTurn = useCallback(
+        async (turnId: string): Promise<string | undefined> => {
+            let sandboxId = findSandboxIdInSnapshot(snapshotRef.current, turnId);
+            // ponytail: bounded linear page-in — the gateway has no direct
+            // session→sandbox lookup; a backend lookup route is the upgrade path.
+            for (
+                let i = 0;
+                sandboxId == null &&
+                snapshotRef.current.historyPagination?.hasOlder === true &&
+                i < MAX_SANDBOX_HISTORY_PAGE_INS;
+                i++
+            ) {
+                await loadOlderHistory();
+                sandboxId = findSandboxIdInSnapshot(snapshotRef.current, turnId);
+            }
+            return sandboxId;
+        },
+        [loadOlderHistory],
+    );
+
     return {
         messages,
         isRunning,
@@ -1110,6 +1191,7 @@ export function useTrueFoundryAgentMessages({
         isLoadingOlderHistory,
         hasOlderHistory,
         loadOlderHistory,
+        resolveSandboxIdForTurn,
         retryLoad,
         sendTurn,
         cancel,

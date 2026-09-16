@@ -451,6 +451,9 @@ function ingestSessionEventsIntoSnapshot(
     let currentCreatedEvent: TurnCreatedEvent | null = null;
     let currentContentEvents: TurnEvent[] = [];
     let beforeCount = 0;
+    // Session-scoped: sandbox.created fires when a sandbox is (re)created and the
+    // sandbox is reused by later turns, so carry the latest one forward.
+    let sessionSandboxId: string | undefined;
 
     for (const item of items) {
         const { turnId, event } = item;
@@ -475,6 +478,7 @@ function ingestSessionEventsIntoSnapshot(
                 (ev): ev is Extract<TurnEvent, { type: "sandbox.created" }> =>
                     ev.type === "sandbox.created",
             );
+            sessionSandboxId = sandboxEvent?.sandboxId ?? sessionSandboxId;
 
             applyUserToolResponsesToFold(
                 snapshot.fold,
@@ -486,7 +490,7 @@ function ingestSessionEventsIntoSnapshot(
                     currentCreatedEvent,
                     event,
                     rootModelMessageIds,
-                    sandboxEvent?.sandboxId,
+                    sessionSandboxId,
                 ),
             );
 
@@ -718,9 +722,24 @@ export async function prependOlderSessionHistory(
         (turn) => turn.rootModelMessageIds ?? [],
     );
 
+    // Forward-propagate sandbox identity revealed by older pages onto
+    // already-loaded newer turns that reused the sandbox without emitting
+    // sandbox.created. A turn's own sandboxId (a mid-session re-create) wins.
+    let knownSandboxId: string | undefined;
+    const mergedTurns = [...olderTurns, ...snapshot.turns].map((turn) => {
+        if (turn.sandboxId != null) {
+            knownSandboxId = turn.sandboxId;
+            return turn;
+        }
+        if (knownSandboxId != null) {
+            return { ...turn, sandboxId: knownSandboxId };
+        }
+        return turn;
+    });
+
     return replaceSessionSnapshot(snapshot, {
         fold: mergedFold,
-        turns: [...olderTurns, ...snapshot.turns],
+        turns: mergedTurns,
         historyEvents,
         historyPagination: {
             hasOlder: window.hasOlder,
@@ -1328,6 +1347,9 @@ function ingestTurnsIntoSnapshot(
     eventArrays: TurnEvent[][],
 ): Turn | undefined {
     let runningTurn: Turn | undefined;
+    // Session-scoped: sandbox.created fires when a sandbox is (re)created and the
+    // sandbox is reused by later turns, so carry the latest one forward.
+    let sessionSandboxId: string | undefined;
 
     for (let i = 0; i < turns.length; i++) {
         const turn = turns[i]!;
@@ -1346,11 +1368,12 @@ function ingestTurnsIntoSnapshot(
             (event): event is Extract<TurnEvent, { type: "sandbox.created" }> =>
                 event.type === "sandbox.created",
         );
+        sessionSandboxId = sandboxEvent?.sandboxId ?? sessionSandboxId;
 
         snapshot.turns.push({
             ...turnToSessionRecord(turn),
             rootModelMessageIds,
-            ...(sandboxEvent != null ? { sandboxId: sandboxEvent.sandboxId } : {}),
+            ...(sessionSandboxId != null ? { sandboxId: sessionSandboxId } : {}),
         });
 
         if (turn.state.status === "running") {

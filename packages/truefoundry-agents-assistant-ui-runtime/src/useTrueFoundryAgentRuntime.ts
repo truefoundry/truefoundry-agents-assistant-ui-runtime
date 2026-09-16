@@ -34,6 +34,7 @@ import {
 } from "./draft/draftSessionBridge.js";
 import { MCP_AUTH_RESUME_RUN_CUSTOM_KEY } from "./mcpAuth.js";
 import { createTrueFoundryDraftThreadListAdapter } from "./draft/truefoundryDraftThreadListAdapter.js";
+import { buildSandboxDownloadRequest } from "./sandboxDownload.js";
 import { trueFoundryExtras } from "./truefoundryExtras.js";
 import { createTrueFoundryThreadListAdapter } from "./truefoundryThreadListAdapter.js";
 import type { UseTrueFoundryAgentRuntimeOptions } from "./types.js";
@@ -143,6 +144,7 @@ function useTrueFoundryAgentRuntimeImpl(
         resumeRun,
         editFromTurn,
         resetFromTurn,
+        resolveSandboxIdForTurn,
         retryLoad,
     } = useTrueFoundryAgentMessages({
         server,
@@ -181,22 +183,23 @@ function useTrueFoundryAgentRuntimeImpl(
                     "Downloading a sandbox file requires AgentChatServer.downloadSandboxFile.",
                 );
             }
-            if (sessionId == null) {
-                throw new Error(
-                    "This session has not been saved yet, so its files cannot be downloaded.",
-                );
-            }
-            if (sandboxId == null) {
-                throw new Error("No sandbox is available yet for this session.");
-            }
-            return await server.downloadSandboxFile({
-                sessionId,
-                turnId,
-                sandboxId,
-                path,
-            });
+            // Prefer the sandbox that was current as of this turn (paging in
+            // older history if its reference predates the loaded window); the
+            // session-wide latest covers turns projected without a record.
+            // sandboxId stays best-effort — turn-scoped hosts resolve the
+            // sandbox from turnId and need no sandboxId at all.
+            const turnSandboxId =
+                (await resolveSandboxIdForTurn(turnId)) ?? sandboxId;
+            return await server.downloadSandboxFile(
+                buildSandboxDownloadRequest({
+                    sessionId,
+                    turnId,
+                    path,
+                    ...(turnSandboxId != null ? { sandboxId: turnSandboxId } : {}),
+                }),
+            );
         },
-        [server, sessionId, sandboxId],
+        [server, sessionId, sandboxId, resolveSandboxIdForTurn],
     );
 
     const draftExtras = useMemo(() => {
