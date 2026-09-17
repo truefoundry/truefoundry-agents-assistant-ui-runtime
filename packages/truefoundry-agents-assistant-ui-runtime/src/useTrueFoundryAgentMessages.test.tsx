@@ -6,6 +6,7 @@ import type { AgentChatServer, Turn } from "./server/index.js";
 
 import { ROOT_THREAD_ID } from "./constants.js";
 import { collectPendingToolResponses } from "./collectPending.js";
+import { prependOlderSessionHistory } from "./convertTurnMessages.js";
 import { loadSessionSnapshot } from "./loadSessionSnapshot.js";
 import {
     buildRootAssistantContent,
@@ -41,7 +42,11 @@ vi.mock("./streamTurn.js", () => ({
 
 vi.mock("./convertTurnMessages.js", async (importOriginal) => {
     const actual = await importOriginal<typeof import("./convertTurnMessages.js")>();
-    return actual;
+    // Wrapped so tests can stub older-history paging; defaults to the real one.
+    return {
+        ...actual,
+        prependOlderSessionHistory: vi.fn(actual.prependOlderSessionHistory),
+    };
 });
 
 const mockServer = {
@@ -986,9 +991,243 @@ describe("useTrueFoundryAgentMessages", () => {
             },
             expect.any(AbortSignal),
             expect.any(Array),
+            expect.any(Function),
         );
         expect(result.current.messages).toHaveLength(1);
         expect(result.current.messages[0]?.role).toBe("assistant");
+    });
+
+    it("commits a continuation under the gateway turn id when no active stream exists", async () => {
+        // Reproduces the "Turn not found: <7-char id>" failure: the paused
+        // stream was already committed (activeStream cleared), so the resume
+        // turn used to run under a local generateId() that leaked into
+        // custom.turnId and the committed record.
+        const fold = new PeerThreadFoldState();
+        ingestTurnEvent(fold, {
+            type: "model.message",
+            id: "model-1",
+            createdAt: new Date().toISOString(),
+            threadId: ROOT_THREAD_ID,
+            content: "committed reply",
+        });
+        const createdAt = new Date().toISOString();
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                fold,
+                turns: [
+                    {
+                        id: "turn-1",
+                        userText: "hi",
+                        createdAt,
+                        state: {
+                            status: "done",
+                            requiredActions: [],
+                            completedAt: createdAt,
+                        },
+                        input: [{ type: "user.message", content: "hi" }],
+                        rootModelMessageIds: ["model-1"],
+                    },
+                ],
+            }),
+        );
+        vi.mocked(streamTurnContent).mockImplementation(
+            (
+                _server,
+                _sessionId,
+                _fold,
+                _options,
+                _signal,
+                _baseline,
+                onTurnIdAvailable,
+            ) =>
+                (async function* () {
+                    onTurnIdAvailable?.("gw-turn-2");
+                    yield {
+                        content: [{ type: "text" as const, text: "resumed" }],
+                    };
+                })(),
+        );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.messages).toHaveLength(2));
+
+        await act(async () => {
+            await result.current.sendTurn({
+                inputs: [
+                    {
+                        type: "user.tool_approval",
+                        threadId: ROOT_THREAD_ID,
+                        toolCallId: "approval-1",
+                        approval: { status: "allow" },
+                    },
+                ],
+            });
+        });
+
+        const assistant = result.current.messages[1];
+        expect(assistant?.role).toBe("assistant");
+        expect(assistant?.metadata.custom).toMatchObject({ turnId: "gw-turn-2" });
+    });
+
+    it("resolveSandboxIdForTurn returns the sandbox current as of that turn", async () => {
+        const createdAt = new Date().toISOString();
+        const doneState = {
+            status: "done" as const,
+            requiredActions: [],
+            completedAt: createdAt,
+        };
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                turns: [
+                    { id: "turn-1", createdAt, state: doneState, sandboxId: "sbx-1" },
+                    { id: "turn-2", createdAt, state: doneState },
+                    { id: "turn-3", createdAt, state: doneState, sandboxId: "sbx-2" },
+                ],
+            }),
+        );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        // turn-2's artifacts came from the sandbox created at turn-1, not the
+        // session-wide latest (turn-3's).
+        await expect(result.current.resolveSandboxIdForTurn("turn-2")).resolves.toBe(
+            "sbx-1",
+        );
+        await expect(result.current.resolveSandboxIdForTurn("turn-3")).resolves.toBe(
+            "sbx-2",
+        );
+        // Unknown turn falls back to the latest sandbox in the loaded window.
+        await expect(
+            result.current.resolveSandboxIdForTurn("turn-unknown"),
+        ).resolves.toBe("sbx-2");
+    });
+
+    it("resolveSandboxIdForTurn pages in older history when the sandbox reference is not loaded", async () => {
+        const createdAt = new Date().toISOString();
+        const doneState = {
+            status: "done" as const,
+            requiredActions: [],
+            completedAt: createdAt,
+        };
+        vi.mocked(loadSessionSnapshot).mockResolvedValue(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                turns: [{ id: "turn-9", createdAt, state: doneState }],
+                historyPagination: { hasOlder: true, olderPageToken: "tok-1" },
+            }),
+        );
+        vi.mocked(prependOlderSessionHistory).mockResolvedValueOnce(
+            replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                turns: [
+                    { id: "turn-1", createdAt, state: doneState, sandboxId: "sbx-old" },
+                    { id: "turn-9", createdAt, state: doneState },
+                ],
+                historyPagination: { hasOlder: false },
+            }),
+        );
+
+        const { result } = renderHook(() =>
+            useTrueFoundryAgentMessages({ server: mockServer, sessionId: "session-1" }),
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        let resolved: string | undefined;
+        await act(async () => {
+            resolved = await result.current.resolveSandboxIdForTurn("turn-9");
+        });
+
+        expect(resolved).toBe("sbx-old");
+        expect(prependOlderSessionHistory).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not merge session A older history onto session B after a switch", async () => {
+        // Bugbot: a stale resolveSandboxIdForTurn / loadOlderHistory closed over
+        // session A can run after switch, capture B's loadGeneration, and commit
+        // A's pages onto B's snapshot — or return B's sandboxId for A's turn.
+        const createdAt = new Date().toISOString();
+        const doneState = {
+            status: "done" as const,
+            requiredActions: [],
+            completedAt: createdAt,
+        };
+
+        vi.mocked(loadSessionSnapshot)
+            .mockResolvedValueOnce(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    turns: [{ id: "turn-a", createdAt, state: doneState }],
+                    historyPagination: { hasOlder: true, olderPageToken: "tok-a" },
+                }),
+            )
+            .mockResolvedValueOnce(
+                replaceSessionSnapshot(createEmptySessionSnapshot(), {
+                    turns: [
+                        {
+                            id: "turn-b",
+                            createdAt,
+                            state: doneState,
+                            sandboxId: "sbx-b",
+                        },
+                    ],
+                    historyPagination: { hasOlder: false },
+                }),
+            );
+
+        vi.mocked(prependOlderSessionHistory).mockImplementation(
+            async (_server, _sessionId, snapshot) =>
+                replaceSessionSnapshot(snapshot, {
+                    turns: [
+                        {
+                            id: "turn-old-a",
+                            createdAt,
+                            state: doneState,
+                            sandboxId: "sbx-a-pollute",
+                        },
+                        ...snapshot.turns,
+                    ],
+                    historyPagination: { hasOlder: false },
+                }),
+        );
+
+        const { result, rerender } = renderHook(
+            ({ sessionId }: { sessionId: string }) =>
+                useTrueFoundryAgentMessages({ server: mockServer, sessionId }),
+            { initialProps: { sessionId: "session-a" } },
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        // Capture the session-A closures, then switch so later calls are stale.
+        const resolveFromA = result.current.resolveSandboxIdForTurn;
+        const loadOlderFromA = result.current.loadOlderHistory;
+
+        rerender({ sessionId: "session-b" });
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        await waitFor(() =>
+            expect(result.current.resolveSandboxIdForTurn).not.toBe(resolveFromA),
+        );
+
+        let staleResolved: string | undefined = "sentinel";
+        await act(async () => {
+            staleResolved = await resolveFromA("turn-a");
+            await loadOlderFromA();
+        });
+
+        // Stale resolve must not read B's sandbox; stale load must not commit.
+        expect(staleResolved).toBeUndefined();
+        expect(prependOlderSessionHistory).not.toHaveBeenCalled();
+        await expect(result.current.resolveSandboxIdForTurn("turn-b")).resolves.toBe(
+            "sbx-b",
+        );
+        expect(
+            result.current.messages.some(
+                (message) =>
+                    (message.metadata.custom as { turnId?: string } | undefined)
+                        ?.turnId === "turn-old-a",
+            ),
+        ).toBe(false);
     });
 
     it("respondToToolApproval records approval decisions on the pending tool call", async () => {

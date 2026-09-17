@@ -341,8 +341,11 @@ export function createTrueFoundryChatServer<
         },
 
         // The gateway addresses sandboxes directly, so the turn is carried for hosts that need it
-        // but is not part of this route.
+        // but is not part of this route. Turn-scoped hosts (e.g. TrueForge) ignore sandboxId.
         async downloadSandboxFile({ sandboxId, path }) {
+            if (sandboxId == null) {
+                throw new Error("No sandbox is available yet for this session.");
+            }
             const response = await privateClient.downloadSandboxFile(sandboxId, {
                 path,
             });
