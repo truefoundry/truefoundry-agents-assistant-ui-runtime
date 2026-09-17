@@ -6,6 +6,18 @@
 
 - Optional `AgentChatServer.renameSession`. When present, thread-list adapters persist rename through it.
 
+## 0.1.41
+
+### Breaking
+
+- `AgentChatServer.downloadSandboxFile` now receives `sandboxId?: string` (optional) instead of `sandboxId: string`. Host implementations must handle a missing `sandboxId`; turn-scoped hosts resolve the sandbox from `(sessionId, turnId)`.
+
+### Fixed
+
+- **Continuation turns no longer leak a local turn id** — approval / ask-user / MCP-auth resume turns now rename their placeholder id to the gateway-assigned id (`turn.created`), and fall back to the last committed turn's id instead of minting a fresh local one. Previously the fabricated id (e.g. `Vu3Hyio`) reached hosts via `custom.turnId`, breaking turn-scoped sandbox downloads ("Turn not found") and edit/retry.
+- **Sandbox artifact download after resume** — `downloadSandboxFile` no longer hard-requires a client-known `sandboxId`. Turn-scoped hosts resolve the sandbox from `(sessionId, turnId)`; `sandboxId` is optional on the request and passed best-effort. Hydration forward-propagates the session-scoped `sandboxId` across turns in the loaded window (and backfills tip turns when older pages reveal `sandbox.created`), and downloads resolve the sandbox that was current as of the artifact's turn, paging in older history when its reference predates the loaded window.
+- **Session switch no longer corrupts sandbox history page-in** — stale `loadOlderHistory` / `resolveSandboxIdForTurn` closures abort when the live session id changes, so a post-switch iteration cannot merge another session's pages onto the current snapshot.
+
 ## 0.1.39
 
 ### Breaking
