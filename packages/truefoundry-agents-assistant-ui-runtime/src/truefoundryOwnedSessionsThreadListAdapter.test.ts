@@ -103,6 +103,37 @@ describe("createTrueFoundryOwnedSessionsThreadListAdapter", () => {
         expect(result.threads[0]?.title).toBe("anthropic/claude-sonnet-4-6");
     });
 
+    it("rename persists title when renameSession is present", async () => {
+        const renameSession = vi.fn().mockResolvedValue(undefined);
+        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({
+            server: mockServer({
+                renameSession,
+                listSessions: vi.fn(),
+                getSession: vi.fn(),
+            }),
+        });
+
+        await adapter.rename("s1", "Customer A");
+
+        expect(renameSession).toHaveBeenCalledWith({
+            sessionId: "s1",
+            title: "Customer A",
+        });
+    });
+
+    it("rename is a no-op when renameSession is omitted", async () => {
+        const renameSession = vi.fn().mockResolvedValue(undefined);
+        const adapter = createTrueFoundryOwnedSessionsThreadListAdapter({
+            server: mockServer({
+                listSessions: vi.fn(),
+                getSession: vi.fn(),
+            }),
+        });
+
+        await expect(adapter.rename("s1", "Customer A")).resolves.toBeUndefined();
+        expect(renameSession).not.toHaveBeenCalled();
+    });
+
     it("throws on initialize because the adapter is read-only", async () => {
         const server = mockServer({
             listSessions: vi.fn(),

@@ -118,6 +118,35 @@ describe("createTrueFoundryThreadListAdapter", () => {
         expect(deleteSession).toHaveBeenCalledWith({ sessionId: "s1" });
     });
 
+    it("rename persists title when renameSession is present", async () => {
+        const renameSession = vi.fn().mockResolvedValue(undefined);
+        const server = mockServer({
+            renameSession,
+        });
+        const adapter = createTrueFoundryThreadListAdapter({
+            server,
+            agentName: "my-agent",
+        });
+
+        await adapter.rename("s1", "Acme onboarding");
+
+        expect(renameSession).toHaveBeenCalledWith({
+            sessionId: "s1",
+            title: "Acme onboarding",
+        });
+    });
+
+    it("rename is a no-op when renameSession is omitted", async () => {
+        const renameSession = vi.fn().mockResolvedValue(undefined);
+        const adapter = createTrueFoundryThreadListAdapter({
+            server: mockServer({}),
+            agentName: "my-agent",
+        });
+
+        await expect(adapter.rename("s1", "Acme onboarding")).resolves.toBeUndefined();
+        expect(renameSession).not.toHaveBeenCalled();
+    });
+
     it("delete is a no-op when server.deleteSession is missing", async () => {
         const adapter = createTrueFoundryThreadListAdapter({
             server: mockServer({}),

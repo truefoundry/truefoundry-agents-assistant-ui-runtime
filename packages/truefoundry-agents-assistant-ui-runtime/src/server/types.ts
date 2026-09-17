@@ -356,6 +356,11 @@ export interface AgentChatServer<
 
   cancelSession(req: { sessionId: string }): Promise<void>;
   deleteSession?(req: { sessionId: string }): Promise<void>;
+  /**
+   * When present, thread-list `rename` persists via this method.
+   * Omitted: rename is a no-op (TrueFoundry Gateway does not persist titles).
+   */
+  renameSession?(req: { sessionId: string; title: string }): Promise<void>;
 
   listTurns(req: {
     sessionId: string;

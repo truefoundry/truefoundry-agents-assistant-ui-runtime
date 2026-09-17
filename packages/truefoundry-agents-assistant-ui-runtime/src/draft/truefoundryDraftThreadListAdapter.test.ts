@@ -178,6 +178,41 @@ describe("createTrueFoundryDraftThreadListAdapter", () => {
         expect(createSession).toHaveBeenCalledWith({ agentSpec: liveAgentSpec });
     });
 
+    it("rename persists title when renameSession is present", async () => {
+        const renameSession = vi.fn().mockResolvedValue(undefined);
+        const adapter = createTrueFoundryDraftThreadListAdapter({
+            server: mockServer({
+                renameSession,
+                listSessions: vi.fn(),
+                createSession: vi.fn(),
+                getSession: vi.fn(),
+            }),
+            defaultAgentSpec,
+        });
+
+        await adapter.rename("d1", "Renamed draft");
+
+        expect(renameSession).toHaveBeenCalledWith({
+            sessionId: "d1",
+            title: "Renamed draft",
+        });
+    });
+
+    it("rename is a no-op when renameSession is omitted", async () => {
+        const renameSession = vi.fn().mockResolvedValue(undefined);
+        const adapter = createTrueFoundryDraftThreadListAdapter({
+            server: mockServer({
+                listSessions: vi.fn(),
+                createSession: vi.fn(),
+                getSession: vi.fn(),
+            }),
+            defaultAgentSpec,
+        });
+
+        await expect(adapter.rename("d1", "Renamed draft")).resolves.toBeUndefined();
+        expect(renameSession).not.toHaveBeenCalled();
+    });
+
     it("falls back to model name for title when draft has no title", async () => {
         const getSession = vi.fn().mockResolvedValue(
             mockDraft("d1", undefined, "2026-06-30T10:00:00.000Z"),
