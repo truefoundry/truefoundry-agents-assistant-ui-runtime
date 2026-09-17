@@ -362,7 +362,8 @@ pnpm typecheck  # tsc --noEmit
 | Attachment rendering | Forwarded on send; user bubbles show text only today |
 | Speech / Dictation / Voice | Pass-through only |
 | Feedback | Pass-through only; not persisted to the gateway |
-| Thread rename / archive / delete | Thread-list adapter no-ops |
+| Thread rename | Opt in with `renameSession`; adapters persist `{ sessionId, title }`. TrueFoundry Gateway does not persist titles. |
+| Thread archive / delete | Archive is a no-op. Delete calls `deleteSession` when implemented. |
 | Thread title generation | Returns an empty stream |
 
 ---

@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.42
+
+### Added
+
+- Optional `AgentChatServer.renameSession`. When present, thread-list adapters persist rename through it.
 
 ## 0.1.39
 

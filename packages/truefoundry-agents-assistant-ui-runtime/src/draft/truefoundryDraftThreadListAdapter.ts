@@ -63,7 +63,10 @@ export function createTrueFoundryDraftThreadListAdapter(options: {
             );
         },
 
-        async rename() {},
+        async rename(remoteId, newTitle) {
+            if (typeof server.renameSession !== "function") return;
+            await server.renameSession({ sessionId: remoteId, title: newTitle });
+        },
         async archive() {},
         async unarchive() {},
         async delete(remoteId) {

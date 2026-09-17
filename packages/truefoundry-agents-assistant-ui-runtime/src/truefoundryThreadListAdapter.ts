@@ -50,7 +50,10 @@ export function createTrueFoundryThreadListAdapter(options: {
             return sessionToThreadMetadata(session, session.title ?? undefined);
         },
 
-        async rename() {},
+        async rename(remoteId, newTitle) {
+            if (typeof server.renameSession !== "function") return;
+            await server.renameSession({ sessionId: remoteId, title: newTitle });
+        },
         async archive() {},
         async unarchive() {},
         async delete(remoteId) {
