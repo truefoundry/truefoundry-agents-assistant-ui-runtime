@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.43
+
+### Added
+
+- `AgentRuntimeConfig.webSearch` and `AgentBuilderCapabilitiesResponse.data.webSearch` for host web-search capability gating.
+
 ## 0.1.42
 
 ### Added

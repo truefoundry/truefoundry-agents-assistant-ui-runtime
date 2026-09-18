@@ -151,6 +151,7 @@ export interface AgentRuntimeConfig {
   generativeUi?: AgentCapabilityConfig;
   dynamicSubAgents?: AgentCapabilityConfig;
   askUserQuestions?: AgentCapabilityConfig;
+  webSearch?: AgentCapabilityConfig;
 }
 
 /**
@@ -442,6 +443,7 @@ export interface AgentBuilderCapabilitiesResponse {
     sandbox: { enabled: boolean };
     skill: { enabled: boolean; reason?: string };
     settings?: { enabled: boolean };
+    webSearch?: { enabled: boolean };
   };
 }
 
