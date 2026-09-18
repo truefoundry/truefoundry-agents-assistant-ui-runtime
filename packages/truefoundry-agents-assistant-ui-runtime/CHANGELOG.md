@@ -5,6 +5,7 @@
 ### Added
 
 - Optional `AgentChatServer.renameSession`. When present, thread-list adapters persist rename through it.
+- `AgentRuntimeConfig.webSearch` and `AgentBuilderCapabilitiesResponse.data.webSearch` for host web-search capability gating.
 
 ## 0.1.41
 
